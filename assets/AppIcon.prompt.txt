@@ -1,0 +1,14 @@
+Generated with the built-in image_gen tool, November 20, 2026.
+Source: AppIcon-source.png (1254 × 1254, opaque RGB PNG).
+Final: AppIcon.png (1024 × 1024, opaque RGB PNG); size normalized with macOS sips.
+No creative postprocessing, transparency, baked rounded mask, or app implementation changes.
+
+Use case: logo-brand
+Asset type: production iOS app icon for April Fools AR, opaque square 1024x1024 bitmap
+Primary request: a polished memorable icon combining an abstract AprilTag/fiducial-inspired target with AR scanning brackets and a restrained suggestion of layered spatial depth. The central mark is an intentionally decorative, non-scannable geometric glyph: a compact asymmetric arrangement of chunky square blocks with an open center, enough to evoke a vision target without reproducing any real AprilTag or QR code.
+Style/medium: premium geometric graphic design with exceptionally crisp edges, confident simple silhouette, a very subtle dimensional inset or stacked-layer effect. Professional robotics instrument, precise yet approachable.
+Composition/framing: one bold centered icon mark, generous safe area about 15 percent on all sides, legible at 48 pixels. Four compact cyan scanner corner brackets frame the glyph. One small warm coral square accent integrated into the glyph, not an extra object. Only two faint offset contour layers behind the central mark to suggest depth, avoiding clutter.
+Scene/backdrop: rich midnight navy background filling all edges; a very subtle navy tonal gradient is acceptable.
+Color palette: midnight navy #071526, luminous electric cyan #40DDED, off-white icy highlights, one warm coral #FF705E accent.
+Text: no text, no letters, no numbers.
+Constraints: full-bleed opaque square background, no transparency, no baked rounded corners or outer app-icon mask, no border around the whole square, no device mockup, no realistic camera, no confetti, no jester hat, no real readable AprilTag/QR/barcode, no busy circuit details, no tiny text, no watermark. The decorative central symbol should feel flat and iconic with only subtle controlled depth, not glossy or heavily 3D.

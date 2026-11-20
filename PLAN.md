@@ -1,0 +1,351 @@
+# AprilTag AR developer implementation plan
+
+Draft for developer handoff
+
+Build a React Native app for quickly inspecting AprilTag placement, producing calibrated field maps with optional physical measurements, and debugging what a robot camera should observe. Make the iPhone experience reliable first. Share TypeScript workflows and a native AprilTag/calibration core, with ARKit components on iOS and ARCore components on Android.
+
+The active scope is **Milestone 0 only: put a working capture/measurement MVP on a real LiDAR-capable iPhone, take it to a real field, and bring the recordings back here for review**. The developer builds the app; the tester performs the field capture using the [Milestone 0 tester checklist](TESTER_CHECKLIST.md). No synthetic-data generator, test rig, surveyed fixture, BLE meter, or competitor benchmark is required for this milestone.
+
+Milestone 0 is complete only after the app works on the phone, the tester has recorded real field data, the exported bundle has been opened and checked here, and we have reviewed the findings together. The later roadmap is retained as a provisional draft. Revise it together after that review before starting later milestones. This update changes the plan only; all implementation checkboxes remain open.
+
+## Milestone 0 Ship the phone capture MVP and collect real field data
+
+**Goal:** Use a working iPhone app to learn what ARKit and LiDAR actually provide on the field before designing the rest of the project. **Working estimate:** 1 to 2 developer weeks for a small capture MVP, plus tester availability and any recorder fixes. **Required tester work:** T0. **Next decision:** joint review of the returned data and revision of the remaining plan.
+
+- [ ] **M0.1** Create the minimal React Native/iOS project and native ARKit component. Choose the shortest practical development-signing or TestFlight route and install a working build on the user's/tester's actual LiDAR-capable iPhone. Record the app revision, device model, iOS version, and install/update instructions. A simulator build alone does not complete this task.
+- [ ] **M0.2** Implement the live camera/AR screen with start/stop recording, a session name, elapsed time, tracking status/reason, depth availability, and saved-data status. Let ARKit own the camera. Show enough live feedback to know that RGB, pose, and LiDAR capture are functioning while walking.
+- [ ] **M0.3** Record RGB video plus preserved images at measurement/bookmark events, with per-recorded-frame timestamps, camera pose, intrinsics, image dimensions/orientation, the image-to-display transform, tracking state/reason, world-mapping state, and available feature-point/anchor/plane information. Preserve frame/segment identity and video presentation-time-to-AR-frame mapping so later analysis can relate imagery, motion, and measurements. Record supported camera/exposure metadata when available; mark missing fields rather than fabricating them.
+- [ ] **M0.4** Capture numeric `sceneDepth` and available confidence maps from the matching AR frames, including their dimensions, units, mapping to the RGB image, and source timestamps. Keep unsmoothed and smoothed depth distinguishable if both are recorded. Add a depth/confidence preview for field use; a rendered heatmap must not replace the numeric data. Expose unsupported/missing-depth states clearly.
+- [ ] **M0.5** Add a simple measurement probe: select a visible point to inspect valid depth, and select two retained 3D points to show estimated 3D distance and gravity-aligned vertical difference separately. Store selected pixels/points, frame IDs, depth/confidence source, values, units, and the method used. Reject unavailable depth and clear/invalidate selected endpoints when tracking resets or the coordinate segment changes. Label measurements as AR/LiDAR estimates; do not present an arbitrary depth pixel as a plumb floor height or a survey result.
+- [ ] **M0.6** Add bookmarks and notes for tag IDs, floor/structure observations, and anything the tester wants reviewed. Allow optional manual reference measurements when convenient, without requiring a tape or fixture. Basic AprilTag detection may be included if straightforward, but it must not delay the capture MVP; preserve original imagery so detection can be added offline later.
+- [ ] **M0.7** Implement stop/save, a session list, and export through iOS Files/Share/AirDrop. Export original numeric depth/confidence records, RGB media, metadata, measurements, notes, app/device/settings information, and a manifest in documented formats. Specify units, coordinate/depth conventions, clock domains, and file checksums. Keep files linked by frame IDs/timestamps and make the bundle readable outside the phone. Do not require a backend, BLE integration, full calibration solver, or replay application.
+- [ ] **M0.8** Run a short capture on the actual phone and open its exported bundle on the development machine. Check that RGB is viewable, numeric depth/confidence is decodable, frame associations and units are coherent, and notes/measurements survived export. Choose capture rates/resolutions that preserve as much useful data as practical for the field session; record actual rates, dropped/missing samples, queue/storage failures, and settings. Fix recorder failures before sending the tester out.
+- [ ] **M0.9** Give the tester the installed build and the short T0 run sheet. Receive at least one real-field recording that visits multiple AprilTags and floor/structure views, includes stationary and moving observations plus measurement/bookmark examples, and returns toward the starting area. The tester exports the complete session bundle and notes back here. A bench-only or synthetic session does not satisfy this task.
+- [ ] **M0.10** Open the returned field bundle here and prepare a concise observation report: what was captured, missing or weak data, sample RGB/depth views, tracking changes, measured-point behavior, data volume/rates, and practical problems. Review the data and report with the user. Use those findings to revise and agree on the next milestones; do not treat this exploratory capture as proven calibration accuracy.
+- [ ] **M0.G** Exit only when the app is installed and functional on the real phone, a tester has captured data on a real field, the exported files have been received and verified readable here, and the user/data review has occurred. Record the dataset location/checksum and findings. Later milestone work starts only after we revise and agree on the next plan together.
+
+**Commit theme:** `feat(M0.x): build the iPhone ARKit LiDAR capture MVP`. Each development step is committed with its checkbox update; record tester evidence and the joint review in a separate M0 completion commit after they actually occur.
+
+**Scope boundary:** Capture the richest useful native data that the phone can sustain, while preserving a usable app and a reliable export. Record the chosen rates/formats and any unavailable or dropped data. Defer synthetic datasets, calibration research, test rigs, BLE purchases/integration, full solver work, Android, and production polish until the real-field review establishes what is needed.
+
+## Later roadmap awaiting the Milestone 0 review
+
+The remaining sections are retained for reference only. Their task IDs, order, scope, dependencies, and estimates are provisional and will be revised together after M0.10/M0.G. They are not permission to begin a synthetic-test phase, VisionCamera investigation, or other later milestone before the real-phone/field-data gate is complete.
+
+## Recommended direction
+
+Use React Native and TypeScript for navigation, field setup, measurement entry, session management, calibration review, and reports. Embed a native AR scanning component: Swift with ARKit and RealityKit on iOS, followed by a Kotlin/native ARCore component on Android. Native code owns camera frames, tracking, frame-synchronized spatial overlays, and active capture persistence.
+
+Use one shared AprilTag 3 C detector behind thin platform adapters, with a portable C/C++ geometry and calibration core. React Native orchestrates this core through typed native interfaces; keep one authoritative implementation of the numerical algorithms. Standard AprilTag detection is classical computer vision and does not require a trained machine-learning model. Prove the mobile bindings before committing to solver dependencies.
+
+Support LiDAR-assisted measurement on capable iPhones through the native ARKit component. Combine RGB tag observations with validated scene-depth/floor/tag-plane constraints in the shared calibration core. Keep the app usable without LiDAR, and retain manual/BLE measurements as additional constraints. Enhanced accuracy must be demonstrated against independent measurements for the quantities and conditions claimed.
+
+Evaluate VisionCamera early as an additional capture path using the same detector. The production AR scanning path remains ARKit/ARCore-backed. During AR scanning, the AR session owns the camera. A separate VisionCamera mode must release its camera before entering AR mode, and vice versa. A frame processor supplies image processing; it does not by itself supply visual-inertial world tracking. Milestone 0A decides whether VisionCamera earns a role in the app without making simultaneous camera ownership a requirement.
+
+After the Milestone 0 data review, consider PractiCal AR as a product reference and WPIcal as a comparison baseline or source of selected calibration routines. Any reuse investigation belongs to the revised later plan and must not delay the phone capture MVP.
+
+Deliver three explicit workflows:
+
+| Workflow | Operator goal | Output |
+| --- | --- | --- |
+| Inspect a field | Find missing, incorrectly identified, moved, or rotated tags efficiently. | Coverage checklist and placement differences against an immutable reference layout. |
+| Calibrate a field | Estimate the layout that is physically present, with or without tape or laser measurements. | A candidate map, supporting observations, uncertainty information, and a reviewed export. |
+| Debug a robot camera | Compare geometric expectations with the robot system's actual observations and calculations. | Virtual camera view, expected tag transforms, and discrepancies against recorded or live robot data. |
+
+The ideas below describe a possible later implementation, not prerequisites for the phone MVP. The Milestone 0 capture results and joint review will determine what to retain, change, combine, or remove.
+
+## Deferred options for development without field access
+
+Use interchangeable live, replay, and synthetic input providers behind the same application interfaces. Exercise the actual detector, solver, storage, and workflow code wherever possible; simulate the unavailable sensor or transport at its boundary.
+
+| Development method | What the developer can verify | What remains physical |
+| --- | --- | --- |
+| Analytic geometry cases | Coordinates, projections, transforms, unit conversion, constraint behavior, and known solver results. | Real-world sensor error. |
+| Rendered AprilTag images and synthetic sessions | Actual detector behavior on controlled images; known tag/camera layouts; injected noise, blur, missing tags, pose drift, and bad measurements. | Detection and accuracy across real lighting, optics, materials, and motion. |
+| Synthetic depth and scripted tape events | Depth registration/math, confidence filtering, plane fitting, missing data, duplicate/stale BLE events, reconnection state, and endpoint association. | Real LiDAR bias and vendor Bluetooth behavior. |
+| Recorded-session replay | Re-run actual saved RGB/depth/pose inputs through changed code; investigate bugs and compare solver configurations without another field visit. | Acquisition behavior not captured in the recording, new environments, and unsupported hardware. |
+| React Native tests and simulator replay | Navigation, forms, coverage status, errors, reports, state recovery, and shared/native contracts. | Native device integration and end-to-end sensor behavior. |
+
+Synthetic test truth must be known independently of the result being checked. Use simple hand-calculated cases and a separate forward scene generator so a shared transform bug cannot make both the input and expected result agree incorrectly. Label synthetic, recorded, and physically surveyed evidence separately.
+
+The iOS Simulator runs the application's simulated/replay paths, not live ARKit: [Apple documents that ARKit is unavailable in iOS Simulator](https://developer.apple.com/documentation/arkit/placing-objects-and-handling-3d-interaction). Likewise, [React Native component tests](https://reactnative.dev/docs/testing-overview) do not execute the backing native platform code. Keep native build checks and tester device runs alongside those tests.
+
+App-owned replay feeds recorded sensor outputs into our code; it does not automatically rerun Apple's tracking or LiDAR processing from ordinary video. Optionally evaluate [Apple's documented AR-session recording/replay workflow](https://developer.apple.com/documentation/arkit/recording-and-replaying-ar-session-data) with the selected Xcode/device versions. Android also has [ARCore recording/playback](https://developers.google.com/ar/develop/c/recording-and-playback/developer-guide), whose tracking results can differ between playbacks. These native facilities supplement the deterministic app replay runner rather than block it.
+
+## Architecture boundaries
+
+| Component | Responsibility | Portability |
+| --- | --- | --- |
+| Shared application | Navigation, field setup, measurement forms, coverage lists, session browsing, calibration review, reports, and exports. | React Native/TypeScript workflows reused on iOS and Android. |
+| Native AR scanning component | Own camera capture, tracking, native spatial rendering, and frame-synchronized capture guidance. Emit matching image/metadata records. | Swift/ARKit/RealityKit first; Kotlin/native ARCore component later. |
+| Depth provider | Capture optional frame-associated depth/confidence buffers, geometry mapping, source type, and smoothing metadata. Reject invalid or stale samples and supply accepted local geometry to the shared solver. | ARKit LiDAR scene depth first; supported ARCore depth sources later. Capability and sensor provenance stay explicit. |
+| Optional VisionCamera adapter | Capture non-AR camera frames and call the same native detector. Mark absent world tracking explicitly. | Retain only if Milestone 0A establishes a useful, maintainable role; validate each platform independently. |
+| Shared AprilTag core | Run AprilTag 3 in image coordinates and retain corners, IDs, quality, pose candidates, and tag geometry. Handle platform buffer layouts in thin adapters. | One C detector used by both AR and optional VisionCamera paths, with mobile bindings. |
+| Geometry and estimation core | Transform frames, select observations, solve candidate layouts, apply measurement constraints, and report diagnostics. | Portable C/C++; public contracts contain no React Native, RealityKit, ARKit, or ARCore framework types. |
+| Typed native interface | Accept commands and return bounded status/observation snapshots, results, and session/file references. Define threading, ordering, cancellation, and error semantics. | Shared TypeScript API/schema with native platform implementations. |
+| Session store and replay | Natively persist active capture inputs, reference maps, observations, measurements, settings, and solver outputs. Reproduce results offline. | One authoritative session store behind platform-neutral contracts; a React Native reload must not lose a recording. |
+| Measurement providers | Normalize manual and BLE readings into the same reviewed measurement record; expose structured device events to the shared workflow. | Core model shared; vendor SDK/Core Bluetooth and Android transports remain native. |
+| Camera diagnostics | Project a selected virtual camera, render spatial overlays natively, and compare expected results with actual robot records. | Shared numerical core and React Native comparison screens; native AR rendering per platform. |
+
+Use meters and radians internally. Define `T_A_B` to mean a transform that maps coordinates from frame B into frame A. Document field, AR world, phone optical, robot body, robot optical, tool, and tag frames, including quaternion ordering and composition order. WPILib uses forward/left/up conventions; AprilTag's optical conventions differ, and ARKit camera geometry needs an explicit conversion. See [WPILib coordinates](https://docs.wpilib.org/en/stable/docs/software/basic-programming/coordinate-system.html), [AprilTag conventions](https://github.com/AprilRobotics/apriltag#coordinate-system), and [ARKit gravity alignment](https://developer.apple.com/documentation/arkit/arconfiguration/worldalignment-swift.enum/gravity).
+
+Use [ARFrame](https://developer.apple.com/documentation/arkit/arframe) and its camera's [intrinsics](https://developer.apple.com/documentation/arkit/arcamera/intrinsics) together. Detection coordinates and rotated/cropped screen coordinates are different. Characterize the actual image geometry and calibration across supported capture modes; invalidate incompatible profiles after camera, lens, zoom, or resolution changes.
+
+Keep image buffers, buffer lifetime management, native recording, and frame-critical processing/rendering within the native pipeline. React Native receives commands/results and bounded snapshots rather than serialized raw camera images. Each snapshot identifies its source, session/segment/frame, capture timestamp and clock domain, image geometry, intrinsics, tracking state, camera pose when available, and matching detections. Throttling display updates must not discard the native records needed for calibration or replay. Untracked camera-only observations must not acquire a fabricated field pose or a tracked status.
+
+## Developer workflow and completion rules
+
+Keep stable task IDs and focused commits. Update each implementation checkbox in the same commit as its deliverable. Milestone 0 has a required real-phone/field-data gate in addition to code completion; its field activity is detailed in [TESTER_CHECKLIST.md](TESTER_CHECKLIST.md). Later milestone definitions below remain provisional until the joint review.
+
+For every completed checkbox:
+
+- Implement the named deliverable and its relevant checks.
+- Store a short reproducible validation record under `docs/validation/`, linking the dataset or fixture used. Keep large recordings outside ordinary Git and reference their location and checksum.
+- Change only the completed item from `[ ]` to `[x]` in this plan.
+- Commit with the task ID, for example `feat(M2.2): detect tags from recorded AR frames`.
+- In the commit body, give the validation command or manual procedure, result, and remaining limitations. If a task is blocked, leave it unchecked and record why; do not mark it complete to close the milestone.
+
+Report installation, field capture, export verification, and review status separately during Milestone 0. The developer can fix the recorder while awaiting the field visit, but must not start the later roadmap or substitute simulated results for the required field dataset. Later development/testing strategies will be chosen after reviewing the actual data.
+
+For Milestone 0, use only the folders needed for the React Native app, iOS native component, minimal capture format, and operating notes. Add synthetic fixtures, elaborate replay tools, Android, and solver packages only if the post-capture plan calls for them. Only planning documents are being edited now.
+
+Milestone 0A is inserted before Milestone 1 so existing task IDs and commit references remain stable. Its proof-of-concept tasks are future implementation work and remain unchecked along with the rest of the plan.
+
+A junior developer owns implementation, code-level verification, and regression fixes. The tester owns physical fixtures, ground-truth measurements, field recordings, and acceptance runs. Use targeted code review for coordinate conventions, solver weighting, and camera extrinsics; the developer supplies executable examples and tests for that review. No fixture construction or survey work is assigned to the developer.
+
+## Milestone 0A Prove React Native and VisionCamera feasibility
+
+**Goal:** Implement the native integration and replayable React Native scanning shell; evaluate VisionCamera without blocking the rest of development. **Depends on:** Milestone 0. **Estimate:** 1 to 2 weeks; time-box VisionCamera-specific exploration to three developer days. **Tester handoff:** T1 runs the compiled native acquisition path on physical devices.
+
+- [ ] **M0A.1** Create the React Native workspace, pin toolchain/dependency versions, and run the base app in iOS Simulator. Build the native device target as well. Provide installation/signing instructions for the tester; a physical field run is not required for this task.
+- [ ] **M0A.2** Build a minimal shared AprilTag 3 C detector wrapper with a platform-neutral input/output contract and known-image fixture. Keep detector configuration, tag dimensions, and numerical behavior common across capture paths. Document the Android binding/build requirements without starting the full Android app.
+- [ ] **M0A.3** Implement/time-box a VisionCamera adapter calling the shared detector. Compile it and test buffer conversion, strides, orientation, timestamps, ownership, and bounded processing using constructed buffers. Evaluate [camera-matrix delivery and its stabilization restriction](https://visioncamera.margelo.com/api/react-native-vision-camera/interfaces/UseFrameOutputProps). Record a successful build or reproducible integration failure and the remaining device checks for T1. Do not spend the rest of the project repairing an optional capture path.
+- [ ] **M0A.4** Implement the native ARKit/RealityKit view and a separate synthetic/replay provider behind the same session interface. The live path reads image, intrinsics, pose, timestamp, and tracking state from matching AR frames; the simulator path supplies known inputs without starting ARKit. Render basic tag axes from a tested optical-frame conversion and return compact observation snapshots to React Native. Compile the live implementation; the tester verifies actual acquisition in T1.
+- [ ] **M0A.5** Automate lifecycle/state tests with injected navigation, unmount, background/foreground, permission-denial, tracking-reset, and reload events. Test camera-mode exclusivity and fresh alignment after a new session. Preserve or explicitly finish/save active capture. Mark actual OS/camera lifecycle behavior for T1; scripted events test our state handling.
+- [ ] **M0A.6** Add an automated benchmark over the synthetic image/session set: detector outputs, pixel/pose consistency, processing latency, bounded queues, and memory trends. Record the host and build configuration. Add device timing/log capture for the tester's live and thermal checks; desktop throughput is not a claim about iPhone performance.
+- [ ] **M0A.7** Write `docs/decisions/002-react-native-camera-integration.md` with the tested versions, native API/view boundary, camera ownership and persistence rules, results, and VisionCamera decision. Choose a separate detection/debug mode or omit VisionCamera from production if it adds no proven value. Reuse the detector/core either way; do not replace the chosen ARKit/ARCore scanning architecture with an untracked camera feed.
+- [ ] **M0A.8** Implement scene-depth/confidence ingestion in the live ARKit adapter and test its conversion/filtering with synthetic buffers, including unsupported hardware and nil/invalid depth. Preserve originating RGB frame/pose and smoothing metadata. Package an instrumented device build for T1 to confirm actual LiDAR acquisition; no separate camera session is required.
+- [ ] **M0A.G** Simulator synthetic/replay flow works, native device targets compile, core/adapter tests pass, and a tester build can capture diagnostic data. Record the VisionCamera decision and pending live-device checks explicitly. Proceed to M1 while the tester runs T1; passing mocks does not mark T1 complete.
+
+**Commit theme:** `spike(M0A.x): validate React Native and VisionCamera integration`. Commit each completed experiment and its validation notes with its checkbox update; preserve reproducible findings when experimental code is replaced.
+
+## Milestone 1 Establish geometry contracts and reproducible sessions
+
+**Goal:** Promote the feasibility work into production contracts and reproducible sessions. **Depends on:** Milestones 0 and 0A. **Estimate:** 1 week.
+
+- [ ] **M1.1** Establish the production React Native app and native-component structure from the spike. Add build instructions, dependency pins, notices, and CI for TypeScript contracts, native builds, and core/numerical tests. Keep a simulator replay configuration and a separately buildable live-device configuration.
+- [ ] **M1.2** Expand the spike's minimal optical-frame contract into the complete production frame and transform contract, with worked examples for a head-on tag, a known translation, 90-degree turns, inverse transforms, quaternion ordering, and tag corner ordering. Specify the baseline composition `T_field_tag = T_field_AR × T_AR_phone × T_phone_tag` after optical-frame conversion. Document how control establishes field registration, inspected-tag exclusion, observation aggregation, drift rechecks, and uncertainty/status rules. Have the reviewer approve this baseline estimator contract before production overlays or inspection use it.
+- [ ] **M1.3** Define versioned models for field layouts, per-tag physical geometry, capture frames, detections, measurement constraints, candidate maps, camera profiles, and validation reports. Include source/session/frame identity and explicit tracked versus camera-only status. Add optional depth/confidence maps, source and smoothing mode, depth resolution/units/convention, RGB-to-depth mapping, capture association, validity, and capability metadata. Distinguish assumed, measured, fitted, and held-out inputs.
+- [ ] **M1.4** Implement strict WPILib layout import and export. Reject duplicate IDs, invalid units or quaternions, and malformed poses. Preserve origin and layout identity; add golden JSON round-trip fixtures.
+- [ ] **M1.5** Implement authoritative native session saving and replay with schema version, device/capture configuration, reference-map identity, settings, timestamps, and checksums. Preserve selected keyframe images, associated depth/confidence buffers when present, and their complete capture metadata; define storage budgets and any optional full-recording mode. Include interruption and session-segment identity. Give the shared interface session/file references rather than a competing copy of capture state.
+- [ ] **M1.6** Define and implement typed React Native commands/events for native view/session lifecycle, configuration, status, saving, calibration jobs, cancellation, and result access. Specify event ordering, observation age, errors, bounded display-update rates, and frame-consistent snapshots. Keep raw image buffers and authoritative mathematics native; validate schemas at the boundary.
+- [ ] **M1.7** Implement a developer replay mode with dataset selection, pause/step/restart, deterministic timestamps, and configurable fault injection. Run the same detector/solver/workflow code on synthetic or recorded inputs. Add a capture-bundle exporter and dataset validator so the tester can record once and the developer can reproduce an issue locally; label input provenance and missing ground truth.
+- [ ] **M1.G** A saved fixture round-trips without changing coordinates; all golden transform cases pass independently checked expected results. Replay reproduces core outputs within a documented numerical tolerance. Snapshot identity and reload/reconnection behavior pass automated adapter/state tests; actual OS lifecycle confirmation remains in T1.
+
+**Commit theme:** `feat(M1.x): add geometry and session foundations`.
+
+## Milestone 2 Capture reliable tag observations on iPhone
+
+**Goal:** Implement capture, tag/depth processing, and overlays with automated geometry checks. **Depends on:** Milestone 1. **Estimate:** 3 weeks, including the depth-processing code. Actual device acquisition is checked in T1/T2.
+
+- [ ] **M2.1** Complete the production native ARKit capture component inside React Native. Capture image, intrinsics, image dimensions, timestamp, pose, and tracking state from the same AR frame. Lock and record the supported camera configuration; handle permission denial and unsupported hardware clearly.
+- [ ] **M2.2** Integrate the shared AprilTag 3 core with configurable family and measured tag dimensions. Record corners, quality measures, and ambiguous pose candidates. Test the actual detector corner-to-corner size definition rather than the paper's outside edge. Apply the same contract to any VisionCamera mode retained in Milestone 0A.
+- [ ] **M2.3** Add a bounded native background detection pipeline. Drop obsolete processing work instead of accumulating latency; expose processing time, detection rate, and observation age through bounded React Native status updates. Preserve the selected recording data independently of display-update throttling.
+- [ ] **M2.4** Draw tag IDs, corners, and spatial axes in the native scanning view through portrait/landscape changes, screen cropping, and supported resolutions. Verify image-to-display conversions with fixed corner fixtures. Keep surrounding controls and nonspatial status in shared React Native components where practical.
+- [ ] **M2.5** Reject or flag blur, undersized detections, oblique views, pose flips, unexpected IDs, and conflicting observations of the same ID. Save the evidence needed to investigate them.
+- [ ] **M2.6** Handle tracking loss, interruptions, backgrounding, relocalization, React Native navigation/unmount, and reload/reconnection. Pause accepted measurements, mark affected alignment stale, and require a reference recheck before continuing an old segment. Release native resources when capture ends and enforce camera-mode ownership.
+- [ ] **M2.7** Validate native RGB/depth registration, differing grid resolutions, scaled intrinsics, orientation, camera-plane-depth unprojection, and reprojection on known geometry. Reject invalid, stale, low-confidence, and edge-mixed samples; test missing confidence data explicitly. Keep depth buffers native and expose bounded measurement/status summaries to React Native.
+- [ ] **M2.8** Fit robust local floor and tag/support planes from accepted depth samples. Use RGB detections to select appropriate regions and tag identity; account for the physical offset between a backing surface and the tag face. Distinguish plumb floor-to-tag height from shortest point-to-plane distance, especially on sloped floors. Report fit residuals and sample coverage, and distinguish estimated floor geometry from independently surveyed control.
+- [ ] **M2.G** Synthetic/recorded tag and depth reprojection tests pass; queue limits, orientation changes, and depth-loss fallback behave correctly in replay. The device build exposes performance and alignment diagnostics for T1/T2. Live tracking quality and phone thermal performance remain separately marked until the tester verifies them.
+
+**Commit theme:** `feat(M2.x): capture and display reliable tag observations`.
+
+## Milestone 3 Deliver guided field inspection without a tape
+
+**Goal:** Implement the guided field-inspection workflow and verify it with synthetic/replayed walks. **Depends on:** Milestone 2. **Estimate:** 2 weeks.
+
+- [ ] **M3.1** Add session setup for a reference layout or a new custom layout, reference selection, field origin, and anchor assumptions. Show the current reference category throughout the session.
+- [ ] **M3.2** Build a shared React Native coverage list and map with expected, seen, sufficiently observed, suspect, and unresolved tags, driven by native session results. An undetected tag remains missing/unresolved; absence of detection alone does not prove physical absence.
+- [ ] **M3.3** Guide the operator toward additional angles, closer views, overlapping groups, and a return to control points. Use angle and spatial diversity, not raw frame count alone, to judge coverage.
+- [ ] **M3.4** Add provisional multi-view tag estimates using the reviewed pose-aggregation method. Preserve actual placement differences and reject conflicting poses rather than averaging tag flips.
+- [ ] **M3.5** Implement inspection comparisons without circular certification. Exclude the tag being judged from explicit field registration, initialization, realignment, and pose estimation; use independent control when available. A pinned/anchoring tag remains assumed until checked independently. Report unresolved results when independent geometry is insufficient.
+- [ ] **M3.6** Produce a per-tag report of position/orientation differences, coverage, assumptions, and unresolved causes. Support save/resume and a repeat scan without overwriting the reference or previous results.
+- [ ] **M3.G** Run the complete scan-to-report workflow on a synthetic walk and any available recorded walk, including planted placement errors, unreadable/unknown tags, and a tracking interruption. No weakly observed tag receives an automatic pass. Deliver the build and capture instructions for the tester's physical walkthrough in T2.
+
+**Commit theme:** `feat(M3.x): guide no-tape field inspection`.
+
+## Milestone 4 Add physical measurements through manual entry
+
+**Goal:** Establish measurement semantics before adding Bluetooth. **Depends on:** Milestone 3. **Estimate:** 1 week.
+
+- [ ] **M4.1** Implement separate records for plumb floor-to-center or floor-to-corner height, distance between named endpoints, horizontal offset, and surveyed point coordinates. Include units, datum, source, uncertainty, and confirmation.
+- [ ] **M4.2** Add an endpoint-selection workflow with clear diagrams or previews. Let the operator select tag center, a specific corner, or a named control point. Distinguish a point on the floor from an estimated AR floor plane.
+- [ ] **M4.3** Implement guided measurement entry and help text for height, inter-tag range, and offsets, including endpoint diagrams, tool datum, and required metadata. Encode the distinction between plumb height, diagonal range, and corner/center measurements in tests. The tester demonstrates the physical procedures and supplies usability findings in T2/T3.
+- [ ] **M4.4** Add unit conversion, repeat readings, correction/undo, outlier review, and explicit rejection of an impossible measurement. Keep original values and provenance when measurements are edited.
+- [ ] **M4.5** Show which coordinates a proposed measurement can constrain. Suggest additional independently placed references when height-only, nearly collinear, or otherwise weak geometry leaves degrees of freedom unresolved.
+- [ ] **M4.G** Synthetic and scripted measurements produce the intended constraint types, records, undo behavior, and contradictions. A diagonal range cannot silently become height. The full entry/review workflow passes automated interaction tests; physical measurement accuracy is evaluated by the tester.
+
+**Commit theme:** `feat(M4.x): add physical measurement constraints`.
+
+## Milestone 5 Solve and validate measurement-assisted calibration
+
+**Goal:** Produce defensible candidate maps from visual observations, LiDAR depth when usable, and optional physical measurements. **Depends on:** Milestones 3 and 4. **Estimate:** 4 to 6 weeks, including depth fusion and reviewer involvement.
+
+- [ ] **M5.1** Implement the solver's states and constraint interfaces with executable examples and targeted code review: tag/keyframe poses, visual or relative-pose constraints, soft VIO information, optional depth/plane constraints, and physical measurements. Make weights configurable for later empirical tuning. Document correlations; do not invent ARKit covariance, convert confidence categories directly to metric covariance, or treat repeated/smoothed observations as independent evidence.
+- [ ] **M5.2** Implement the selected solver once in the portable native core and expose jobs/results to React Native. Use WPIcal-derived components only where the Milestone 0 decision supports reuse. Keep a raw-corner bundle adjustment approach as a separately justified choice, not an assumed WPIcal feature.
+- [ ] **M5.3** Handle gauge freedom, anchor uncertainty, disconnected groups, weak geometry, outliers, and multiple pose hypotheses. Components without a valid connection to field control remain unregistered; they cannot be exported as calibrated global coordinates.
+- [ ] **M5.4** Support both no-tape and measurement-assisted solves using the same recorded sessions. Show the effect of physical constraints, residuals, rejected inputs, and sensitivity to removing a questionable measurement.
+- [ ] **M5.5** Add a candidate-map review with per-tag changes, unresolved conditions, and uncertainty provenance. Label uncertainty as model-based or physically evaluated; do not present synthetic/model confidence as empirical field accuracy. Protect the reference map and distinguish estimated tags from unchanged reference fallback tags in mixed exports and companion reports.
+- [ ] **M5.6** Run the solver regression suite on synthetic geometry and available recorded datasets. Implement loading held-out truth and computing position/orientation error, repeatability, and unresolved coverage. Compare software revisions automatically. When T2 data arrives, run it through the same harness and fix failures; absence of a surveyed dataset does not block implementing the solver or diagnostics.
+- [ ] **M5.7** Export schema-validated candidate WPILib JSON plus a companion evidence/status report in JSON/CSV. Add `.fmap` only if required by the selected robot stack and test its reader compatibility. Round-trip origin, units, IDs, and orientations; keep pending physical validation explicit in the companion report.
+- [ ] **M5.8** Implement optional depth/plane residuals in the shared solver with configurable weighting, robust rejection, provenance, and enable/disable controls. Verify expected effects using known synthetic noise/bias cases, then tune against designated T2 development captures when available. Evaluate the frozen candidate on untouched acceptance data; if an evaluation informs a change, reserve fresh data for the next final assessment. Replay identical RGB/pose inputs with added-depth constraints on/off; this does not disable ARKit's internal fusion. Reject conflicting depth or fall back rather than silently forcing a worse estimate.
+- [ ] **M5.G** Solver, rejection logic, no-tape/measurement modes, depth switches, and error reports pass the synthetic/replay regression suite; exported results are reproducible. Document pending empirical accuracy/LiDAR-benefit checks in T2/T5. This code-completion gate permits camera-debug development but does not authorize a validated-accuracy claim or public release.
+
+**Commit theme:** `feat(M5.x): solve and validate field calibration`.
+
+## Milestone 6 Integrate one verified BLE tape
+
+**Goal:** Implement the BLE integration and verify its software behavior without requiring a meter for every iteration. **Depends on:** Milestone 4; the actual driver also needs vendor documentation/SDK access. **Estimate:** 1 to 2 weeks after that access. Hardware verification runs separately in T3.
+
+- [ ] **M6.1** Use the SDK-access and open-source findings in [reekon-sprint.md](reekon-sprint.md) to select a licensed, compatible existing integration or implement the REEKON driver from official documentation. Record supported SDK/firmware versions and terms; compile/link and test documented responses or supplied traces. The access investigation runs separately; keep this task open if access prevents implementation, while continuing unrelated milestones. Do not substitute an invented protocol or mark a fake provider as the finished driver.
+- [ ] **M6.2** Implement the native measurement-provider interface using the vendor SDK's transport or a documented [Core Bluetooth](https://developer.apple.com/documentation/corebluetooth) adapter. Expose typed device state/readings to the shared React Native measurement workflow. Handle permission, discovery, connection, disconnection, and foreground lifecycle behavior without duplicating SDK transport ownership. Keep manual entry available.
+- [ ] **M6.3** Normalize readings to the manual measurement schema and retain raw device records for replay/debugging. Preserve device identity, units, measurement kind, datum, offsets/relative zero, device acquisition time if available, and local receipt time. Require explicit operator selection or entry of required metadata the device does not supply.
+- [ ] **M6.4** Add an explicit pending-measurement workflow: choose endpoints/type, request or receive a reading, preview it, then confirm association. Never attach a reading to whichever tag happens to be visible when a delayed notification arrives.
+- [ ] **M6.5** Handle duplicates, stale readings, reconnects, unit changes, permission loss, and the tool being connected elsewhere. Recheck datum, offsets, units, and relative-zero state after tool restart. Distinguish live-sample notifications from capture events; deduplicate by supported event identity or explicit operator confirmation, never by length alone. Two intentional captures of the same length are valid. Do not promise delivery of events the tool itself never retained.
+- [ ] **M6.6** Automate at least 100 scripted reading events, including identical valid lengths, duplicates, delays, disconnects, restart-state changes, and absent metadata. Assert no duplicate confirmed record or silent reassignment; verify equivalent manual/BLE inputs reach the solver identically. Use real traces from T3 as regression fixtures when supplied.
+- [ ] **M6.G** The real driver builds, contract/parser tests and scripted event tests pass, and the tester can run T3 with useful diagnostics. Actual connectivity, power cycles, measurement agreement, and operator speed remain hardware acceptance checks. If SDK access blocks the driver, keep affected items open and continue M7/M8; additional brands remain follow-on work.
+
+**Commit theme:** `feat(M6.x): capture measurements from a BLE tape`.
+
+## Milestone 7 Predict the view from a robot camera
+
+**Goal:** Implement virtual-camera predictions and alignment controls, verified against known synthetic cameras. **Depends on:** Milestones 2 and 5. **Estimate:** 2 weeks.
+
+- [ ] **M7.1** Define importable robot-camera profiles: resolution, intrinsics, distortion model, optical frame, robot-to-camera transform, tag family/size assumptions, and pipeline conventions. Provide a worked profile for the chosen first system.
+- [ ] **M7.2** Implement approximate-placement and calibrated-alignment workflows, including entry/import of optical-center and orientation offsets and visible uncertainty. Test using known synthetic transforms. Provide the tester with alignment instructions; physical jig placement and offset measurements belong to T4.
+- [ ] **M7.3** Implement independent field alignment and a documented transform chain from field to phone, virtual robot camera, and robot body. Expose the assumed offsets and field-map version.
+- [ ] **M7.4** Use the shared numerical core to predict the virtual camera's frustum, image corners, camera-to-tag transforms, ranges, yaw, and pitch. Render spatial overlays in the native AR component and show the predicted image plane and comparison values in the appropriate native/shared views. Keep phone detections visibly distinct from virtual-camera predictions.
+- [ ] **M7.5** Add geometric visibility checks for image bounds, front/back orientation, projected tag size, and known occlusion geometry where available. Label predictions as geometric visibility; actual detection also depends on exposure, lighting, occlusion, and detector behavior.
+- [ ] **M7.6** Show a geometric reference robot pose by composing the independently established virtual-camera pose with the mounting transform. Distinguish this from reproducing a robot pipeline's pose-solving algorithm, which requires its own explicitly supported, versioned solver adapter. Provide a way to switch reference versus calibrated maps to isolate map errors.
+- [ ] **M7.G** Synthetic known-camera cases reproduce independently calculated projected corners and transforms within the approved numerical tolerance. Alignment/profile workflows and replay overlays pass automated checks. Ship the diagnostic build for the tester's stationary/jig trial in T4; that physical trial does not block M8 implementation.
+
+**Commit theme:** `feat(M7.x): predict robot-camera observations`.
+
+## Milestone 8 Compare predictions with a real robot vision system
+
+**Goal:** Diagnose why the robot's results differ. **Depends on:** Milestone 7. **Estimate:** 1 to 2 weeks for one vision stack.
+
+- [ ] **M8.1** Define a neutral import format for actual robot records: image or frame ID, capture timestamp/clock domain, camera profile, layout identity, tag IDs and corners, target transforms, pose candidates, solved robot pose, and available quality metrics.
+- [ ] **M8.2** Implement file import for the selected first system, such as PhotonVision, Limelight, or a custom pipeline. Start with schema-valid synthetic/static fixtures and reject missing or incompatible fields. Add stationary recordings supplied by T4 to remove timing as a confounder before evaluating moving-camera data.
+- [ ] **M8.3** Show expected versus actual IDs, image corners, per-target transforms, and robot poses using the same camera model and map. Identify unavailable fields instead of fabricating equivalents across different pipelines.
+- [ ] **M8.4** Add one live telemetry adapter after file-based comparisons pass. Use a local test server or documented protocol fixtures to check the supported interface and topic schemas. Record capture time, latency, clock offset, and staleness; reject quantitative moving-camera comparison when timing is unresolved. Actual robot connectivity is verified in T4.
+- [ ] **M8.5** Build scripted diagnostic cases for wrong tag size, wrong layout version/origin, inverted axes, incorrect camera mounting transform, lens calibration error, pose ambiguity, and stale telemetry. Include both a passing case and an injected failure for each supported diagnostic.
+- [ ] **M8.6** Export a shareable diagnostic session containing the selected profiles/maps, phone pose assumptions, real records, predictions, differences, and reproduction instructions.
+- [ ] **M8.G** For each planted fault, the report exposes the relevant discrepancy without claiming certainty about unobserved causes. Approximate phone placement remains a qualitative comparison; quantitative results require the verified alignment and timing procedure.
+
+**Commit theme:** `feat(M8.x): compare real robot vision with predictions`.
+
+## Milestone 9 Deliver the tested iOS release candidate
+
+**Goal:** Deliver a reproducibly tested candidate and fix tester-reported defects. **Depends on:** Milestones 5, 7, and 8; include M6 when its real driver is available. If an external dependency blocks an adapter, produce an explicitly scoped candidate with that feature disabled and its implementation checkboxes still open. **Estimate:** 2 developer weeks plus defect-fix time. Physical release qualification runs separately in T5.
+
+- [ ] **M9.1** Implement a batch regression command over all synthetic and available recorded datasets. Save per-build detector, solver, false-pass, unresolved-coverage, and timing reports. Include separate fields for missing physical truth and pending device acceptance.
+- [ ] **M9.2** Automate fault cases for blur/noise/occlusion, duplicate IDs, wrong sizes, disconnected geometry, tracking reset, stale/reordered frames, invalid depth, and BLE loss. Add a regression fixture for each reproducible tester defect; generated faults are not substitutes for real lighting/material tests.
+- [ ] **M9.3** Automate the main setup → scan/replay → review → measurement → export workflows. Check one-handed layout, large text, unit conversion, undo, errors, and coverage states in simulator/device UI tests as appropriate. Fix usability defects reported by the tester.
+- [ ] **M9.4** Run a 30-minute replay/stress test for memory, storage growth, queue latency, remount/reload, interrupted saves, and export recovery. Implement device metrics collection for battery/thermal and live-capture checks in T5. Keep core inspection/calibration usable offline.
+- [ ] **M9.5** Validate exports with the target reader/library or supplied consumer fixtures, and publish operating instructions and a short tester runbook. Fix round-trip failures; actual robot-consumer field use remains part of T4/T5.
+- [ ] **M9.6** Prepare the TestFlight candidate, permission descriptions, privacy disclosures, local export/deletion, dependency notices, and one-action issue/capture-bundle export. Record included features and external blockers. Public release waits for T5 acceptance.
+- [ ] **M9.7** Implement the comparison runner for visual/VIO inputs, added depth constraints, added physical measurements, and both additions. Report errors against synthetic truth or supplied surveyed truth with provenance. Keep "physical accuracy pending" explicit until T2/T5 establishes a supported claim; check depth fallback and source labels automatically.
+- [ ] **M9.G** Included features are implemented, automated checks pass, native targets build, and the tester has a candidate plus reproducible reports/instructions. Code fixes from received failures are covered by regression tests. T5 separately decides physical release readiness; a pending tester run does not turn an engineering-complete feature back into unfinished code.
+
+**Commit theme:** `release(M9): validate the iOS field workflow`.
+
+## Milestone 10 Port to Android after the iOS candidate
+
+**Goal:** Reuse the implemented workflows and core while replacing platform adapters. **Depends on:** Milestone 9 engineering completion. **Estimate:** 4 to 8 developer weeks, with T6 physical validation in parallel. This keeps iOS first without requiring Android coding to wait for every iOS field retest.
+
+- [ ] **M10.1** Select an initial set of [ARCore-supported devices](https://developers.google.com/ar/devices/) and minimum Android version. Define supported camera modes rather than promising every Android phone.
+- [ ] **M10.2** Build the shared AprilTag and geometry/calibration core with the Android NDK and React Native bindings. Run the same detector, geometry, solver, and export fixtures; set explicit numerical equivalence tolerances against iOS. Verify any retained VisionCamera adapter against the pinned Android-compatible plugin stack.
+- [ ] **M10.3** Implement the React Native-hosted native ARCore scanning/rendering component, camera coordinate conversions, lifecycle handling, local storage, and replay adapters against the existing contracts. Validate intrinsics, image orientation, timestamps, and camera pose together. Use ARCore's supported camera ownership/sharing model rather than assuming an independent VisionCamera session can run alongside it.
+- [ ] **M10.4** Reuse the React Native inspection, measurement, review, and reporting workflows. Add platform-specific native views/adapters only where required, and validate layout, permissions, navigation, native-session recovery, and Android device differences. Keep the native/core contracts common rather than building a second application interface or numerical implementation.
+- [ ] **M10.5** Port the BLE protocol and camera-debug adapters. Run the same scripted transport, endpoint-association, datum, and telemetry fixtures; provide a diagnostic build for the tester's Android device checks in T6.
+- [ ] **M10.6** Map the depth contract to supported [ARCore Depth/Raw Depth capabilities](https://developers.google.com/ar/develop/depth), including availability, confidence, capture timestamps/freshness, grid mapping, and fallback. Test with synthetic/replayed data and capability mocks; record whether actual device depth uses motion, hardware, or fused sources when T6 data arrives. Do not label all Android depth as LiDAR or assume iOS accuracy parity.
+- [ ] **M10.G** Android native targets build and the shared core, adapter, replay, and UI suites pass within documented tolerances. Deliver the candidate for T6. Physical accuracy and each device's supported operating envelope require the separate tester results before release.
+
+**Commit theme:** `feat(M10.x): validate Android platform adapters`.
+
+## Schedule and scope controls
+
+Only Milestone 0 is currently scoped for execution planning: target a small installable capture MVP in 1 to 2 developer weeks, then the required field capture and joint data review. Treat all later estimates as unapproved placeholders and re-estimate from the recorded evidence and agreed next scope. Existing SDK-access reconnaissance may continue independently, but no BLE device purchase or integration is required for M0.
+
+The active sequence is **installable phone MVP → on-phone capture/export check → tester's real-field capture → data received and reviewed here → joint revision of the remaining plan**. M0A and all later milestones remain paused as provisional ideas until that sequence is complete.
+
+Keep the initial release focused: one tape model, one robot vision integration, local sessions, and field/tag geometry. Additional BLE devices, automatic tool aiming, full photorealistic camera simulation, cloud collaboration, elaborate field CAD, and Android expansion are separate follow-on work. PhotonVision's [simulation documentation](https://docs.photonvision.org/en/latest/docs/simulation/simulation-java.html) is a useful reference for camera properties and target outputs, while also showing why geometric prediction is not a complete physical detector simulation.
+
+Start with the available LiDAR iPhone and a simple capture screen. Use the returned real-world observations to decide later camera modes, solver inputs, data formats, testing strategy, and accuracy work. Do not front-load those decisions into a new research or simulation prerequisite.
+
+## Existing projects and reuse decisions
+
+| Foundation | Verified facts | Planned use |
+| --- | --- | --- |
+| PractiCal AR | The [App Store listing](https://apps.apple.com/us/app/practical-ar/id6757085499) describes ARKit and AprilTag detection, layout comparison, and reports. The public [support repository](https://github.com/toddyocum/practical-ar-support) contains support material; an app implementation and reusable app license were not established. | Benchmark the experience. Do not make development depend on receiving its source. Reconsider reuse if suitable source and permission become available. |
+| WPIcal | The [official workflow](https://docs.wpilib.org/en/stable/docs/software/wpilib-tools/wpical/index.html) processes camera-calibrated videos, uses an ideal map and pinned tag, and exports WPILib JSON and `.fmap`. | Optional tester baseline on the same independently measured fixture; not a developer prerequisite. |
+| WPIcal solver | Current [field calibration code](https://github.com/wpilibsuite/allwpilib/blob/main/tools/wpical/src/main/native/cpp/fieldcalibration.cpp) builds relative tag constraints and uses Ceres for a pose graph, fixing one tag. It does not already fuse ARKit trajectories or physical measurements; this source also contains a fixed tag-size constant. | Investigate extracting selected routines. Do not describe it as an existing raw-corner bundle adjustment engine. Pin the exact revision inspected. |
+| AprilTag 3 | The [upstream library](https://github.com/AprilRobotics/apriltag) is a small C implementation with pose estimation. It uses a [BSD 2-Clause license](https://github.com/AprilRobotics/apriltag/blob/master/LICENSE.md). | Use the detector on both platforms, behind thin bindings. Configure family and physical tag dimensions explicitly. |
+| VisionCamera | Current [Frame Output documentation](https://visioncamera.margelo.com/docs/frame-output) uses `useFrameOutput`; [native processing plugins](https://visioncamera.margelo.com/docs/native-frame-processor-plugins) use Nitro modules and support Swift/Kotlin/C++. Older V4 examples use different APIs. | Pin compatible React Native, VisionCamera, Nitro, and worklet versions in Milestone 0A. Budget a custom AprilTag adapter; verify any third-party wrapper before relying on it. |
+
+Audit the exact dependencies selected for reuse. WPILib has a [BSD license](https://github.com/wpilibsuite/allwpilib/blob/main/LICENSE.md), while WPIcal also carries [third-party notices](https://github.com/wpilibsuite/allwpilib/blob/main/tools/wpical/WPICalThirdPartyNotices.txt). Retain required notices and record the provenance of any field layouts or models shipped with the app.
+
+## Bluetooth measurement research
+
+Start with manual entry and one physical tape integration. First candidate: REEKON T1M Utility; alternate: T1 Tomahawk. Choose between them after testing ergonomics and obtaining the SDK. A laser distance meter is a separate, useful option for long baselines and less accessible points.
+
+| Device | Measurement type | Integration evidence and decision |
+| --- | --- | --- |
+| REEKON T1M Utility | Retractable physical tape, 16 ft or 25 ft. | REEKON explicitly documents [direct SDK connectivity](https://support.reekon.tools/hc/en-us/articles/37713390218260--T1M-Is-the-T1M-Utility-Digital-Tape-Measure-Bluetooth-Connected). Preferred first candidate, subject to SDK access and an iPhone test. |
+| REEKON T1 Tomahawk | Retractable physical tape, 25 ft. Its alignment laser is not a laser rangefinder. | Official [connection methods](https://support.reekon.tools/hc/en-us/articles/28838376238228-Methods-to-Connect-to-REEKON-Products?sort_by=votes) distinguish custom SDK integration from keyboard mode. Evaluate handling and capture controls against T1M. |
+| REEKON T1R Range | Hybrid 16 ft tape, 50 m laser, and level. | [Specifications](https://support.reekon.tools/hc/en-us/articles/53900778221972--T1R-Technical-Specifications) list SDK support. The [product page](https://reekon.tools/products/t1r-range-hybrid-measuring-tool) contains preorder/shipping language; confirm fulfillment, firmware, and SDK maturity before making it a dependency. |
+| Leica DISTO D5 | Dedicated laser meter, up to 200 m under favorable conditions. | [Specifications](https://shop.leica-geosystems.com/sites/default/files/2025-01/Leica%20DISTO%20D5%20data-sheet_2405_V1.12_EN.pdf) list Bluetooth Smart; the [manual](https://shop.leica-geosystems.com/sites/default/files/2024-01/979589_Leica_DISTO_D5_UM_v1-0-0_en.pdf) explains selectable measurement references. [Developer API access](https://shop.leica-geosystems.com/lat/measurement-tools/disto/leica-disto-apps) is through the partner program. Strong later candidate after model and SDK access are confirmed. |
+| Bosch GLM 50-27 C | Dedicated laser meter, up to 50 m. | The [manufacturer confirms BLE and MeasureOn connectivity](https://www.bosch-professional.com/gb/en/products/glm-50-27-c-0601072T00). Supported custom-app protocol access was not established. Keep as an alternate pending vendor documentation. |
+
+The [REEKON BLE guide and SDK](https://support.reekon.tools/hc/en-us/articles/35510332936596-BLE-Connection-Guide-and-SDK-for-REEKON-Tools) are request-gated. Obtain the documentation, usage terms, supported firmware, and redistribution conditions before selecting an integration. Requesting access and buying or borrowing hardware are future tasks, not actions taken for this plan.
+
+For every candidate, verify direct offline reads in the custom iOS app, units, reference datum, saved versus live readings, error conditions, event timing, and Android protocol support. Bluetooth branding or compatibility with a vendor app does not establish those capabilities. Treat keyboard emulation as convenient manual input, not structured sensor telemetry. Device precision specifications also do not establish overall field calibration accuracy.
+
+## Accuracy and measurement rules
+
+1. **Keep reference and estimated maps separate.** Inspection never silently edits the reference. A calibrated candidate becomes a new version only through an explicit operator action.
+2. **Expose what establishes the reference.** Known tag dimensions and AR tracking provide metric information. An assumed pinned tag does not prove the field origin or heading is correct. Label results as relative, anchored to an assumed reference, or independently measured. Absolute accuracy requires enough independent control to establish the relevant field coordinates.
+3. **Use independent validation.** Do not estimate phone pose from a tag and use that same fit to certify its placement. Exclude the inspected tag from the explicit field-registration chain, including initialization and later realignment, or use independent control. A pinned tag cannot certify itself. ARKit may still track ordinary image features on the tag; that visual evidence is correlated, not independent survey truth. Reserve physical dimensions and captures that the solver never uses for final evaluation.
+4. **Give each measurement a physical meaning.** A plumb height from a defined floor datum to a tag center is different from a diagonal range, a horizontal offset, or a distance between named corners. A scalar BLE reading supplies neither endpoints nor global direction. Height alone cannot recover horizontal placement or orientation.
+5. **Record the tool datum.** Front, rear, hook, tripod, relative zero, and mounting offsets can change what a reading means. Store units, endpoints, source, timestamp, uncertainty, and operator confirmation. If the tool does not transmit a required setting, require the operator to specify it.
+6. **Avoid unsupported pose assumptions.** A handheld tape or laser may supply a constraint between selected endpoints without knowing its pose. Automatic directional placement requires a calibrated rigid mounting transform, measurement origin and direction, and timing. Tilt alone does not provide global heading.
+7. **Separate presentation from estimation.** Smooth AR graphics and normal tracking status are not measured accuracy. A detected floor plane is an estimate, not automatically a surveyed floor datum. Tracking resets or lost alignment invalidate affected results until rechecked.
+8. **Preserve unusual real geometry.** Do not silently snap tags upright, flatten the floor, or enforce the ideal map while trying to discover actual placement errors. Optional priors must be visible and recorded.
+
+### LiDAR measurement support
+
+On supported devices, ARKit exposes LiDAR-backed [scene depth](https://developer.apple.com/documentation/arkit/arconfiguration/framesemantics-swift.struct/scenedepth). Use runtime capability checks and handle missing depth without losing the RGB/tag workflow. The [depth data](https://developer.apple.com/documentation/arkit/ardepthdata) includes a depth map and optional confidence map. Depth values describe camera-plane distance, not automatically Euclidean range along a viewing ray; RGB and depth grids require explicit geometric mapping.
+
+Use accepted depth samples to fit local floor and tag/support planes, cross-check visual tag range and orientation, and supply reviewed soft constraints to the solver. RGB corners remain responsible for tag identity and in-plane geometry. A supporting wall or board may be offset from the printed tag plane; floor planes remain estimates until checked against physical control. LiDAR does not by itself establish the correct field origin or heading.
+
+Start measurement experiments with frame-associated `sceneDepth`. Record [smoothed depth](https://developer.apple.com/documentation/arkit/arconfiguration/framesemantics-swift.struct/smoothedscenedepth) separately because it averages information across frames; smoother visuals do not establish better measurement accuracy. Determine uncertainty empirically rather than treating confidence categories as metric error bounds. Account for correlation between depth, AR tracking, repeated observations, and smoothing.
+
+Validate explicit depth constraints disabled/enabled on identical saved RGB/pose inputs, both with and without physical measurements. This isolates the application's added depth constraints; it does not establish that ARKit's internal use of LiDAR was disabled. Compare against independent truth, retain non-LiDAR device tests, and enable measurement fusion only inside its demonstrated operating envelope. Missing, weak, or conflicting depth must cause rejection or fallback, not an automatic increase in reported confidence.
+
+### Proposed acceptance targets
+
+These are product acceptance targets, not prerequisites for writing code or claims about ARKit, PractiCal, or the proposed app. Encode the initial tolerances in configurable test profiles and coordinate the physical matrix with the tester. Synthetic/replay checks verify software behavior; the tester's independently measured runs establish empirical accuracy. Keep failures visible rather than loosening thresholds after seeing results.
+
+| Area | Proposed gate |
+| --- | --- |
+| No-tape inspection | Detect at least 95% of deliberately introduced errors of 50 mm translation or 3 degrees rotation in the scripted test set; zero false passes in that set. Insufficient evidence is a separate result and is reported in the coverage rate. |
+| No-tape estimation | Within the approved distance, lighting, and path envelope, target 95th-percentile tag-center error at or below 50 mm and orientation error at or below 2 degrees, against independent truth. Report relative accuracy separately when absolute control is unavailable. |
+| Measurement-assisted calibration | Target 95th-percentile tag-center error at or below 20 mm and orientation error at or below 1 degree where the measurement geometry constrains those quantities. A 10 mm position target is a stretch objective requiring evidence. |
+| LiDAR-assisted measurement | For later accuracy work, preserve the existing accuracy/false-pass gates and define minimum useful improvement in T2.0 for the specific claimed quantities and operating envelope. Use held-out truth and explicit depth-constraint ablation. Report local height, tag-center, and orientation errors separately; depth access alone does not satisfy this later gate. |
+| Field coverage and speed | Within 10 minutes of walking and at most 3 minutes of setup, sufficiently observe at least 95% of expected accessible, readable tags in the test layout. Explicitly account for every remaining tag and report unresolved coverage across all expected tags, including inaccessible or damaged ones. Report physical measurement time separately and also report total task time. |
+| iOS responsiveness | Target at least 30 frames/second for presentation and 10 detection updates/second in the baseline scene on the minimum supported iPhone, without a growing processing queue. Record observation latency and thermal behavior. |
+
+Measure tag-center translation error and full 3D angular error, not just yaw or reprojection error. Report median, 95th percentile, worst case, repeatability, unresolved fraction, and false-pass rate by distance and viewing angle. Repeated scans agreeing with one another demonstrate repeatability, not necessarily accuracy.
+
+Use independent reference measurements with uncertainty preferably at least five times smaller than the quantity being tested. A tape alone does not establish a full tag orientation. If suitable ground truth cannot be established, limit the claim to the components that can be validated. Align evaluation maps using the designated control only; do not best-fit all test tags and hide origin or heading error.

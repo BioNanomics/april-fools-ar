@@ -4,6 +4,7 @@
 
 - Date: 2026-11-20.
 - App: **April Fools AR**, version 0.1.0, build 1.
+- Implementation revision: `06bd141`; the final Release app embeds this value as `BuildCommit` for exported session manifests.
 - Bundle identifier: `com.doughorner.aprilfoolsar`.
 - Target: Doug's `DougiPhone17Pro`, iPhone 17 Pro, iOS 27.2.1.
 - Toolchain: Xcode 27.2; React Native 0.88.1; React 19.3.0; Node 22.18.0.
@@ -27,6 +28,8 @@ The build configuration declares the generated JavaScript bundle as a script out
 
 The initial phone launch showed a black RGB preview, `LIMITED` tracking and `DEPTH WAITING`. An external active call/video overlay was visible at the same time; it has not been ended or modified. That observation does not establish the cause of the missing camera/depth. A relaunch after granting camera access did not resolve it. The user has been asked to free the camera and point the rear cameras at a room/floor for the live check.
 
+Final device check: the exact `06bd141` Release build was installed through Device Hub and launched successfully; `devicectl` confirmed its running process. The final screen showed `LIMITED`, reason `initializing`, and `DEPTH WAITING`. It remains at the capture screen, with no recording started. The installed code includes RGB/depth/confidence previews, measurement controls, notes, native recording, and ZIP export, but these sensor-dependent paths have not yet passed live verification.
+
 No real session has yet been exported or validated. A successful build and app launch do **not** establish that measurement or recording works. M0.8, field capture M0.9, review M0.10, and the overall M0 gate remain open.
 
 When the camera is available, complete this short check:
@@ -36,7 +39,7 @@ When the camera is available, complete this short check:
 - [ ] Stop/save and export the session ZIP using the app.
 - [ ] Copy the ZIP to the Mac and run `scripts/inspect-session.py`; decode its RGB video and inspect numeric depth/confidence, geometry and event associations.
 - [ ] Record session location, manifest/ZIP checksums, rates, drops, and any errors here.
-- [ ] Confirm the final installed build launches again without Metro.
+- [x] Confirm the final installed build launches again without Metro (exact `06bd141` build).
 
 ## Next field activity
 

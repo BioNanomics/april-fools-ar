@@ -19,7 +19,7 @@ The app stops and saves an active recording when it goes into the background. Ke
 
 - `rgb.mp4`: camera video, targeting 30 fps.
 - `frames.jsonl`: timestamped camera poses, intrinsics, image/display geometry, tracking state, frame identity and sample-file links.
-- `frames/`: high-quality camera JPEG samples and bookmarked/measurement frames.
+- `frames/`: high-quality camera JPEG samples and detection/bookmark/measurement frames.
 - `depth/`: packed float32 little-endian camera-plane depth in meters, plus uint8 confidence maps. Depth/image samples target 5 Hz.
 - `events.jsonl`: AprilTag detections (including analyzed frames with no tags), measurements, notes, interruptions, resets and session events.
 - `manifest.json`: capture settings, device/app information, coordinate conventions, totals, errors and file integrity information.

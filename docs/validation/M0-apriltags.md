@@ -2,6 +2,8 @@
 
 Live AprilTag identification is required for Milestone 0. The new build adds the shared C detector, the iOS adapter, native outlines, visible IDs and frame-associated detection records. The original field capture and joint-review gate remains open.
 
+Installed implementation: `9224957`, version 0.1.0, build 2, on Doug's iPhone 17 Pro. The final immutable Release app embeds `BuildCommit=9224957`; Device Hub installation and launch were confirmed. Its final screen reported 61 analyzed frames and 7 ms analysis time, without a crash.
+
 ## Implementation
 
 - AprilTag 3.4.5, upstream revision `b7c0ebe9aa20f82ec7a828579004f9e706bfecd9`, vendored unmodified with an explicit production source list and BSD/MIT notices.
@@ -19,7 +21,7 @@ Live AprilTag identification is required for Milestone 0. The new build adds the
 2. Local C warnings-as-errors and Objective-C ARC syntax checks passed. The host image check is a parser/unit test, not a physical-camera accuracy test.
 3. `npx tsc --noEmit`, `npm run lint -- --quiet`, and all three Jest tests passed. The new UI test verifies current tag IDs appear before recording and clear when absent.
 4. Signed iOS Release build 2 passed. `codesign --verify --deep --strict` passed; license and notice files are present in the app bundle.
-5. Installed through Device Hub and launched on Doug's iPhone 17 Pro. The native pipeline reported `Looking for tags`, 51 analyzed frames and approximately 6 ms analysis time in the observed screen. This establishes live frame delivery and detector execution.
+5. Installed through Device Hub and launched on Doug's iPhone 17 Pro. The native pipeline reported `Looking for tags`; its analyzed-frame count rose from 51 to 153, with observed analysis times of 3–6 ms. This establishes live frame delivery and detector execution for the current black image; it is not a field-performance benchmark.
 
 ## Physical validation still required
 

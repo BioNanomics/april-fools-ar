@@ -12,7 +12,7 @@ Each session has a UUID directory containing `manifest.json`, `frames.jsonl`, `e
 
 ## RGB and geometry
 
-RGB video uses H.264, targeting 30 fps. Selected frames are JPEGs at a target of 5 Hz and at measurement/bookmark events, subject to the bounded writer queue. The preserved sensor image is not rotated to match the phone screen. `imageWidth`, `imageHeight`, `interfaceOrientation`, `viewportWidth`, `viewportHeight`, and `displayTransform` describe presentation.
+RGB video uses H.264, targeting 30 fps. Selected frames are JPEGs at a target of 5 Hz and at positive-detection/measurement/bookmark events, subject to the bounded writer queue. A frame already saved as a JPEG is reused rather than duplicated. The preserved sensor image is not rotated to match the phone screen. `imageWidth`, `imageHeight`, `interfaceOrientation`, `viewportWidth`, `viewportHeight`, and `displayTransform` describe presentation.
 
 `displayTransform` stores `[a, b, c, d, tx, ty]` for ARKit's affine mapping from normalized captured-image coordinates to normalized viewport coordinates. Invert it to map a screen tap to a normalized image coordinate. `intrinsicsColumnMajor` stores the 3×3 camera intrinsics in column-major order for the captured-image dimensions. `cameraToWorldColumnMajor` stores a 4×4 column-major transform.
 

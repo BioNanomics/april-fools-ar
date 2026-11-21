@@ -35,7 +35,7 @@ target.build_configurations.each do |config|
   config.build_settings['DEVELOPMENT_TEAM'] = 'X5873NL7XM'
   config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
   config.build_settings['MARKETING_VERSION'] = '0.1.0'
-  config.build_settings['CURRENT_PROJECT_VERSION'] = '2'
+  config.build_settings['CURRENT_PROJECT_VERSION'] = '3'
   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
   config.build_settings['SWIFT_VERSION'] = '5.0'
   config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = '$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h'

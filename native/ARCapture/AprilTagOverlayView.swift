@@ -3,6 +3,8 @@ import UIKit
 /// Image-space detections only. No world pose or physical tag size is inferred here.
 final class AprilTagOverlayView: UIView {
     private var sourceFrameID: String?
+    private var outlineLayers = [CAShapeLayer]()
+    private var tagLabels = [UILabel]()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -14,8 +16,12 @@ final class AprilTagOverlayView: UIView {
 
     func clear() {
         sourceFrameID = nil
-        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        subviews.forEach { $0.removeFromSuperview() }
+        // UIKit owns each label's backing layer. Removing that layer directly
+        // before removeFromSuperview corrupts the view/layer relationship.
+        tagLabels.forEach { $0.removeFromSuperview() }
+        tagLabels.removeAll()
+        outlineLayers.forEach { $0.removeFromSuperlayer() }
+        outlineLayers.removeAll()
     }
 
     func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double) {
@@ -42,6 +48,7 @@ final class AprilTagOverlayView: UIView {
             shape.lineWidth = 2.5
             shape.lineJoin = .round
             layer.addSublayer(shape)
+            outlineLayers.append(shape)
             let label = UILabel()
             label.text = " #\(id.intValue) "
             label.font = .monospacedSystemFont(ofSize: 16, weight: .bold)
@@ -51,6 +58,7 @@ final class AprilTagOverlayView: UIView {
             label.sizeToFit()
             label.frame.origin = CGPoint(x: max(0, min(bounds.width - label.bounds.width, points.map(\.x).min() ?? 0)), y: max(0, min(bounds.height - label.bounds.height, (points.map(\.y).min() ?? 0) - label.bounds.height)))
             addSubview(label)
+            tagLabels.append(label)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self] in
             guard let self, self.sourceFrameID == frameID else { return }

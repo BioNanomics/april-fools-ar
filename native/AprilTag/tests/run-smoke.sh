@@ -9,3 +9,8 @@ clang -std=gnu11 -O2 -pthread -I native/AprilTag -I third_party/apriltag \
   third_party/apriltag/*.c third_party/apriltag/common/*.c \
   -lm -o "$test_output/af-tag-core-smoke"
 "$test_output/af-tag-core-smoke"
+clang -std=gnu11 -O2 -pthread -I native/AprilTag -I third_party/apriltag \
+  native/AprilTag/AFTagCore.c native/AprilTag/tests/AFTagPoseSmoke.c \
+  third_party/apriltag/*.c third_party/apriltag/common/*.c \
+  -lm -o "$test_output/af-tag-pose-smoke"
+"$test_output/af-tag-pose-smoke"

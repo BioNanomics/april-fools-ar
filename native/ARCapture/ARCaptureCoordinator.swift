@@ -14,7 +14,6 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var tagPendingFrameID: String?
     private var tagPendingRecorderID: String?
     private var tagGeneration = 0
-    private var lastTagEnqueueTimestamp = -Double.infinity
     private var lastTagResultTimestamp: Double?
     private var tagState = "initializing"
     private var tagIDs = [Int]()
@@ -24,6 +23,14 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var tagLateRecordingResults = 0
     private var tagResultFrameID: String?
     private var tagError: String?
+    private var debugSettings = TagDebugSettings.load()
+    private var debugMode = true
+    private var selectedTagID: Int?
+    private var latestTagDetections = [[String: Any]]()
+    private var latestTagDisplayTransform = CGAffineTransform.identity
+    private var latestTagImageSize = CGSize(width: 1, height: 1)
+    private var tagCompletionTimes = [Double]()
+    private var lastJSEmissionTime = 0.0
     private weak var host: ARCaptureView?
     private var session: ARSession?
     private var recorder: CaptureRecorder?
@@ -88,7 +95,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let arSession = view.arView.session
         arSession.delegate = self
         arSession.delegateQueue = captureQueue
-        captureQueue.async { self.session = arSession; self.invalidateAprilTags() }
+        captureQueue.async {
+            self.session = arSession; self.invalidateAprilTags()
+            let enabled = self.debugMode
+            DispatchQueue.main.async { view.setDebugMode(enabled) }
+        }
         guard ARWorldTrackingConfiguration.isSupported else {
             captureQueue.async { self.lastError = "ARKit live capture requires a supported physical iPhone."; self.emitStatus() }
             return
@@ -126,7 +137,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             guard self.recorder == nil && !self.finalizing else { completion(.failure(CaptureError.message("A recording is already active or finalizing."))); return }
             guard Self.lidarSupported, self.latestFrame?.sceneDepth != nil else { completion(.failure(CaptureError.message("Start requires live scene depth on a LiDAR-capable iPhone. Wait for tracking/depth."))); return }
             do {
-                let recorder = try CaptureRecorder(name: name.isEmpty ? "Field capture" : name)
+                let recorder = try CaptureRecorder(name: name.isEmpty ? "Field capture" : name, debugSettings: self.debugSettings)
                 self.recorder = recorder
                 self.clearPoints()
                 DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
@@ -141,6 +152,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     }
                 }
                 recorder.event(["type": "segment", "segmentId": self.segment, "reason": "recording began", "timestamp": self.latestFrame?.timestamp ?? 0])
+                recorder.event(["type": "debugSettingsAtStart", "settings": self.debugSettings.dictionary, "timestamp": self.latestFrame?.timestamp ?? 0])
                 self.emitStatus(); completion(.success(self.status()))
             } catch { self.lastError = error.localizedDescription; self.emitStatus(); completion(.failure(error)) }
         }
@@ -170,6 +182,63 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
 
     func getStatus(completion: @escaping ([String: Any]) -> Void) { captureQueue.async { completion(self.status()) } }
+
+    func getDebugSettings(completion: @escaping ([String: Any]) -> Void) { captureQueue.async { completion(self.debugSettings.dictionary) } }
+
+    func setDebugSettings(_ changes: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do {
+                let settings = try self.debugSettings.merging(changes)
+                self.updateDebugSettings(settings, source: "manual", evidence: [:])
+                completion(.success(settings.dictionary))
+            } catch { completion(.failure(error)) }
+        }
+    }
+
+    func applyMeasuredTagSize(completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do {
+                let distance = self.worldPoints.count == 2 ? Double(simd_length(self.worldPoints[1] - self.worldPoints[0])) : nil
+                let age = self.latestFrame.map { ProcessInfo.processInfo.systemUptime - $0.timestamp } ?? .infinity
+                let width = try TagDebugMath.measuredTagSize(points: self.points, worldDistance: distance, segmentID: self.segment, tracking: self.tracking, frameAgeSeconds: age)
+                var settings = try self.debugSettings.merging(["tagSizeMeters": width])
+                settings.tagSizeSource = "ar-two-point-edge"
+                self.updateDebugSettings(settings, source: "ar-two-point-edge", evidence: ["sourcePoints": self.points, "measuredEdgeMeters": width, "method": "Euclidean distance of two live sceneDepth world endpoints; no PnP-derived size"])
+                completion(.success(settings.dictionary))
+            } catch { completion(.failure(error)) }
+        }
+    }
+
+    private func updateDebugSettings(_ settings: TagDebugSettings, source: String, evidence: [String: Any]) {
+        let old = debugSettings.dictionary
+        debugSettings = settings; settings.persist(); invalidateAprilTags()
+        var event: [String: Any] = ["type": "settingsChanged", "source": source, "settings": settings.dictionary, "previousSettings": old, "timestamp": latestFrame?.timestamp ?? 0, "segmentId": segment]
+        for (key, value) in evidence { event[key] = value }
+        recorder?.event(event)
+        if source == "ar-two-point-edge", JSONSerialization.isValidJSONObject(evidence), let data = try? JSONSerialization.data(withJSONObject: evidence) { UserDefaults.standard.set(data, forKey: TagDebugSettings.tagSizeEvidenceKey) }
+        emitStatus(force: true)
+    }
+
+    func setDebugMode(_ enabled: Bool, completion: @escaping ([String: Any]) -> Void) {
+        captureQueue.async {
+            self.debugMode = enabled
+            if enabled { self.previewMode = "camera" }
+            self.invalidateAprilTags()
+            DispatchQueue.main.async {
+                self.host?.setDebugMode(enabled)
+                self.host?.depthView.isHidden = self.previewMode == "camera"
+                self.host?.tagOverlay.isHidden = self.previewMode != "camera"
+            }
+            self.emitStatus(force: true); completion(self.status())
+        }
+    }
+
+    func selectTag(_ id: Int) {
+        captureQueue.async {
+            guard self.latestTagDetections.contains(where: { ($0["id"] as? NSNumber)?.intValue == id }) else { return }
+            self.selectedTagID = id; self.renderTagDebug(); self.emitStatus(force: true)
+        }
+    }
 
     func setPreviewMode(_ mode: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         captureQueue.async {
@@ -379,35 +448,42 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         value["elapsedSeconds"] = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         value["droppedFrames"] = droppedFrames; value["lastError"] = lastError as Any? ?? NSNull()
         value["measurement"] = lastMeasurement; value["previewMode"] = previewMode; value["segmentId"] = segment
+        value["debugMode"] = debugMode
+        var selectedDebug = selectedTagDebug()
+        if let timestamp = lastTagResultTimestamp { selectedDebug?["ageSeconds"] = max(0, ProcessInfo.processInfo.systemUptime - timestamp) }
         value["aprilTag"] = ["state": tagState, "family": "tag36h11", "ids": tagIDs, "count": tagIDs.count,
             "latencyMilliseconds": tagLatencyMilliseconds as Any? ?? NSNull(), "analyzedFrames": tagAnalyzedFrames,
             "skippedFrames": tagSkippedFrames, "lateRecordingResults": tagLateRecordingResults,
             "timestamp": lastTagResultTimestamp as Any? ?? NSNull(), "frameId": tagResultFrameID as Any? ?? NSNull(),
-            "error": tagError as Any? ?? NSNull()]
+            "error": tagError as Any? ?? NSNull(), "debugSettings": debugSettings.dictionary,
+            "selectedId": selectedTagID as Any? ?? NSNull(), "selectedDebug": selectedDebug as Any? ?? NSNull(), "analysisHz": analysisHz]
         return value
     }
     private func invalidateAprilTags() {
-        tagGeneration += 1; tagIDs = []; lastTagResultTimestamp = nil; tagResultFrameID = nil
+        tagGeneration += 1; tagIDs = []; latestTagDetections = []; lastTagResultTimestamp = nil; tagResultFrameID = nil
         tagState = "waiting"
         DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }
     }
     private func expireAprilTagsIfNeeded() {
-        guard let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp > 0.5 else { return }
+        guard let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp > 0.4 else { return }
         if !tagIDs.isEmpty || tagResultFrameID != nil {
-            tagIDs = []; tagResultFrameID = nil
+            tagIDs = []; latestTagDetections = []; tagResultFrameID = nil
             if tagError == nil { tagState = "waiting" }
             DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }
         }
     }
     private func analyzeAprilTags(_ frame: ARFrame) {
-        guard frame.timestamp - lastTagEnqueueTimestamp >= 0.125 else { return }
         guard !tagInFlight else { tagSkippedFrames += 1; return }
-        lastTagEnqueueTimestamp = frame.timestamp; tagInFlight = true; tagState = "running"
+        tagInFlight = true; tagState = "running"
         let sourceFrameID = frameID, sourceSegmentID = segment, sourceRecorderID = recorder?.id
         tagPendingFrameID = sourceFrameID; tagPendingRecorderID = sourceRecorderID
         let generation = tagGeneration, timestamp = frame.timestamp
         let buffer = frame.capturedImage
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
+        let settings = debugSettings, sourceTracking = tracking
+        let k = frame.camera.intrinsics
+        let poseIntrinsics = [Double(k.columns.0.x), Double(k.columns.1.y), Double(k.columns.2.x), Double(k.columns.2.y)]
+        let depthBuffer = frame.sceneDepth?.depthMap, confidenceBuffer = frame.sceneDepth?.confidenceMap
         let display = frame.displayTransform(for: orientation, viewportSize: viewport)
         let sourceMetadata: [String: Any] = ["type": "aprilTagDetections", "frameId": sourceFrameID,
             "segmentId": sourceSegmentID, "timestamp": timestamp, "family": "tag36h11",
@@ -416,23 +492,35 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             "displayTransform": [display.a, display.b, display.c, display.d, display.tx, display.ty],
             "viewportWidth": viewport.width, "viewportHeight": viewport.height, "interfaceOrientation": orientation.rawValue,
             "tracking": tracking, "trackingReason": trackingReason,
-            "analysisSkippedFramesTotal": tagSkippedFrames, "targetAnalysisHz": 8, "maxAnalysisInFlight": 1,
-            "recordingId": sourceRecorderID as Any? ?? NSNull(), "poseEstimation": false]
+            "analysisSkippedFramesTotal": tagSkippedFrames, "targetAnalysisHz": 30, "maxAnalysisInFlight": 1,
+            "recordingId": sourceRecorderID as Any? ?? NSNull(), "poseEstimation": true, "debugSettings": settings.dictionary]
         tagQueue.async { [weak self] in
             guard let self else { return }
             autoreleasepool {
                 if self.tagDetector == nil { self.tagDetector = AFTagDetector() }
                 let started = ProcessInfo.processInfo.systemUptime
-                let result = self.tagDetector?.detectPixelBuffer(buffer) as? [[String: Any]]
-                let latency = (ProcessInfo.processInfo.systemUptime - started) * 1000
+                let result = self.tagDetector?.detectPixelBuffer(buffer, intrinsics: poseIntrinsics.map(NSNumber.init(value:)), tagSizeMeters: settings.tagSizeMeters) as? [[String: Any]]
                 let error = result == nil ? (self.tagDetector?.lastError?.localizedDescription ?? "AprilTag detector returned no result") : nil
-                let detections = result ?? []
+                let detections = (result ?? []).map { detection -> [String: Any] in
+                    let center = TagDebugMath.numbers(detection["center"], count: 2) ?? []
+                    let depth = TagDebugMath.sampleDepth(depth: depthBuffer, confidence: confidenceBuffer, center: center, imageWidth: width, imageHeight: height)
+                    return TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                }
+                let completed = ProcessInfo.processInfo.systemUptime
+                let latency = (completed - started) * 1000
                 self.captureQueue.async {
                     self.tagInFlight = false; self.tagPendingFrameID = nil; self.tagPendingRecorderID = nil
-                    if result != nil { self.tagAnalyzedFrames += 1 }
+                    if result != nil {
+                        self.tagAnalyzedFrames += 1
+                        self.tagCompletionTimes.append(completed)
+                        self.tagCompletionTimes.removeAll { $0 < completed - 2 }
+                    }
+                    let selected = self.chooseSelectedTag(detections, imageSize: CGSize(width: width, height: height))
                     var event = sourceMetadata
                     event["detections"] = detections; event["latencyMilliseconds"] = latency
                     event["analysisSucceeded"] = result != nil; event["detectorError"] = error as Any? ?? NSNull()
+                    event["selectedId"] = selected as Any? ?? NSNull()
+                    event["selectedDebug"] = detections.first(where: { ($0["id"] as? NSNumber)?.intValue == selected })?["debug"] as Any? ?? NSNull()
                     if let sourceRecorderID {
                         if let recorder = self.recorder, recorder.id == sourceRecorderID {
                             recorder.aprilTagEvent(event, pixelBuffer: detections.isEmpty ? nil : buffer, frameID: sourceFrameID)
@@ -441,15 +529,14 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     guard generation == self.tagGeneration, sourceSegmentID == self.segment else { self.emitStatus(); return }
                     self.tagLatencyMilliseconds = latency; self.tagError = error
                     self.lastTagResultTimestamp = timestamp; self.tagResultFrameID = sourceFrameID
+                    self.latestTagDetections = detections; self.selectedTagID = selected
+                    self.latestTagImageSize = CGSize(width: width, height: height); self.latestTagDisplayTransform = display
                     let age = ProcessInfo.processInfo.systemUptime - timestamp
-                    self.tagIDs = age <= 0.5 ? Array(Set(detections.compactMap { ($0["id"] as? NSNumber)?.intValue })).sorted() : []
-                    self.tagState = error == nil ? (age <= 0.5 ? "ready" : "waiting") : "error"
-                    if age <= 0.5 && error == nil {
-                        DispatchQueue.main.async { [weak self] in
-                            self?.host?.showAprilTagOverlay(detections, imageSize: CGSize(width: width, height: height), displayTransform: display, frameID: sourceFrameID, expiresAt: timestamp + 0.5)
-                        }
-                    } else { DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() } }
-                    self.captureQueue.asyncAfter(deadline: .now() + max(0, 0.5 - age)) { [weak self] in
+                    self.tagIDs = age <= 0.4 ? Array(Set(detections.compactMap { ($0["id"] as? NSNumber)?.intValue })).sorted() : []
+                    self.tagState = error == nil ? (age <= 0.4 ? "ready" : "waiting") : "error"
+                    if age <= 0.4 && error == nil { self.renderTagDebug() }
+                    else { DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() } }
+                    self.captureQueue.asyncAfter(deadline: .now() + max(0, 0.4 - age)) { [weak self] in
                         guard let self, self.tagResultFrameID == sourceFrameID else { return }
                         self.expireAprilTagsIfNeeded(); self.emitStatus()
                     }
@@ -458,7 +545,39 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             }
         }
     }
-    private func emitStatus() {
+    private var analysisHz: Double {
+        guard tagCompletionTimes.count > 1, let first = tagCompletionTimes.first, let last = tagCompletionTimes.last, last > first,
+              ProcessInfo.processInfo.systemUptime - last < 0.5 else { return 0 }
+        return Double(tagCompletionTimes.count - 1) / (last - first)
+    }
+    private func chooseSelectedTag(_ rows: [[String: Any]], imageSize: CGSize) -> Int? {
+        if let id = selectedTagID, rows.contains(where: { ($0["id"] as? NSNumber)?.intValue == id }) { return id }
+        return rows.min { a, b in
+            func distance(_ row: [String: Any]) -> Double {
+                guard let center = TagDebugMath.numbers(row["center"], count: 2), imageSize.width > 0, imageSize.height > 0 else { return .infinity }
+                return pow(center[0] / imageSize.width - 0.5, 2) + pow(center[1] / imageSize.height - 0.5, 2)
+            }
+            return distance(a) < distance(b)
+        }.flatMap { ($0["id"] as? NSNumber)?.intValue }
+    }
+    private func selectedTagDebug() -> [String: Any]? {
+        latestTagDetections.first(where: { ($0["id"] as? NSNumber)?.intValue == selectedTagID })?["debug"] as? [String: Any]
+    }
+    private func renderTagDebug() {
+        guard let frameID = tagResultFrameID, let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp <= 0.4 else {
+            DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }; return
+        }
+        let rows = latestTagDetections, selected = selectedTagID, debug = selectedTagDebug(), size = latestTagImageSize, display = latestTagDisplayTransform
+        let settings = debugSettings, hz = analysisHz, latency = tagLatencyMilliseconds
+        DispatchQueue.main.async { [weak self] in
+            self?.host?.showAprilTagOverlay(rows, imageSize: size, displayTransform: display, frameID: frameID, expiresAt: timestamp+0.4, selectedID: selected)
+            self?.host?.debugPanel.show(debug: debug, frameID: frameID, timestamp: timestamp, analysisHz: hz, latencyMilliseconds: latency, settings: settings)
+        }
+    }
+    private func emitStatus(force: Bool = false) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard force || now - lastJSEmissionTime >= 0.2 else { return }
+        lastJSEmissionTime = now
         let value = status()
         DispatchQueue.main.async { [weak self] in
             self?.host?.updateLabel(value)
@@ -514,6 +633,8 @@ final class ARCaptureView: UIView {
     let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
     let depthView = UIImageView()
     let tagOverlay = AprilTagOverlayView(frame: .zero)
+    let debugPanel = TagDebugPanelView(frame: .zero)
+    private var debugEnabled = true
     private let statusLabel = UILabel()
     private var attached = false
     override init(frame: CGRect) {
@@ -522,6 +643,7 @@ final class ARCaptureView: UIView {
         depthView.contentMode = .scaleAspectFill; depthView.clipsToBounds = true; depthView.alpha = 0.88; depthView.isHidden = true
         addSubview(depthView)
         addSubview(tagOverlay)
+        addSubview(debugPanel)
         statusLabel.textColor = .white; statusLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
         statusLabel.numberOfLines = 3; statusLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         statusLabel.text = "Starting ARKit · tap two surfaces to measure"
@@ -536,12 +658,24 @@ final class ARCaptureView: UIView {
         else if window == nil && attached { attached = false; ARCaptureCoordinator.shared.detach(self) }
     }
     override func layoutSubviews() {
-        super.layoutSubviews(); arView.frame = bounds; depthView.frame = bounds; tagOverlay.frame = bounds
+        super.layoutSubviews()
+        let panelHeight = debugEnabled ? min(270, bounds.height) : 0
+        let previewFrame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height-panelHeight))
+        arView.frame = previewFrame; depthView.frame = previewFrame; tagOverlay.frame = previewFrame
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
-        ARCaptureCoordinator.shared.updateViewport(bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
+        debugPanel.frame = CGRect(x: 8, y: previewFrame.maxY, width: max(0, bounds.width - 16), height: panelHeight)
+        ARCaptureCoordinator.shared.updateViewport(arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
     }
     @objc private func tapped(_ gesture: UITapGestureRecognizer) {
-        ARCaptureCoordinator.shared.tap(gesture.location(in: self), in: bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
+        if debugEnabled {
+            let point = gesture.location(in: tagOverlay)
+            guard tagOverlay.bounds.contains(point), let id = tagOverlay.tagID(at: point) else { return }
+            ARCaptureCoordinator.shared.selectTag(id)
+            return
+        }
+        let point = gesture.location(in: arView)
+        guard arView.bounds.contains(point) else { return }
+        ARCaptureCoordinator.shared.tap(point, in: arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
     }
     func updateLabel(_ status: [String: Any]) {
         let tracking = status["tracking"] as? String ?? "unavailable"
@@ -550,8 +684,9 @@ final class ARCaptureView: UIView {
         let mode = status["previewMode"] as? String ?? "camera"
         statusLabel.text = "\(tracking) · \(depth) · \(mode)\nTap two surfaces · \(count)/2 points · estimates only"
     }
-    func clearAprilTagOverlay() { tagOverlay.clear() }
-    func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double) {
-        tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt)
+    func setDebugMode(_ enabled: Bool) { debugEnabled = enabled; debugPanel.isHidden = !enabled; setNeedsLayout(); layoutIfNeeded() }
+    func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
+    func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil) {
+        tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID)
     }
 }

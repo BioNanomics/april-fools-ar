@@ -25,6 +25,10 @@
     return nil;
 }
 - (NSArray<NSDictionary<NSString *, id> *> *)detectPixelBuffer:(CVPixelBufferRef)pixelBuffer {
+    return [self detectPixelBuffer:pixelBuffer intrinsics:nil tagSizeMeters:0];
+}
+- (NSArray<NSDictionary<NSString *, id> *> *)detectPixelBuffer:(CVPixelBufferRef)pixelBuffer
+    intrinsics:(NSArray<NSNumber *> *)intrinsics tagSizeMeters:(double)tagSizeMeters {
     @synchronized (self) {
         self.lastError = nil;
         if (!_core || !pixelBuffer) return [self fail:@"AprilTag detector or pixel buffer is unavailable."];
@@ -75,7 +79,15 @@
                 return [self fail:@"Invalid AprilTag grayscale dimensions or stride."];
             AFTagDetection *detections = NULL;
             size_t count = 0;
-            int status = AFTagCoreDetect(_core, gray, (int)width, (int)height, (int)stride, &detections, &count);
+            AFTagCalibration calibration = {0};
+            if (intrinsics.count == 4 && [intrinsics[0] isKindOfClass:NSNumber.class] &&
+                [intrinsics[1] isKindOfClass:NSNumber.class] && [intrinsics[2] isKindOfClass:NSNumber.class] &&
+                [intrinsics[3] isKindOfClass:NSNumber.class]) {
+                calibration = (AFTagCalibration){.fx = intrinsics[0].doubleValue, .fy = intrinsics[1].doubleValue,
+                    .cx = intrinsics[2].doubleValue, .cy = intrinsics[3].doubleValue, .tagSizeMeters = tagSizeMeters};
+            }
+            int status = AFTagCoreDetectCalibrated(_core, gray, (int)width, (int)height, (int)stride,
+                                                  &calibration, &detections, &count);
             if (status != AFTagCoreSuccess) return [self fail:@"AprilTag detection failed; no results were accepted."];
             NSMutableArray *records = [NSMutableArray arrayWithCapacity:count];
             for (size_t index = 0; index < count; index++) {
@@ -83,9 +95,36 @@
                 NSMutableArray *corners = [NSMutableArray arrayWithCapacity:4];
                 for (int corner = 0; corner < 4; corner++)
                     [corners addObject:@[@(tag.corners[corner][0]), @(tag.corners[corner][1])]];
-                [records addObject:@{@"id":@(tag.id), @"family":@"tag36h11", @"hamming":@(tag.hamming),
+                NSMutableDictionary *record = [@{@"id":@(tag.id), @"family":@"tag36h11", @"hamming":@(tag.hamming),
                     @"decisionMargin":@(tag.decisionMargin), @"center":@[@(tag.center[0]), @(tag.center[1])],
-                    @"corners":corners, @"detectionImageWidth":@(width), @"detectionImageHeight":@(height)}];
+                    @"corners":corners, @"detectionImageWidth":@(width), @"detectionImageHeight":@(height)} mutableCopy];
+                if (tag.hasPose) {
+                    AFTagPose p = tag.pose;
+                    NSMutableArray *rotation = [NSMutableArray arrayWithCapacity:9];
+                    for (int i = 0; i < 9; i++) [rotation addObject:@(p.rotationRowMajor[i])];
+                    NSMutableDictionary *pose = [@{
+                        @"translation":@[@(p.translation[0]), @(p.translation[1]), @(p.translation[2])],
+                        @"rotationRowMajor":rotation,
+                        @"eulerDegrees":@[@(p.eulerDegrees[0]), @(p.eulerDegrees[1]), @(p.eulerDegrees[2])],
+                        @"rangeMeters":@(p.rangeMeters), @"opticalAxisAngleDegrees":@(p.opticalAxisAngleDegrees),
+                        @"planeAngleDegrees":@(p.planeAngleDegrees), @"reprojectionRMSEPixels":@(p.reprojectionRMSEPixels),
+                        @"poseError":@(p.poseError), @"ambiguous":@((BOOL)p.ambiguous),
+                        @"candidateCount":@(p.candidateCount), @"eulerSingular":@((BOOL)p.eulerSingular),
+                        @"tagSizeMeters":@(tagSizeMeters), @"coordinateFrame":@"camera-optical-x-right-y-down-z-forward",
+                        @"rotationConvention":@"tag-to-camera row-major; R=Rz(yawZ)*Ry(pitchY)*Rx(rollX)",
+                        @"poseErrorMetric":@"sum-squared-object-space-ray-distance-m2",
+                        @"solver":@"apriltag-orthogonal-iteration-50"
+                    } mutableCopy];
+                    if (p.hasSecondPose) {
+                        pose[@"secondPoseError"] = @(p.secondPoseError);
+                        pose[@"secondReprojectionRMSEPixels"] = @(p.secondReprojectionRMSEPixels);
+                        pose[@"poseErrorRatio"] = @(p.poseErrorRatio);
+                        pose[@"candidateRotationSeparationDegrees"] = @(p.candidateRotationSeparationDegrees);
+                        pose[@"candidateTranslationSeparationMeters"] = @(p.candidateTranslationSeparationMeters);
+                    }
+                    record[@"pose"] = pose;
+                }
+                [records addObject:record];
             }
             AFTagCoreFreeDetections(detections);
             result = records;

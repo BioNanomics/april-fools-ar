@@ -21,6 +21,11 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import {
+  DebugSettingsModal,
+  DEFAULT_DEBUG_SETTINGS,
+  type DebugSettings,
+} from './DebugSettingsModal';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const Engine = NativeModules.ARCaptureEngine;
@@ -41,8 +46,15 @@ type Status = {
   droppedFrames?: number;
   bytesWritten?: number;
   lastError?: string;
+  debugMode?: boolean;
   aprilTag?: {
-    state?: 'initializing' | 'waiting' | 'ready' | 'running' | 'paused' | 'error';
+    state?:
+      | 'initializing'
+      | 'waiting'
+      | 'ready'
+      | 'running'
+      | 'paused'
+      | 'error';
     family?: string;
     ids?: number[];
     count?: number;
@@ -50,6 +62,8 @@ type Status = {
     analyzedFrames?: number;
     skippedFrames?: number;
     error?: string;
+    analysisHz?: number;
+    debugSettings?: DebugSettings;
   };
   measurement?: {
     pointCount?: number;
@@ -94,6 +108,12 @@ function CaptureApp() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   const [preview, setPreview] = useState('camera');
+  const [debugEnabled, setDebugEnabled] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [measuringTagSize, setMeasuringTagSize] = useState(false);
+  const [debugSettings, setDebugSettings] = useState<DebugSettings>(
+    DEFAULT_DEBUG_SETTINGS,
+  );
   const recordingRef = useRef(false);
   recordingRef.current = Boolean(status.recording);
   const refresh = useCallback(async () => {
@@ -123,6 +143,11 @@ function CaptureApp() {
       clearInterval(interval);
     };
   }, [refresh]);
+  useEffect(() => {
+    if (typeof status.debugMode === 'boolean') {
+      setDebugEnabled(status.debugMode);
+    }
+  }, [status.debugMode]);
   useEffect(() => {
     const handle = async (url: string) => {
       if (url.startsWith('aprilfoolsar://capture/start')) {
@@ -206,6 +231,58 @@ function CaptureApp() {
       Alert.alert('Preview', errorText(e));
     }
   };
+  const changeDebugMode = async (enabled: boolean) => {
+    try {
+      if (enabled) {
+        await Engine.setPreviewMode('camera');
+        setPreview('camera');
+      }
+      const next = await Engine.setDebugMode(enabled);
+      setMeasuringTagSize(false);
+      setDebugEnabled(enabled);
+      if (next) {
+        setStatus(next);
+      }
+    } catch (error) {
+      Alert.alert('Display mode', errorText(error));
+    }
+  };
+  const openDebugSettings = async () => {
+    try {
+      setMeasuringTagSize(false);
+      setDebugSettings(await Engine.getDebugSettings());
+      setSettingsOpen(true);
+    } catch (error) {
+      Alert.alert('Debug settings', errorText(error));
+    }
+  };
+  const saveDebugSettings = async (settings: DebugSettings) => {
+    setDebugSettings(await Engine.setDebugSettings(settings));
+    setSettingsOpen(false);
+    await refresh();
+  };
+  const beginTagSizeMeasurement = async () => {
+    try {
+      setSettingsOpen(false);
+      await Engine.clearMeasurements();
+      await Engine.setPreviewMode('camera');
+      setPreview('camera');
+      const next = await Engine.setDebugMode(false);
+      setStatus(next);
+      setDebugEnabled(false);
+      setMeasuringTagSize(true);
+    } catch (error) {
+      Alert.alert('Measure tag width', errorText(error));
+    }
+  };
+  const applyTagSizeMeasurement = async () => {
+    try {
+      setDebugSettings(await Engine.applyMeasuredTagSize());
+      await changeDebugMode(true);
+    } catch (error) {
+      Alert.alert('Measure tag width', errorText(error));
+    }
+  };
   const m = status.measurement;
   const tags = status.aprilTag;
   const tagIDs = tags?.ids || [];
@@ -247,6 +324,38 @@ function CaptureApp() {
             </Pressable>
           ))}
         </View>
+        {tab === 'capture' && (
+          <View style={s.debugBar}>
+            <View style={s.debugSwitch}>
+              <Pressable
+                accessibilityLabel="Tag debug mode"
+                accessibilityState={{ selected: debugEnabled }}
+                onPress={() => changeDebugMode(true)}
+                style={[s.debugChoice, debugEnabled && s.modeActive]}
+              >
+                <Text style={[s.modeText, debugEnabled && s.dark]}>
+                  Tag debug
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Measurement mode"
+                accessibilityState={{ selected: !debugEnabled }}
+                onPress={() => changeDebugMode(false)}
+                style={[s.debugChoice, !debugEnabled && s.modeActive]}
+              >
+                <Text style={[s.modeText, !debugEnabled && s.dark]}>
+                  Measure
+                </Text>
+              </Pressable>
+            </View>
+            <Pressable
+              accessibilityLabel="Debug settings"
+              onPress={openDebugSettings}
+            >
+              <Text style={s.link}>Settings</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
       {tab === 'capture' ? (
         <>
@@ -282,87 +391,129 @@ function CaptureApp() {
                   </Text>
                 </View>
               </View>
-              {!!status.trackingReason && (
+              {!debugEnabled && !!status.trackingReason && (
                 <Text style={s.trackingHint}>
                   {status.trackingReason.replace(/([A-Z])/g, ' $1')}
                 </Text>
               )}
-              <View style={s.modes}>
-                {['camera', 'depth', 'confidence'].map(mode => (
-                  <Pressable
-                    key={mode}
-                    style={[s.mode, preview === mode && s.modeActive]}
-                    onPress={() => setMode(mode)}
-                  >
-                    <Text style={[s.modeText, preview === mode && s.dark]}>
-                      {mode === 'camera'
-                        ? 'RGB'
-                        : mode === 'depth'
-                        ? 'Depth'
-                        : 'Confidence'}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={s.tagStatus} pointerEvents="none">
-                <Text style={s.tagHeading}>
-                  APRILTAGS · {tags?.family || 'tag36h11'}
-                </Text>
-                <Text style={s.tagText}>
-                  {tags?.state === 'error'
-                    ? tags.error || 'Detector unavailable'
-                    : tagIDs.length
-                    ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
-                    : tags?.state === 'running' || tags?.state === 'ready'
-                    ? 'Looking for tags'
-                    : 'Waiting for camera frames'}
-                </Text>
-                {tags?.latencyMilliseconds != null && (
-                  <Text style={s.tagMeta}>
-                    {tags.latencyMilliseconds.toFixed(0)} ms ·{' '}
-                    {tags.analyzedFrames || 0} analyzed
+              {!debugEnabled && (
+                <View style={s.modes}>
+                  {['camera', 'depth', 'confidence'].map(mode => (
+                    <Pressable
+                      key={mode}
+                      style={[s.mode, preview === mode && s.modeActive]}
+                      onPress={() => setMode(mode)}
+                    >
+                      <Text style={[s.modeText, preview === mode && s.dark]}>
+                        {mode === 'camera'
+                          ? 'RGB'
+                          : mode === 'depth'
+                          ? 'Depth'
+                          : 'Confidence'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              {!debugEnabled && (
+                <View style={s.tagStatus} pointerEvents="none">
+                  <Text style={s.tagHeading}>
+                    APRILTAGS · {tags?.family || 'tag36h11'}
                   </Text>
+                  <Text style={s.tagText}>
+                    {tags?.state === 'error'
+                      ? tags.error || 'Detector unavailable'
+                      : tagIDs.length
+                      ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
+                      : tags?.state === 'running' || tags?.state === 'ready'
+                      ? 'Looking for tags'
+                      : 'Waiting for camera frames'}
+                  </Text>
+                  {tags?.latencyMilliseconds != null && (
+                    <Text style={s.tagMeta}>
+                      {tags.latencyMilliseconds.toFixed(0)} ms ·{' '}
+                      {tags.analyzedFrames || 0} analyzed
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+            {!debugEnabled && (
+              <View style={s.measure}>
+                {measuringTagSize ? (
+                  <>
+                    <Text style={s.kicker}>MEASURE ONE TAG EDGE</Text>
+                    <Text style={s.value}>
+                      {m?.pointCount === 2 && m.distanceMeters != null
+                        ? `${(m.distanceMeters * 1000).toFixed(1)} mm`
+                        : `${m?.pointCount || 0} / 2 points`}
+                    </Text>
+                    <Text style={s.hint}>
+                      Tap adjacent black/white boundary corners on one edge.
+                      Review this AR/LiDAR estimate before using it.
+                    </Text>
+                    <View style={[s.row, s.measureActions]}>
+                      <Pressable onPress={() => changeDebugMode(true)}>
+                        <Text style={s.link}>Cancel</Text>
+                      </Pressable>
+                      <Pressable onPress={() => Engine.clearMeasurements()}>
+                        <Text style={s.link}>Clear</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Use measured tag width"
+                        onPress={applyTagSizeMeasurement}
+                        disabled={m?.pointCount !== 2 || !m.distanceMeters}
+                        style={[
+                          s.export,
+                          (m?.pointCount !== 2 || !m.distanceMeters) && s.dim,
+                        ]}
+                      >
+                        <Text style={s.exportText}>Use width</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={s.row}>
+                      <Text style={s.kicker}>TAP TWO SURFACES TO MEASURE</Text>
+                      <Pressable onPress={() => Engine.clearMeasurements()}>
+                        <Text style={s.link}>Clear</Text>
+                      </Pressable>
+                    </View>
+                    <View style={s.values}>
+                      <View>
+                        <Text style={s.value}>
+                          {m?.distanceMeters != null
+                            ? `${m.distanceMeters.toFixed(3)} m`
+                            : '—'}
+                        </Text>
+                        <Text style={s.small}>3D distance</Text>
+                      </View>
+                      <View style={s.divider} />
+                      <View>
+                        <Text style={s.value}>
+                          {m?.verticalMeters != null
+                            ? `${
+                                m.verticalMeters >= 0 ? '+' : ''
+                              }${m.verticalMeters.toFixed(3)} m`
+                            : '—'}
+                        </Text>
+                        <Text style={s.small}>Vertical difference</Text>
+                      </View>
+                    </View>
+                    <Text style={s.hint}>
+                      {m?.pointCount === 1
+                        ? `First point${
+                            firstDepth != null
+                              ? ` · ${firstDepth.toFixed(3)} m depth`
+                              : ''
+                          }. Tap the second surface.`
+                        : 'AR/LiDAR estimates · Keep the phone steady when tapping.'}
+                    </Text>
+                  </>
                 )}
               </View>
-            </View>
-            <View style={s.measure}>
-              <View style={s.row}>
-                <Text style={s.kicker}>TAP TWO SURFACES TO MEASURE</Text>
-                <Pressable onPress={() => Engine.clearMeasurements()}>
-                  <Text style={s.link}>Clear</Text>
-                </Pressable>
-              </View>
-              <View style={s.values}>
-                <View>
-                  <Text style={s.value}>
-                    {m?.distanceMeters != null
-                      ? `${m.distanceMeters.toFixed(3)} m`
-                      : '—'}
-                  </Text>
-                  <Text style={s.small}>3D distance</Text>
-                </View>
-                <View style={s.divider} />
-                <View>
-                  <Text style={s.value}>
-                    {m?.verticalMeters != null
-                      ? `${
-                          m.verticalMeters >= 0 ? '+' : ''
-                        }${m.verticalMeters.toFixed(3)} m`
-                      : '—'}
-                  </Text>
-                  <Text style={s.small}>Vertical difference</Text>
-                </View>
-              </View>
-              <Text style={s.hint}>
-                {m?.pointCount === 1
-                  ? `First point${
-                      firstDepth != null
-                        ? ` · ${firstDepth.toFixed(3)} m depth`
-                        : ''
-                    }. Tap the second surface.`
-                  : 'AR/LiDAR estimates · Keep the phone steady when tapping.'}
-              </Text>
-            </View>
+            )}
           </View>
           <View style={[s.controls, { paddingBottom: inset.bottom + 12 }]}>
             {status.lastError ? (
@@ -483,6 +634,13 @@ function CaptureApp() {
           />
         </View>
       )}
+      <DebugSettingsModal
+        visible={settingsOpen}
+        initialSettings={debugSettings}
+        onCancel={() => setSettingsOpen(false)}
+        onSave={saveDebugSettings}
+        onMeasure={beginTagSizeMeasurement}
+      />
       <Modal
         visible={noteOpen}
         transparent
@@ -558,6 +716,19 @@ const s = StyleSheet.create({
   },
   tabActive: { borderBottomColor: C.cyan },
   tabText: { color: C.muted, fontSize: 13, fontWeight: '600' },
+  debugBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 9,
+  },
+  debugSwitch: {
+    flexDirection: 'row',
+    backgroundColor: C.card,
+    borderRadius: 15,
+    padding: 3,
+  },
+  debugChoice: { borderRadius: 12, paddingVertical: 7, paddingHorizontal: 13 },
   cyan: { color: C.cyan },
   dark: { color: C.bg },
   camera: { flex: 1, backgroundColor: C.card, overflow: 'hidden' },
@@ -649,6 +820,7 @@ const s = StyleSheet.create({
   small: { color: C.muted, fontSize: 10, marginTop: 4 },
   divider: { width: 1, height: 33, backgroundColor: C.line },
   hint: { fontSize: 10, color: C.muted, marginTop: 12 },
+  measureActions: { marginTop: 12 },
   controls: { paddingHorizontal: 18, paddingTop: 13 },
   telemetry: {
     fontSize: 9,

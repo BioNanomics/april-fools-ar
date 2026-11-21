@@ -12,6 +12,8 @@ final class CaptureRecorder {
     let name: String
     let createdAt = Date()
     let folder: URL
+    private let initialDebugSettings: TagDebugSettings
+    private let initialTagSizeEvidence: [String: Any]?
     private let queue = DispatchQueue(label: "AprilFoolsAR.capture.disk", qos: .utility)
     private let slots = DispatchSemaphore(value: 3)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
@@ -34,6 +36,8 @@ final class CaptureRecorder {
     private var tagAnalyzedFrames = 0
     private var tagPositiveFrames = 0
     private var tagErrors = 0
+    // Called only from captureQueue; disk work remains on queue.
+    private var lastTagSnapshotRequestedTimestamp = -Double.infinity
     private var recentDropCount = 0
     private let expirationLock = NSLock()
     private var backgroundExpired = false
@@ -45,8 +49,10 @@ final class CaptureRecorder {
             .appendingPathComponent("AprilFoolsAR/sessions", isDirectory: true)
     }
 
-    init(name: String) throws {
+    init(name: String, debugSettings: TagDebugSettings = .load()) throws {
         self.name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160))
+        initialDebugSettings = debugSettings
+        initialTagSizeEvidence = debugSettings.matchingTagSizeEvidence()
         folder = Self.root.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("frames"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("depth"), withIntermediateDirectories: true)
@@ -118,7 +124,10 @@ final class CaptureRecorder {
 
     /// Analysis metadata is recorded for empty results too. Positive-result image retention shares the bounded writer pool.
     func aprilTagEvent(_ event: [String: Any], pixelBuffer: CVPixelBuffer?, frameID: String) {
-        let captureImage = pixelBuffer != nil && slots.wait(timeout: .now()) == .success
+        let timestamp = (event["timestamp"] as? NSNumber)?.doubleValue ?? -Double.infinity
+        let snapshotDue = pixelBuffer != nil && timestamp - lastTagSnapshotRequestedTimestamp >= 0.2
+        let captureImage = snapshotDue && slots.wait(timeout: .now()) == .success
+        if captureImage { lastTagSnapshotRequestedTimestamp = timestamp }
         let retainedBuffer = captureImage ? pixelBuffer : nil
         let hadImage = pixelBuffer != nil
         queue.async { [self] in
@@ -130,7 +139,9 @@ final class CaptureRecorder {
                 if let buffer = retainedBuffer {
                     do { record["rgbImagePath"] = try saveRGBImage(buffer, frameID: frameID) }
                     catch { record["captureError"] = error.localizedDescription; recordError(error.localizedDescription) }
-                } else if hadImage { record["frameCaptureSkipped"] = "bounded writer queue busy" }
+                } else if hadImage {
+                    record["frameCaptureSkipped"] = snapshotDue ? "bounded writer queue busy" : "positive-tag JPEG snapshot limited to 5 Hz; numeric result retained"
+                }
                 do { try appendJSON(record, to: eventsFile) } catch { recordError(error.localizedDescription) }
             }
         }
@@ -269,8 +280,9 @@ final class CaptureRecorder {
         manifest["firstARFrameTimestamp"] = firstTimestamp as Any? ?? NSNull()
         manifest["coordinateConvention"] = "ARKit right-handed, gravity aligned +Y up, camera looks along -Z; camera transforms column-major camera-to-world; depth is camera-plane Z in meters"
         manifest["captureDefaults"] = ["videoFPS": 30, "depthAndJPEGHz": 5, "maxRetainedWriterFrames": 3, "jpegQuality": 0.94, "videoBitrate": 10_000_000]
-        manifest["aprilTagConfiguration"] = ["enabled": true, "family": "tag36h11", "implementation": "AprilRobotics/apriltag via AFTagDetector", "upstreamRevision": AFTagDetector.upstreamRevision(), "quadDecimate": 2, "threads": 2, "targetAnalysisHz": 8, "maxInFlight": 1, "poseEstimation": false, "coordinates": "full-resolution capturedImage sensor pixels", "overlayMaximumAgeSeconds": 0.5]
+        manifest["aprilTagConfiguration"] = ["enabled": true, "family": "tag36h11", "implementation": "AprilRobotics/apriltag via AFTagDetector", "upstreamRevision": AFTagDetector.upstreamRevision(), "quadDecimate": 2, "threads": 2, "targetAnalysisHz": 30, "analysisScheduling": "one in flight; no artificial throttle; actual throughput recorded", "maxInFlight": 1, "poseEstimation": true, "coordinates": "full-resolution capturedImage sensor pixels; camera optical XYZ", "overlayMaximumAgeSeconds": 0.4, "positiveDetectionJPEGMaxHz": 5, "debugSettingsAtStart": initialDebugSettings.dictionary]
         manifest["aprilTagCounts"] = ["analyzedFrames": tagAnalyzedFrames, "positiveFrames": tagPositiveFrames, "errors": tagErrors]
+        manifest["tagSizeEvidenceAtStart"] = initialTagSizeEvidence as Any? ?? NSNull()
         manifest["counts"] = ["metadataFrames": framesWritten, "depthFrames": depthFrames, "videoFrames": videoFrames, "writerDroppedFrames": recentDropCount, "videoDroppedFrames": droppedVideoFrames]
         manifest["files"] = ["frames": "frames.jsonl", "events": "events.jsonl", "video": "rgb.mp4", "images": "frames/", "depth": "depth/"]
         manifest["evidence"] = "Live capture; measurement accuracy has not been independently validated. AR world poses are not surveyed field truth."

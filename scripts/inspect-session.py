@@ -10,7 +10,7 @@ import sys
 import zipfile
 
 
-def inspect(path: Path, require_tags: bool = False) -> dict:
+def inspect(path: Path, require_tags: bool = False, require_debug: bool = False) -> dict:
     archive = zipfile.ZipFile(path) if path.is_file() else None
     prefix = ""
     if archive and "manifest.json" not in archive.namelist():
@@ -82,6 +82,10 @@ def inspect(path: Path, require_tags: bool = False) -> dict:
         detected_ids = set()
         detection_count = 0
         failed_tag_analyses = 0
+        pose_count = 0
+        debug_statuses = {}
+        def finite_number(value):
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
         for event in tag_events:
             if event.get('analysisSucceeded') is False:
                 failed_tag_analyses += 1
@@ -105,8 +109,37 @@ def inspect(path: Path, require_tags: bool = False) -> dict:
                     errors.append('Invalid AprilTag corner coordinates')
                 if not detection.get('family') or 'hamming' not in detection or 'decisionMargin' not in detection:
                     errors.append('AprilTag detection lacks family/quality fields')
+                pose = detection.get('pose')
+                if isinstance(pose, dict):
+                    pose_count += 1
+                    for field, size in [('translation', 3), ('rotationRowMajor', 9), ('eulerDegrees', 3)]:
+                        values = pose.get(field, [])
+                        if len(values) != size or not all(finite_number(v) for v in values):
+                            errors.append(f'Invalid AprilTag optical pose: {field}')
+                    translation = pose.get('translation', [])
+                    if len(translation) == 3 and all(finite_number(v) for v in translation):
+                        if translation[2] <= 0:
+                            errors.append('AprilTag optical pose is behind the camera')
+                        distance = pose.get('rangeMeters')
+                        if not finite_number(distance) or abs(distance - math.hypot(*translation)) > 1e-6:
+                            errors.append('AprilTag pose range is inconsistent with translation')
+                    rms = pose.get('reprojectionRMSEPixels')
+                    if not finite_number(rms) or rms < 0:
+                        errors.append('Invalid AprilTag pixel reprojection RMS')
+                debug = detection.get('debug')
+                if isinstance(debug, dict):
+                    state = debug.get('status', 'unknown')
+                    debug_statuses[state] = debug_statuses.get(state, 0) + 1
+                    center, z, delta = (debug.get(k) for k in ['centerDepthMeters', 'opticalPoseZMeters', 'depthDifferenceMeters'])
+                    if all(finite_number(v) for v in [center, z, delta]) and abs(delta - abs(center - z)) > 1e-6:
+                        errors.append('Debug depth mismatch compares inconsistent values')
+                    if debug.get('valid'):
+                        if state != 'valid' or debug.get('centerConfidence') not in [1, 2] or debug.get('tracking') != 'normal' or not all(finite_number(v) for v in [center, z, delta]):
+                            errors.append('Debug valid flag has missing or rejected sensor evidence')
         if require_tags and not detection_count:
             errors.append('No AprilTag detections; this check requires a known visible tag')
+        if require_debug and (not pose_count or not debug_statuses):
+            errors.append('No solved AprilTag pose/debug records; this check requires a visible calibrated tag')
         verified = 0
         for entry in manifest.get('fileInventory', []):
             name = entry['path']
@@ -132,6 +165,7 @@ def inspect(path: Path, require_tags: bool = False) -> dict:
                 "aprilTagAnalyzedFrames": len(tag_events), "aprilTagDetections": detection_count,
                 "aprilTagIDs": sorted(detected_ids),
                 "aprilTagFailedAnalyses": failed_tag_analyses,
+                "aprilTagPoses": pose_count, "debugStatuses": debug_statuses,
                 "videoBytes": video_bytes, "depthSamples": samples,
                 "verifiedPayloadFiles": verified,
                 "manifestErrors": manifest.get("errors", []), "validationErrors": errors,
@@ -145,9 +179,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
     parser.add_argument("--require-tags", action="store_true", help="Require at least one decoded tag for the known-tag device check")
+    parser.add_argument("--require-debug", action="store_true", help="Require solved poses and debug records for a calibrated-tag device check")
     args = parser.parse_args()
     try:
-        result = inspect(args.session, require_tags=args.require_tags)
+        result = inspect(args.session, require_tags=args.require_tags, require_debug=args.require_debug)
         print(json.dumps(result, indent=2))
         sys.exit(1 if result["validationErrors"] else 0)
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:

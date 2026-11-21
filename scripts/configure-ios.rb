@@ -13,7 +13,7 @@ end
 native = project.main_group.groups.find { |group| group.name == 'Native' }
 native ||= project.main_group.new_group('Native', '../native')
 Dir.glob(File.join(root, 'native/**/*.{swift,m,mm,c}')).sort.each do |path|
-  next if path.downcase.include?('/tests/') || File.basename(path).downcase.include?('test')
+  next if path.split('/').any? { |part| part.downcase.end_with?('tests') } || File.basename(path).downcase.include?('test')
   relative = path.delete_prefix(File.join(root, 'native/'))
   reference = native.files.find { |file| file.path == relative } || native.new_file(relative)
   target.source_build_phase.add_file_reference(reference, true)
@@ -35,7 +35,7 @@ target.build_configurations.each do |config|
   config.build_settings['DEVELOPMENT_TEAM'] = 'X5873NL7XM'
   config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
   config.build_settings['MARKETING_VERSION'] = '0.1.0'
-  config.build_settings['CURRENT_PROJECT_VERSION'] = '3'
+  config.build_settings['CURRENT_PROJECT_VERSION'] = '4'
   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
   config.build_settings['SWIFT_VERSION'] = '5.0'
   config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = '$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h'

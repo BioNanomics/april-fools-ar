@@ -37,6 +37,23 @@ final class ARCaptureEngine: RCTEventEmitter {
     func getStatus(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.getStatus { value in DispatchQueue.main.async { resolve(value) } }
     }
+    @objc(getDebugSettings:rejecter:)
+    func getDebugSettings(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.getDebugSettings { value in DispatchQueue.main.async { resolve(value) } }
+    }
+    @objc(setDebugSettings:resolver:rejecter:)
+    func setDebugSettings(_ changes: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        guard let changes = changes as? [String: Any] else { reject("AR_CAPTURE_ERROR", "Settings must be a dictionary.", nil); return }
+        ARCaptureCoordinator.shared.setDebugSettings(changes) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(setDebugMode:resolver:rejecter:)
+    func setDebugMode(_ enabled: Bool, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.setDebugMode(enabled) { value in DispatchQueue.main.async { resolve(value) } }
+    }
+    @objc(applyMeasuredTagSize:rejecter:)
+    func applyMeasuredTagSize(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.applyMeasuredTagSize { self.complete($0, resolve: resolve, reject: reject) }
+    }
     @objc(addBookmark:resolver:rejecter:)
     func addBookmark(_ note: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.addBookmark(note: note) { self.complete($0, resolve: resolve, reject: reject) }

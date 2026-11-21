@@ -4,10 +4,12 @@ An iPhone-first AprilTag field capture app. Milestone zero detects tags and reco
 
 ## On the phone
 
+**Tag debug** shows camera-relative pose, LiDAR center/mean depth, depth mismatch, viewing angles, decode quality and validity. Tap a tag to select it. Use **Settings** for the physical tag width and quality thresholds; width defaults to FRC 165.1 mm. You can enter a width or use **Measure tag width with AR**, then review and accept the two-point edge estimate. See [debug definitions and conventions](docs/tag-debug-screen.md).
+
 1. Open **April Fools AR** and allow camera access. Use a LiDAR-capable iPhone for numeric depth recording.
 2. Wait for tracking and depth to become available. Point at a `tag36h11` AprilTag to see its ID and corner outline; live detection also runs before recording. The RGB, Depth, and Confidence controls change the preview, not the recorded sensor source.
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
-4. Tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
+4. In **Measure** mode, tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
 6. Tap **Stop & save**. Open **Saved sessions**, then **Export ZIP** and send the bundle through AirDrop or save it to Files.
 
@@ -60,6 +62,6 @@ These development checks do not establish sensor accuracy. [PLAN.md](PLAN.md) ke
 - `native/ArchiveModule/`: streaming ZIP export without a server dependency.
 - `assets/`: opaque app icon and generation provenance.
 
-The initial detector supports the `tag36h11` family. IDs and image corners do not require knowing tag size. Tag pose estimation, a calibration solver, Android and BLE integration remain later work. REEKON SDK access status is tracked in [reekon-sprint.md](reekon-sprint.md).
+The initial detector supports the `tag36h11` family. IDs and image corners do not require knowing tag size; metric pose does. A field calibration solver, Android and BLE integration remain later work. REEKON SDK access status is tracked in [reekon-sprint.md](reekon-sprint.md).
 
 The pinned detector's redistribution notices are in [third_party/apriltag/NOTICE.md](third_party/apriltag/NOTICE.md) and are included in the app bundle. The initial family follows [WPILib's FRC AprilTag documentation](https://docs.wpilib.org/en/latest/docs/software/vision-processing/apriltag/apriltag-intro.html).

@@ -28,6 +28,7 @@ int main(void) {
     assert(AFTagCoreDetect(core, pixels, width, height, stride, &found, &count) == AFTagCoreSuccess);
     assert(count == 1 && found[0].id == 42 && found[0].hamming == 0);
     assert(strcmp(found[0].family, "tag36h11") == 0 && found[0].decisionMargin > 0);
+    assert(!found[0].hasPose); // Legacy API never manufactures calibration.
     // Confirms internal decimation has not halved the returned pixel coordinates.
     assert(fabs(found[0].center[0] - (x0 + tag->width * scale / 2.0)) < 2);
     assert(fabs(found[0].center[1] - (y0 + tag->height * scale / 2.0)) < 2);
@@ -37,6 +38,15 @@ int main(void) {
     }
     printf("PASS tag36h11 ID=%d center=(%.2f,%.2f), padded stride=%d; blank zero; upstream=%s\n",
            found[0].id, found[0].center[0], found[0].center[1], stride, AFTagCoreUpstreamRevision());
+    AFTagCoreFreeDetections(found);
+    AFTagCalibration calibration = {.fx=1000,.fy=1000,.cx=230,.cy=180,.tagSizeMeters=0.1651};
+    assert(AFTagCoreDetectCalibrated(core,pixels,width,height,stride,&calibration,&found,&count)==AFTagCoreSuccess);
+    assert(count==1 && found[0].id==42 && found[0].hasPose);
+    assert(fabs(found[0].pose.translation[2]-1000*0.1651/160)<0.01);
+    AFTagCoreFreeDetections(found);
+    calibration.tagSizeMeters=0;
+    assert(AFTagCoreDetectCalibrated(core,pixels,width,height,stride,&calibration,&found,&count)==AFTagCoreSuccess);
+    assert(count==1 && found[0].id==42 && !found[0].hasPose);
     AFTagCoreFreeDetections(found);
     assert(AFTagCoreDetect(core, pixels, width, height, width - 1, &found, &count) == AFTagCoreInvalidInput);
     image_u8_destroy(tag); tag36h11_destroy(family); AFTagCoreDestroy(core); free(pixels);

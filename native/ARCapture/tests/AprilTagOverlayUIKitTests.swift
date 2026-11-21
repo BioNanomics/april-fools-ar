@@ -37,10 +37,10 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             autoreleasepool {
                 show([detection(index)])
                 XCTAssertEqual(overlay.subviews.compactMap { $0 as? UILabel }.count, 1)
-                XCTAssertEqual(overlay.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.count, 1)
+                XCTAssertEqual(overlay.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.count, 2)
                 show([detection(index + 1), detection(index + 2)])
                 XCTAssertEqual(overlay.subviews.compactMap { $0 as? UILabel }.count, 2)
-                XCTAssertEqual(overlay.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.count, 2)
+                XCTAssertEqual(overlay.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.count, 4)
                 show([])
                 overlay.clear(); overlay.clear()
                 XCTAssertTrue(overlay.subviews.isEmpty)
@@ -87,5 +87,23 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             checkedFinalExpiry.fulfill()
         }
         wait(for: [checkedNewFrame, checkedFinalExpiry], timeout: 2)
+    }
+
+    func testDCurrentUpdatesReuseViewsAndDrawFourSelectableCorners() {
+        show([detection()])
+        let label = overlay.subviews.compactMap { $0 as? UILabel }.first!
+        let initialLayers = overlay.layer.sublayers!.compactMap { $0 as? CAShapeLayer }
+        for index in 0..<150 {
+            show([detection()], frameID: "reuse-\(index)")
+            XCTAssertTrue(overlay.subviews.compactMap { $0 as? UILabel }.first === label)
+            let layers = overlay.layer.sublayers!.compactMap { $0 as? CAShapeLayer }
+            XCTAssertEqual(layers.count, 2)
+            XCTAssertTrue(layers[0] === initialLayers[0]); XCTAssertTrue(layers[1] === initialLayers[1])
+            XCTAssertEqual(overlay.tagID(at: CGPoint(x: 80, y: 80)), 42)
+            XCTAssertNil(overlay.tagID(at: CGPoint(x: 300, y: 400)))
+        }
+        var circleMoves = 0
+        initialLayers[1].path!.applyWithBlock { if $0.pointee.type == .moveToPoint { circleMoves += 1 } }
+        XCTAssertEqual(circleMoves, 4)
     }
 }

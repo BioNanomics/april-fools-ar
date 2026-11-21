@@ -13,6 +13,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// Returns nil and sets lastError for unsupported/invalid buffers or errors.
 - (nullable NSArray<NSDictionary<NSString *, id> *> *)detectPixelBuffer:(CVPixelBufferRef)pixelBuffer
     NS_SWIFT_NAME(detectPixelBuffer(_:));
+/// Intrinsics [fx,fy,cx,cy] refer to the original captured pixels. Explicit
+/// corner-to-corner tag edge in meters; invalid calibration yields no pose.
+- (nullable NSArray<NSDictionary<NSString *, id> *> *)detectPixelBuffer:(CVPixelBufferRef)pixelBuffer
+    intrinsics:(nullable NSArray<NSNumber *> *)intrinsics tagSizeMeters:(double)tagSizeMeters
+    NS_SWIFT_NAME(detectPixelBuffer(_:intrinsics:tagSizeMeters:));
 @end
 
 NS_ASSUME_NONNULL_END

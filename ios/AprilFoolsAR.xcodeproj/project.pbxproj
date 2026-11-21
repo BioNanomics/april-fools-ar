@@ -16,6 +16,7 @@
 		1508D443397E26804536B59C /* ARCaptureReact.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */; };
 		1DD28336743D5D3B79AEA09D /* zarray.c in Sources */ = {isa = PBXBuildFile; fileRef = CA4D9A9C2175E6193DDC55E8 /* zarray.c */; };
 		21693BD65381C9C81688828E /* zhash.c in Sources */ = {isa = PBXBuildFile; fileRef = FD9BB39E20F049935B814282 /* zhash.c */; };
+		24A7BA2A23FCD99934CAB655 /* TagDebugPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */; };
 		25EF4F5FAE49956C2FAE1179 /* tag36h11.c in Sources */ = {isa = PBXBuildFile; fileRef = CDF97A947CC1CF95873D4345 /* tag36h11.c */; };
 		291316D7E0441B79FD5C74D5 /* ArchiveModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */; };
 		2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */ = {isa = PBXBuildFile; fileRef = 8B743D7F395310A75BDE0593 /* string_util.c */; };
@@ -35,6 +36,7 @@
 		7D721A7FFAFDC1D1C6417BEF /* CaptureRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B656219EB5E72270FF25D5 /* CaptureRecorder.swift */; };
 		7D848C62E79BEC2D2E5C63A4 /* AFTagDetector.m in Sources */ = {isa = PBXBuildFile; fileRef = 468D4324892A66A3BF05B7B0 /* AFTagDetector.m */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		82775D5EF40CCB131F9FAC96 /* TagDebugMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */; };
 		86C00913574A035160C49D75 /* matd.c in Sources */ = {isa = PBXBuildFile; fileRef = 78764DD7E780CABC9B355826 /* matd.c */; };
 		AC9E75D7FF47342FF702995C /* zmaxheap.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E44803935F6579A749699F8 /* zmaxheap.c */; };
 		AFB7866EAFC1D0922D8652A6 /* getopt.c in Sources */ = {isa = PBXBuildFile; fileRef = 5DF00A1907A26462253BD5F7 /* getopt.c */; };
@@ -82,6 +84,7 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = AprilFoolsAR/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8557C9FDEF8BC3089C875676 /* SessionZIPWriter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SessionZIPWriter.swift; path = ArchiveModule/SessionZIPWriter.swift; sourceTree = "<group>"; };
 		8B743D7F395310A75BDE0593 /* string_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = string_util.c; path = common/string_util.c; sourceTree = "<group>"; };
+		8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagDebugMath.swift; path = ARCapture/TagDebugMath.swift; sourceTree = "<group>"; };
 		9959BA1C7D343658916BEE71 /* NOTICE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = NOTICE.md; sourceTree = "<group>"; };
 		AF54B392AF6AF22FF9C87B16 /* workerpool.c */ = {isa = PBXFileReference; includeInIndex = 1; name = workerpool.c; path = common/workerpool.c; sourceTree = "<group>"; };
 		BFE5AB4C89A6209CDF6E8F3E /* pam.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pam.c; path = common/pam.c; sourceTree = "<group>"; };
@@ -98,6 +101,7 @@
 		EA83DAE678B40D531BAF2FFD /* LICENSE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.md; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F65F24E17F0D91A4485AC78B /* image_u8.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8.c; path = common/image_u8.c; sourceTree = "<group>"; };
+		F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagDebugPanelView.swift; path = ARCapture/TagDebugPanelView.swift; sourceTree = "<group>"; };
 		F8E33A9E46C7BB1561A197FD /* apriltag_pose.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag_pose.c; sourceTree = "<group>"; };
 		FD9BB39E20F049935B814282 /* zhash.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zhash.c; path = common/zhash.c; sourceTree = "<group>"; };
 		FFCDC580B5E67BFA6CECFDDF /* ARCaptureBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = ARCaptureBridge.m; path = ARCapture/ARCaptureBridge.m; sourceTree = "<group>"; };
@@ -150,6 +154,8 @@
 				65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */,
 				E8B8A96D63698D4255EFFE75 /* AFTagCore.c */,
 				468D4324892A66A3BF05B7B0 /* AFTagDetector.m */,
+				8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */,
+				F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -421,6 +427,8 @@
 				21693BD65381C9C81688828E /* zhash.c in Sources */,
 				AC9E75D7FF47342FF702995C /* zmaxheap.c in Sources */,
 				25EF4F5FAE49956C2FAE1179 /* tag36h11.c in Sources */,
+				82775D5EF40CCB131F9FAC96 /* TagDebugMath.swift in Sources */,
+				24A7BA2A23FCD99934CAB655 /* TagDebugPanelView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -434,7 +442,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -473,7 +481,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (

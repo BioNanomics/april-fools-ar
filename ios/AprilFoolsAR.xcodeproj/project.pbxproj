@@ -7,19 +7,49 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		017EB8DE1F5B72D3F7B60A46 /* pnm.c in Sources */ = {isa = PBXBuildFile; fileRef = 2540CE28C05CEEFC3ABC83FF /* pnm.c */; };
+		01CAF493F029E80D5568F3C9 /* AprilTagOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */; };
+		0AE1D41CFDE400D554CB72B9 /* svd22.c in Sources */ = {isa = PBXBuildFile; fileRef = 322A348F58056FBE702D49EA /* svd22.c */; };
 		0C80B921A6F3F58F76C31292 /* libPods-AprilFoolsAR.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-AprilFoolsAR.a */; };
 		0D29D20B52888BC13C221C32 /* SessionZIPWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8557C9FDEF8BC3089C875676 /* SessionZIPWriter.swift */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1508D443397E26804536B59C /* ARCaptureReact.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */; };
+		1DD28336743D5D3B79AEA09D /* zarray.c in Sources */ = {isa = PBXBuildFile; fileRef = CA4D9A9C2175E6193DDC55E8 /* zarray.c */; };
+		21693BD65381C9C81688828E /* zhash.c in Sources */ = {isa = PBXBuildFile; fileRef = FD9BB39E20F049935B814282 /* zhash.c */; };
+		25EF4F5FAE49956C2FAE1179 /* tag36h11.c in Sources */ = {isa = PBXBuildFile; fileRef = CDF97A947CC1CF95873D4345 /* tag36h11.c */; };
 		291316D7E0441B79FD5C74D5 /* ArchiveModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */; };
+		2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */ = {isa = PBXBuildFile; fileRef = 8B743D7F395310A75BDE0593 /* string_util.c */; };
+		34C7BC10A1B2909961E81174 /* g2d.c in Sources */ = {isa = PBXBuildFile; fileRef = 3E65C29D4D082A77C20F9142 /* g2d.c */; };
+		40B3ADBE9B5EC5EEAEEDDD59 /* AFTagCore.c in Sources */ = {isa = PBXBuildFile; fileRef = E8B8A96D63698D4255EFFE75 /* AFTagCore.c */; };
+		493E2B21D726B34BB0493700 /* image_u8x4.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E3A4C79448974334F594FA9 /* image_u8x4.c */; };
+		4F14051DCE23E152A6ED7597 /* LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = EA83DAE678B40D531BAF2FFD /* LICENSE.md */; };
 		5DDFA3666B7B838AA2F47CF0 /* ArchiveModuleBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E6DDB04829654A3469E2AA17 /* ArchiveModuleBridge.m */; };
 		5F59B54D8B242E409BEC4A6E /* ARCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */; };
+		629385028333213529D5993C /* image_u8x3.c in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE2087C434A7DAD20946AB /* image_u8x3.c */; };
 		665F5DA3657666D038C6E1C6 /* ARCaptureBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = FFCDC580B5E67BFA6CECFDDF /* ARCaptureBridge.m */; };
+		73D92B66C9BCFD1CD5E4F15D /* time_util.c in Sources */ = {isa = PBXBuildFile; fileRef = C163298A0F6DC8A250C20E13 /* time_util.c */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
+		7661B81446A4E5C3F45455C2 /* pam.c in Sources */ = {isa = PBXBuildFile; fileRef = BFE5AB4C89A6209CDF6E8F3E /* pam.c */; };
 		7D28A7E5356E6DF492274190 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		7D721A7FFAFDC1D1C6417BEF /* CaptureRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B656219EB5E72270FF25D5 /* CaptureRecorder.swift */; };
+		7D848C62E79BEC2D2E5C63A4 /* AFTagDetector.m in Sources */ = {isa = PBXBuildFile; fileRef = 468D4324892A66A3BF05B7B0 /* AFTagDetector.m */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		86C00913574A035160C49D75 /* matd.c in Sources */ = {isa = PBXBuildFile; fileRef = 78764DD7E780CABC9B355826 /* matd.c */; };
+		AC9E75D7FF47342FF702995C /* zmaxheap.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E44803935F6579A749699F8 /* zmaxheap.c */; };
+		AFB7866EAFC1D0922D8652A6 /* getopt.c in Sources */ = {isa = PBXBuildFile; fileRef = 5DF00A1907A26462253BD5F7 /* getopt.c */; };
+		B00D8DF342D0024D8567A150 /* unionfind.c in Sources */ = {isa = PBXBuildFile; fileRef = 7F8DD804A45F21BC7D954794 /* unionfind.c */; };
+		B29F69AB46FBD16EFC019A73 /* image_u8.c in Sources */ = {isa = PBXBuildFile; fileRef = F65F24E17F0D91A4485AC78B /* image_u8.c */; };
+		BB27464AB65284AF3500CFE1 /* pthreads_cross.c in Sources */ = {isa = PBXBuildFile; fileRef = 2597B3319AD2D1C5517C152B /* pthreads_cross.c */; };
+		CA9D8486E41D82AF33B6601A /* apriltag_pose.c in Sources */ = {isa = PBXBuildFile; fileRef = F8E33A9E46C7BB1561A197FD /* apriltag_pose.c */; };
+		CF00F5589ADEF5F3FD483A3B /* homography.c in Sources */ = {isa = PBXBuildFile; fileRef = 78CED63F155DCD2DD5BCCAC8 /* homography.c */; };
+		D1D2FA6D793879C11F03BF1F /* apriltag.c in Sources */ = {isa = PBXBuildFile; fileRef = E58DC96727684DC98AB58CE2 /* apriltag.c */; };
+		D3A310B212DE0D198040F522 /* apriltag_quad_thresh.c in Sources */ = {isa = PBXBuildFile; fileRef = 636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */; };
+		D67D403D684BB61E9B6F4FA1 /* pjpeg-idct.c in Sources */ = {isa = PBXBuildFile; fileRef = 65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */; };
+		DA27C35703607F1813578B2B /* pjpeg.c in Sources */ = {isa = PBXBuildFile; fileRef = D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */; };
+		E25CDE140876A1CCDA05B580 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = 9959BA1C7D343658916BEE71 /* NOTICE.md */; };
+		E5447352652A80E035CB8F29 /* workerpool.c in Sources */ = {isa = PBXBuildFile; fileRef = AF54B392AF6AF22FF9C87B16 /* workerpool.c */; };
+		EDD5F009E1328D5ECD12C581 /* image_u8_parallel.c in Sources */ = {isa = PBXBuildFile; fileRef = 493908AED57E2288AFD6D880 /* image_u8_parallel.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,19 +57,49 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = AprilFoolsAR/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = AprilFoolsAR/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = AprilFoolsAR/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2540CE28C05CEEFC3ABC83FF /* pnm.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pnm.c; path = common/pnm.c; sourceTree = "<group>"; };
+		2597B3319AD2D1C5517C152B /* pthreads_cross.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pthreads_cross.c; path = common/pthreads_cross.c; sourceTree = "<group>"; };
+		2E3A4C79448974334F594FA9 /* image_u8x4.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8x4.c; path = common/image_u8x4.c; sourceTree = "<group>"; };
+		2E44803935F6579A749699F8 /* zmaxheap.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zmaxheap.c; path = common/zmaxheap.c; sourceTree = "<group>"; };
+		322A348F58056FBE702D49EA /* svd22.c */ = {isa = PBXFileReference; includeInIndex = 1; name = svd22.c; path = common/svd22.c; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-AprilFoolsAR.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AprilFoolsAR.debug.xcconfig"; path = "Target Support Files/Pods-AprilFoolsAR/Pods-AprilFoolsAR.debug.xcconfig"; sourceTree = "<group>"; };
+		3E65C29D4D082A77C20F9142 /* g2d.c */ = {isa = PBXFileReference; includeInIndex = 1; name = g2d.c; path = common/g2d.c; sourceTree = "<group>"; };
+		468D4324892A66A3BF05B7B0 /* AFTagDetector.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = AFTagDetector.m; path = AprilTag/AFTagDetector.m; sourceTree = "<group>"; };
 		48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArchiveModule.swift; path = ArchiveModule/ArchiveModule.swift; sourceTree = "<group>"; };
+		493908AED57E2288AFD6D880 /* image_u8_parallel.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8_parallel.c; path = common/image_u8_parallel.c; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-AprilFoolsAR.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AprilFoolsAR.release.xcconfig"; path = "Target Support Files/Pods-AprilFoolsAR/Pods-AprilFoolsAR.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-AprilFoolsAR.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AprilFoolsAR.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5DF00A1907A26462253BD5F7 /* getopt.c */ = {isa = PBXFileReference; includeInIndex = 1; name = getopt.c; path = common/getopt.c; sourceTree = "<group>"; };
+		636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag_quad_thresh.c; sourceTree = "<group>"; };
+		65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AprilTagOverlayView.swift; path = ARCapture/AprilTagOverlayView.swift; sourceTree = "<group>"; };
+		65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */ = {isa = PBXFileReference; includeInIndex = 1; name = "pjpeg-idct.c"; path = "common/pjpeg-idct.c"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AprilFoolsAR/AppDelegate.swift; sourceTree = "<group>"; };
 		761780EE2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = AprilFoolsAR/SceneDelegate.swift; sourceTree = "<group>"; };
+		78764DD7E780CABC9B355826 /* matd.c */ = {isa = PBXFileReference; includeInIndex = 1; name = matd.c; path = common/matd.c; sourceTree = "<group>"; };
+		78CED63F155DCD2DD5BCCAC8 /* homography.c */ = {isa = PBXFileReference; includeInIndex = 1; name = homography.c; path = common/homography.c; sourceTree = "<group>"; };
+		7F8DD804A45F21BC7D954794 /* unionfind.c */ = {isa = PBXFileReference; includeInIndex = 1; name = unionfind.c; path = common/unionfind.c; sourceTree = "<group>"; };
+		7FEE2087C434A7DAD20946AB /* image_u8x3.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8x3.c; path = common/image_u8x3.c; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = AprilFoolsAR/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8557C9FDEF8BC3089C875676 /* SessionZIPWriter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SessionZIPWriter.swift; path = ArchiveModule/SessionZIPWriter.swift; sourceTree = "<group>"; };
+		8B743D7F395310A75BDE0593 /* string_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = string_util.c; path = common/string_util.c; sourceTree = "<group>"; };
+		9959BA1C7D343658916BEE71 /* NOTICE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = NOTICE.md; sourceTree = "<group>"; };
+		AF54B392AF6AF22FF9C87B16 /* workerpool.c */ = {isa = PBXFileReference; includeInIndex = 1; name = workerpool.c; path = common/workerpool.c; sourceTree = "<group>"; };
+		BFE5AB4C89A6209CDF6E8F3E /* pam.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pam.c; path = common/pam.c; sourceTree = "<group>"; };
+		C163298A0F6DC8A250C20E13 /* time_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = time_util.c; path = common/time_util.c; sourceTree = "<group>"; };
 		C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ARCaptureReact.swift; path = ARCapture/ARCaptureReact.swift; sourceTree = "<group>"; };
 		C2B656219EB5E72270FF25D5 /* CaptureRecorder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CaptureRecorder.swift; path = ARCapture/CaptureRecorder.swift; sourceTree = "<group>"; };
+		CA4D9A9C2175E6193DDC55E8 /* zarray.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zarray.c; path = common/zarray.c; sourceTree = "<group>"; };
+		CDF97A947CC1CF95873D4345 /* tag36h11.c */ = {isa = PBXFileReference; includeInIndex = 1; path = tag36h11.c; sourceTree = "<group>"; };
+		D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pjpeg.c; path = common/pjpeg.c; sourceTree = "<group>"; };
 		DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ARCaptureCoordinator.swift; path = ARCapture/ARCaptureCoordinator.swift; sourceTree = "<group>"; };
+		E58DC96727684DC98AB58CE2 /* apriltag.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag.c; sourceTree = "<group>"; };
 		E6DDB04829654A3469E2AA17 /* ArchiveModuleBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = ArchiveModuleBridge.m; path = ArchiveModule/ArchiveModuleBridge.m; sourceTree = "<group>"; };
+		E8B8A96D63698D4255EFFE75 /* AFTagCore.c */ = {isa = PBXFileReference; includeInIndex = 1; name = AFTagCore.c; path = AprilTag/AFTagCore.c; sourceTree = "<group>"; };
+		EA83DAE678B40D531BAF2FFD /* LICENSE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.md; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		F65F24E17F0D91A4485AC78B /* image_u8.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8.c; path = common/image_u8.c; sourceTree = "<group>"; };
+		F8E33A9E46C7BB1561A197FD /* apriltag_pose.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag_pose.c; sourceTree = "<group>"; };
+		FD9BB39E20F049935B814282 /* zhash.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zhash.c; path = common/zhash.c; sourceTree = "<group>"; };
 		FFCDC580B5E67BFA6CECFDDF /* ARCaptureBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = ARCaptureBridge.m; path = ARCapture/ARCaptureBridge.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -87,6 +147,9 @@
 				FFCDC580B5E67BFA6CECFDDF /* ARCaptureBridge.m */,
 				DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */,
 				C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */,
+				65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */,
+				E8B8A96D63698D4255EFFE75 /* AFTagCore.c */,
+				468D4324892A66A3BF05B7B0 /* AFTagDetector.m */,
 			);
 			name = Native;
 			path = ../native;
@@ -108,6 +171,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
 				77F511F658448DDAD99115F4 /* Native */,
+				AB59BE6D2F5B6F4F11081784 /* AprilTag upstream */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -120,6 +184,41 @@
 				13B07F961A680F5B00A75B9A /* AprilFoolsAR.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AB59BE6D2F5B6F4F11081784 /* AprilTag upstream */ = {
+			isa = PBXGroup;
+			children = (
+				E58DC96727684DC98AB58CE2 /* apriltag.c */,
+				F8E33A9E46C7BB1561A197FD /* apriltag_pose.c */,
+				636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */,
+				3E65C29D4D082A77C20F9142 /* g2d.c */,
+				5DF00A1907A26462253BD5F7 /* getopt.c */,
+				78CED63F155DCD2DD5BCCAC8 /* homography.c */,
+				F65F24E17F0D91A4485AC78B /* image_u8.c */,
+				493908AED57E2288AFD6D880 /* image_u8_parallel.c */,
+				7FEE2087C434A7DAD20946AB /* image_u8x3.c */,
+				2E3A4C79448974334F594FA9 /* image_u8x4.c */,
+				78764DD7E780CABC9B355826 /* matd.c */,
+				BFE5AB4C89A6209CDF6E8F3E /* pam.c */,
+				65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */,
+				D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */,
+				2540CE28C05CEEFC3ABC83FF /* pnm.c */,
+				2597B3319AD2D1C5517C152B /* pthreads_cross.c */,
+				8B743D7F395310A75BDE0593 /* string_util.c */,
+				322A348F58056FBE702D49EA /* svd22.c */,
+				C163298A0F6DC8A250C20E13 /* time_util.c */,
+				7F8DD804A45F21BC7D954794 /* unionfind.c */,
+				AF54B392AF6AF22FF9C87B16 /* workerpool.c */,
+				CA4D9A9C2175E6193DDC55E8 /* zarray.c */,
+				FD9BB39E20F049935B814282 /* zhash.c */,
+				2E44803935F6579A749699F8 /* zmaxheap.c */,
+				CDF97A947CC1CF95873D4345 /* tag36h11.c */,
+				EA83DAE678B40D531BAF2FFD /* LICENSE.md */,
+				9959BA1C7D343658916BEE71 /* NOTICE.md */,
+			);
+			name = "AprilTag upstream";
+			path = ../third_party/apriltag;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -196,6 +295,8 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				7D28A7E5356E6DF492274190 /* PrivacyInfo.xcprivacy in Resources */,
+				4F14051DCE23E152A6ED7597 /* LICENSE.md in Resources */,
+				E25CDE140876A1CCDA05B580 /* NOTICE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -292,6 +393,34 @@
 				665F5DA3657666D038C6E1C6 /* ARCaptureBridge.m in Sources */,
 				5F59B54D8B242E409BEC4A6E /* ARCaptureCoordinator.swift in Sources */,
 				1508D443397E26804536B59C /* ARCaptureReact.swift in Sources */,
+				01CAF493F029E80D5568F3C9 /* AprilTagOverlayView.swift in Sources */,
+				40B3ADBE9B5EC5EEAEEDDD59 /* AFTagCore.c in Sources */,
+				7D848C62E79BEC2D2E5C63A4 /* AFTagDetector.m in Sources */,
+				D1D2FA6D793879C11F03BF1F /* apriltag.c in Sources */,
+				CA9D8486E41D82AF33B6601A /* apriltag_pose.c in Sources */,
+				D3A310B212DE0D198040F522 /* apriltag_quad_thresh.c in Sources */,
+				34C7BC10A1B2909961E81174 /* g2d.c in Sources */,
+				AFB7866EAFC1D0922D8652A6 /* getopt.c in Sources */,
+				CF00F5589ADEF5F3FD483A3B /* homography.c in Sources */,
+				B29F69AB46FBD16EFC019A73 /* image_u8.c in Sources */,
+				EDD5F009E1328D5ECD12C581 /* image_u8_parallel.c in Sources */,
+				629385028333213529D5993C /* image_u8x3.c in Sources */,
+				493E2B21D726B34BB0493700 /* image_u8x4.c in Sources */,
+				86C00913574A035160C49D75 /* matd.c in Sources */,
+				7661B81446A4E5C3F45455C2 /* pam.c in Sources */,
+				D67D403D684BB61E9B6F4FA1 /* pjpeg-idct.c in Sources */,
+				DA27C35703607F1813578B2B /* pjpeg.c in Sources */,
+				017EB8DE1F5B72D3F7B60A46 /* pnm.c in Sources */,
+				BB27464AB65284AF3500CFE1 /* pthreads_cross.c in Sources */,
+				2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */,
+				0AE1D41CFDE400D554CB72B9 /* svd22.c in Sources */,
+				73D92B66C9BCFD1CD5E4F15D /* time_util.c in Sources */,
+				B00D8DF342D0024D8567A150 /* unionfind.c in Sources */,
+				E5447352652A80E035CB8F29 /* workerpool.c in Sources */,
+				1DD28336743D5D3B79AEA09D /* zarray.c in Sources */,
+				21693BD65381C9C81688828E /* zhash.c in Sources */,
+				AC9E75D7FF47342FF702995C /* zmaxheap.c in Sources */,
+				25EF4F5FAE49956C2FAE1179 /* tag36h11.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -305,10 +434,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../native",
+					"$(SRCROOT)/../third_party/apriltag",
+				);
 				INFOPLIST_FILE = AprilFoolsAR/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -324,6 +458,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.doughorner.aprilfoolsar;
 				PRODUCT_NAME = AprilFoolsAR;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -338,9 +473,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../native",
+					"$(SRCROOT)/../third_party/apriltag",
+				);
 				INFOPLIST_FILE = AprilFoolsAR/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -356,6 +496,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.doughorner.aprilfoolsar;
 				PRODUCT_NAME = AprilFoolsAR;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";

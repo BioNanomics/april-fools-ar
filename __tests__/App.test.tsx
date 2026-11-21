@@ -90,3 +90,23 @@ test('falls back to a nonempty session name when the input is blank', async () =
   );
   expect(engine.startSession).toHaveBeenCalledWith('Field walk');
 });
+
+test('shows current native tag IDs before recording and clears absent tags', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    aprilTag: { state: 'running', family: 'tag36h11', ids: [4, 17] },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('Visible: #4, #17');
+  expect(engine.startSession).not.toHaveBeenCalled();
+
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    aprilTag: { state: 'ready', family: 'tag36h11', ids: [] },
+  });
+  await act(async () => jest.advanceTimersByTime(2000));
+  expect(JSON.stringify(tree.toJSON())).toContain('Looking for tags');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Visible: #4, #17');
+});

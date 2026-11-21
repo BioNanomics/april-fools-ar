@@ -35,6 +35,8 @@ A `.confidence.u8` file is a matching packed grid of UInt8 categories: 0 low, 1 
 
 ## Events and integrity
 
+AprilTag analysis uses the `tag36h11` family and the shared native AprilTag 3 detector. Each `aprilTagDetections` event identifies its source frame, coordinate segment, timestamp, image dimensions, intrinsics, camera pose and display transform. `detections` contains ID, family, Hamming corrections, decision margin, image-pixel center and four ordered image-pixel corners. An empty array with `analysisSucceeded: true` means the detector analyzed that frame and found no tags; it is distinct from a frame that was not analyzed or a failed analysis. Failures have `analysisSucceeded: false` and `detectorError`. The bounded analysis worker targets 8 Hz and records its latency. Live outlines are cleared when their result becomes stale. A detected ID is not proof of correct field placement, and the initial detector does not estimate a tag pose or assume a printed tag size.
+
 `events.jsonl` includes bookmarks, selected measurement endpoints, tracking changes, segment boundaries, and session lifecycle events. An endpoint records its image/depth pixel, camera-frame identity, world point, confidence when available, and depth source. With two valid endpoints in one segment, the app reports 3D Euclidean distance and signed `second.y - first.y` vertical difference separately. The vertical difference is not automatically floor-to-tag height.
 
 The writer retains at most three frames for disk work. Busy queues can omit frames or event snapshots; omissions are reported rather than assigned invented data. Capture counters distinguish accepted metadata, video, depth samples, and writer/video drops. Sample rates are targets, not guarantees.
@@ -48,5 +50,7 @@ Validate an exported bundle or copied session directory with:
 ```sh
 python3 scripts/inspect-session.py /path/to/session.zip
 ```
+
+For the short device check with a known visible tag, add `--require-tags` to fail when the export contains no decoded tag.
 
 This checks readability, numeric buffer sizes, sample decoding, and payload checksums. It does not establish measurement accuracy or replace the field review.

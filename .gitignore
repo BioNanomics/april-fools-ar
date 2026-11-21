@@ -67,6 +67,7 @@ yarn-error.log
 /coverage
 __pycache__/
 *.pyc
+**/tests/.build/
 
 # Yarn
 .yarn/*

@@ -43,4 +43,6 @@ When the camera is available, complete this short check:
 
 ## Next field activity
 
+The detector-enabled build 2 is documented in [M0-apriltags.md](M0-apriltags.md). It supersedes the initial capture-only implementation while retaining the same open physical capture/export and field-review gates.
+
 After the short sensor/export check passes, use T0 in [TESTER_CHECKLIST.md](../../TESTER_CHECKLIST.md). Capture an actual field, return the complete bundle, and review it with the user before revising the later roadmap.

@@ -10,7 +10,7 @@ import sys
 import zipfile
 
 
-def inspect(path: Path) -> dict:
+def inspect(path: Path, require_tags: bool = False) -> dict:
     archive = zipfile.ZipFile(path) if path.is_file() else None
     prefix = ""
     if archive and "manifest.json" not in archive.namelist():
@@ -78,6 +78,35 @@ def inspect(path: Path) -> dict:
         depth_count = sum("depthPath" in f for f in frames)
         if not depth_count:
             errors.append("No saved numeric depth frames")
+        tag_events = [e for e in events if e.get('type') == 'aprilTagDetections']
+        detected_ids = set()
+        detection_count = 0
+        failed_tag_analyses = 0
+        for event in tag_events:
+            if event.get('analysisSucceeded') is False:
+                failed_tag_analyses += 1
+            if not event.get('frameId') or not event.get('segmentId'):
+                errors.append('AprilTag analysis lacks source frame/segment identity')
+            for field, size in [('intrinsicsColumnMajor', 9), ('cameraToWorldColumnMajor', 16), ('displayTransform', 6)]:
+                values = event.get(field, [])
+                if len(values) != size or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in values):
+                    errors.append(f'Invalid AprilTag source geometry: {field}')
+            if not isinstance(event.get('timestamp'), (int, float)):
+                errors.append('AprilTag analysis lacks a source timestamp')
+            for detection in event.get('detections', []):
+                detection_count += 1
+                tag_id = detection.get('id')
+                if not isinstance(tag_id, int) or tag_id < 0:
+                    errors.append('Invalid AprilTag ID')
+                else:
+                    detected_ids.add(tag_id)
+                corners = detection.get('corners', [])
+                if len(corners) != 4 or any(len(p) != 2 or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in p) for p in corners):
+                    errors.append('Invalid AprilTag corner coordinates')
+                if not detection.get('family') or 'hamming' not in detection or 'decisionMargin' not in detection:
+                    errors.append('AprilTag detection lacks family/quality fields')
+        if require_tags and not detection_count:
+            errors.append('No AprilTag detections; this check requires a known visible tag')
         verified = 0
         for entry in manifest.get('fileInventory', []):
             name = entry['path']
@@ -100,6 +129,9 @@ def inspect(path: Path) -> dict:
                 "name": manifest.get("name"), "finalized": manifest.get("finalized"),
                 "metadataFrames": len(frames), "depthFrames": depth_count,
                 "events": len(events), "eventTypes": sorted(set(e.get("type", "unknown") for e in events)),
+                "aprilTagAnalyzedFrames": len(tag_events), "aprilTagDetections": detection_count,
+                "aprilTagIDs": sorted(detected_ids),
+                "aprilTagFailedAnalyses": failed_tag_analyses,
                 "videoBytes": video_bytes, "depthSamples": samples,
                 "verifiedPayloadFiles": verified,
                 "manifestErrors": manifest.get("errors", []), "validationErrors": errors,
@@ -112,9 +144,10 @@ def inspect(path: Path) -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
+    parser.add_argument("--require-tags", action="store_true", help="Require at least one decoded tag for the known-tag device check")
     args = parser.parse_args()
     try:
-        result = inspect(args.session)
+        result = inspect(args.session, require_tags=args.require_tags)
         print(json.dumps(result, indent=2))
         sys.exit(1 if result["validationErrors"] else 0)
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:

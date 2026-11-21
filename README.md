@@ -1,11 +1,11 @@
 # April Fools AR
 
-An iPhone-first field capture app. Milestone zero records real ARKit/LiDAR observations for later analysis; it does not yet solve an AprilTag field calibration.
+An iPhone-first AprilTag field capture app. Milestone zero detects tags and records real ARKit/LiDAR observations for later analysis; it does not yet solve an AprilTag field calibration.
 
 ## On the phone
 
 1. Open **April Fools AR** and allow camera access. Use a LiDAR-capable iPhone for numeric depth recording.
-2. Wait for tracking and depth to become available. The RGB, Depth, and Confidence controls change the preview, not the recorded sensor source.
+2. Wait for tracking and depth to become available. Point at a `tag36h11` AprilTag to see its ID and corner outline; live detection also runs before recording. The RGB, Depth, and Confidence controls change the preview, not the recorded sensor source.
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
 4. Tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
@@ -21,7 +21,7 @@ The app stops and saves an active recording when it goes into the background. Ke
 - `frames.jsonl`: timestamped camera poses, intrinsics, image/display geometry, tracking state, frame identity and sample-file links.
 - `frames/`: high-quality camera JPEG samples and bookmarked/measurement frames.
 - `depth/`: packed float32 little-endian camera-plane depth in meters, plus uint8 confidence maps. Depth/image samples target 5 Hz.
-- `events.jsonl`: measurements, notes, interruptions, resets and session events.
+- `events.jsonl`: AprilTag detections (including analyzed frames with no tags), measurements, notes, interruptions, resets and session events.
 - `manifest.json`: capture settings, device/app information, coordinate conventions, totals, errors and file integrity information.
 
 The recorder uses bounded frame retention. Counters and saved diagnostics identify omitted samples; UI update rate is separate from native capture. A heatmap is only a preview—the numeric depth files are the measurement evidence.
@@ -56,7 +56,10 @@ These development checks do not establish sensor accuracy. [PLAN.md](PLAN.md) ke
 
 - React Native/TypeScript: capture controls, session list, bookmarks, export workflow.
 - `native/ARCapture/`: Swift ARKit/RealityKit view, measurement probe, native recorder and React Native bridge.
+- `native/AprilTag/` and `third_party/apriltag/`: portable AprilTag 3 core, pinned upstream sources and iOS pixel-buffer adapter.
 - `native/ArchiveModule/`: streaming ZIP export without a server dependency.
 - `assets/`: opaque app icon and generation provenance.
 
-Android, automatic AprilTag detection, a calibration solver, and BLE integration remain later work. REEKON SDK access status is tracked in [reekon-sprint.md](reekon-sprint.md).
+The initial detector supports the `tag36h11` family. IDs and image corners do not require knowing tag size. Tag pose estimation, a calibration solver, Android and BLE integration remain later work. REEKON SDK access status is tracked in [reekon-sprint.md](reekon-sprint.md).
+
+The pinned detector's redistribution notices are in [third_party/apriltag/NOTICE.md](third_party/apriltag/NOTICE.md) and are included in the app bundle. The initial family follows [WPILib's FRC AprilTag documentation](https://docs.wpilib.org/en/latest/docs/software/vision-processing/apriltag/apriltag-intro.html).

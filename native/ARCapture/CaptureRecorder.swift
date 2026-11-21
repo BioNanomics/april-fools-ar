@@ -31,6 +31,9 @@ final class CaptureRecorder {
     private var bytesWritten: Int64 = 0
     private var errors = [String]()
     private var sampledIDs = Set<String>()
+    private var tagAnalyzedFrames = 0
+    private var tagPositiveFrames = 0
+    private var tagErrors = 0
     private var recentDropCount = 0
     private let expirationLock = NSLock()
     private var backgroundExpired = false
@@ -113,6 +116,26 @@ final class CaptureRecorder {
         }
     }
 
+    /// Analysis metadata is recorded for empty results too. Positive-result image retention shares the bounded writer pool.
+    func aprilTagEvent(_ event: [String: Any], pixelBuffer: CVPixelBuffer?, frameID: String) {
+        let captureImage = pixelBuffer != nil && slots.wait(timeout: .now()) == .success
+        let retainedBuffer = captureImage ? pixelBuffer : nil
+        let hadImage = pixelBuffer != nil
+        queue.async { [self] in
+            defer { if captureImage { slots.signal() } }
+            autoreleasepool {
+                var record = event
+                if event["analysisSucceeded"] as? Bool == true { tagAnalyzedFrames += 1 } else { tagErrors += 1 }
+                if let detections = event["detections"] as? [[String: Any]], !detections.isEmpty { tagPositiveFrames += 1 }
+                if let buffer = retainedBuffer {
+                    do { record["rgbImagePath"] = try saveRGBImage(buffer, frameID: frameID) }
+                    catch { record["captureError"] = error.localizedDescription; recordError(error.localizedDescription) }
+                } else if hadImage { record["frameCaptureSkipped"] = "bounded writer queue busy" }
+                do { try appendJSON(record, to: eventsFile) } catch { recordError(error.localizedDescription) }
+            }
+        }
+    }
+
     func backgroundExecutionExpired() {
         expirationLock.lock(); backgroundExpired = true; expirationLock.unlock()
     }
@@ -180,11 +203,7 @@ final class CaptureRecorder {
             return paths
         }
         var paths: [String: Any] = [:]
-        let image = CIImage(cvPixelBuffer: frame.capturedImage)
-        if let jpeg = ciContext.jpegRepresentation(of: image, colorSpace: CGColorSpaceCreateDeviceRGB(), options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.94]) {
-            try jpeg.write(to: folder.appendingPathComponent(rgbPath), options: .atomic)
-            bytesWritten += Int64(jpeg.count); paths["rgbImagePath"] = rgbPath
-        }
+        paths["rgbImagePath"] = try saveRGBImage(frame.capturedImage, frameID: frameID)
         if let depth = frame.sceneDepth {
             let data = Self.packedData(depth.depthMap, bytesPerPixel: 4)
             try data.write(to: folder.appendingPathComponent(depthPath), options: .atomic)
@@ -204,6 +223,15 @@ final class CaptureRecorder {
         }
         sampledIDs.insert(frameID)
         return paths
+    }
+
+    private func saveRGBImage(_ buffer: CVPixelBuffer, frameID: String) throws -> String {
+        let path = "frames/\(frameID).jpg", url = folder.appendingPathComponent("frames/\(frameID).jpg")
+        if FileManager.default.fileExists(atPath: url.path) { return path }
+        let image = CIImage(cvPixelBuffer: buffer)
+        guard let jpeg = ciContext.jpegRepresentation(of: image, colorSpace: CGColorSpaceCreateDeviceRGB(), options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.94]) else { throw CaptureError.message("Could not encode camera image") }
+        try jpeg.write(to: url, options: .atomic); bytesWritten += Int64(jpeg.count)
+        return path
     }
 
     static func packedData(_ buffer: CVPixelBuffer, bytesPerPixel: Int) -> Data {
@@ -241,6 +269,8 @@ final class CaptureRecorder {
         manifest["firstARFrameTimestamp"] = firstTimestamp as Any? ?? NSNull()
         manifest["coordinateConvention"] = "ARKit right-handed, gravity aligned +Y up, camera looks along -Z; camera transforms column-major camera-to-world; depth is camera-plane Z in meters"
         manifest["captureDefaults"] = ["videoFPS": 30, "depthAndJPEGHz": 5, "maxRetainedWriterFrames": 3, "jpegQuality": 0.94, "videoBitrate": 10_000_000]
+        manifest["aprilTagConfiguration"] = ["enabled": true, "family": "tag36h11", "implementation": "AprilRobotics/apriltag via AFTagDetector", "upstreamRevision": AFTagDetector.upstreamRevision(), "quadDecimate": 2, "threads": 2, "targetAnalysisHz": 8, "maxInFlight": 1, "poseEstimation": false, "coordinates": "full-resolution capturedImage sensor pixels", "overlayMaximumAgeSeconds": 0.5]
+        manifest["aprilTagCounts"] = ["analyzedFrames": tagAnalyzedFrames, "positiveFrames": tagPositiveFrames, "errors": tagErrors]
         manifest["counts"] = ["metadataFrames": framesWritten, "depthFrames": depthFrames, "videoFrames": videoFrames, "writerDroppedFrames": recentDropCount, "videoDroppedFrames": droppedVideoFrames]
         manifest["files"] = ["frames": "frames.jsonl", "events": "events.jsonl", "video": "rgb.mp4", "images": "frames/", "depth": "depth/"]
         manifest["evidence"] = "Live capture; measurement accuracy has not been independently validated. AR world poses are not surveyed field truth."

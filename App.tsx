@@ -41,6 +41,16 @@ type Status = {
   droppedFrames?: number;
   bytesWritten?: number;
   lastError?: string;
+  aprilTag?: {
+    state?: 'initializing' | 'waiting' | 'ready' | 'running' | 'paused' | 'error';
+    family?: string;
+    ids?: number[];
+    count?: number;
+    latencyMilliseconds?: number;
+    analyzedFrames?: number;
+    skippedFrames?: number;
+    error?: string;
+  };
   measurement?: {
     pointCount?: number;
     distanceMeters?: number;
@@ -197,6 +207,8 @@ function CaptureApp() {
     }
   };
   const m = status.measurement;
+  const tags = status.aprilTag;
+  const tagIDs = tags?.ids || [];
   const firstDepth = m?.points?.[0]?.depthMeters;
   const working = busy || status.finalizing;
 
@@ -291,6 +303,26 @@ function CaptureApp() {
                     </Text>
                   </Pressable>
                 ))}
+              </View>
+              <View style={s.tagStatus} pointerEvents="none">
+                <Text style={s.tagHeading}>
+                  APRILTAGS · {tags?.family || 'tag36h11'}
+                </Text>
+                <Text style={s.tagText}>
+                  {tags?.state === 'error'
+                    ? tags.error || 'Detector unavailable'
+                    : tagIDs.length
+                    ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
+                    : tags?.state === 'running' || tags?.state === 'ready'
+                    ? 'Looking for tags'
+                    : 'Waiting for camera frames'}
+                </Text>
+                {tags?.latencyMilliseconds != null && (
+                  <Text style={s.tagMeta}>
+                    {tags.latencyMilliseconds.toFixed(0)} ms ·{' '}
+                    {tags.analyzedFrames || 0} analyzed
+                  </Text>
+                )}
               </View>
             </View>
             <View style={s.measure}>
@@ -406,8 +438,8 @@ function CaptureApp() {
             </Pressable>
           </View>
           <Text style={s.description}>
-            Export RGB video, numeric depth, poses, measurements, and notes in
-            one ZIP.
+            Export RGB video, numeric depth, poses, tag detections,
+            measurements, and notes in one ZIP.
           </Text>
           <FlatList
             data={sessions}
@@ -573,6 +605,23 @@ const s = StyleSheet.create({
   mode: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 17 },
   modeActive: { backgroundColor: C.cyan },
   modeText: { fontSize: 11, fontWeight: '600', color: C.text },
+  tagStatus: {
+    backgroundColor: '#071426E8',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  tagHeading: {
+    color: C.muted,
+    fontSize: 9,
+    letterSpacing: 1,
+    fontWeight: '700',
+  },
+  tagText: { color: C.cyan, fontSize: 13, fontWeight: '600', marginTop: 4 },
+  tagMeta: { color: C.muted, fontSize: 9, marginTop: 4 },
   measure: {
     position: 'absolute',
     bottom: 14,

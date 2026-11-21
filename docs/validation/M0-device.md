@@ -45,4 +45,6 @@ When the camera is available, complete this short check:
 
 The detector-enabled build 2 is documented in [M0-apriltags.md](M0-apriltags.md). It supersedes the initial capture-only implementation while retaining the same open physical capture/export and field-review gates.
 
+The latest installed update is debug-screen build 4 (`58ebc05`), documented in [M0-tag-debug.md](M0-tag-debug.md). Its final short device check reported normal tracking, live depth and approximately 30 analyses/second with no visible tag. Launch, settings layout and mode switching passed; positive tag/depth comparison, physical RGB-preview confirmation and export validation remain open.
+
 After the short sensor/export check passes, use T0 in [TESTER_CHECKLIST.md](../../TESTER_CHECKLIST.md). Capture an actual field, return the complete bundle, and review it with the user before revising the later roadmap.

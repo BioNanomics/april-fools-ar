@@ -267,3 +267,36 @@ test('reset to FRC defaults replaces a measured width even when both display the
   );
   expect(engine.setDebugSettings).toHaveBeenCalledWith(DEFAULT_DEBUG_SETTINGS);
 });
+
+test('pose axes switch is opt-in and saves without rounding the measured tag width', async () => {
+  const measuredWidth = 0.1723456789;
+  engine.getDebugSettings.mockResolvedValue({
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: measuredWidth,
+    tagSizeSource: 'ar-two-point-edge',
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  const toggle = tree.root.findByProps({
+    accessibilityLabel: 'Show pose axes',
+  });
+  expect(toggle.props.value).toBe(false);
+  await act(async () => toggle.props.onValueChange(true));
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Apply debug settings' })
+      .props.onPress(),
+  );
+  expect(engine.setDebugSettings).toHaveBeenCalledWith({
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: measuredWidth,
+    showPoseAxes: true,
+  });
+});

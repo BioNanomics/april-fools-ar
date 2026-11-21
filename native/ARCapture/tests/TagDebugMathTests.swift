@@ -79,6 +79,25 @@ final class TagDebugMathTests: XCTestCase {
         ar.tagSizeMeters = 0.17; XCTAssertNil(ar.matchingTagSizeEvidence(from: defaults))
         ar.tagSizeMeters = 0.1651; ar.tagSizeSource = "manual"; XCTAssertNil(ar.matchingTagSizeEvidence(from: defaults))
     }
+    func testPoseAxesPreferencePreservesLegacyWidthAndRequiresBoolean() throws {
+        let defaults = UserDefaults(suiteName: "TagAxesSettingsTests.\(UUID().uuidString)")!
+        var legacy = TagDebugSettings().dictionary
+        legacy.removeValue(forKey: "showPoseAxes")
+        legacy["tagSizeMeters"] = 0.1723456789
+        legacy["tagSizeSource"] = "ar-two-point-edge"
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: TagDebugSettings.defaultsKey)
+        let loaded = TagDebugSettings.load(from: defaults)
+        XCTAssertFalse(loaded.showPoseAxes)
+        XCTAssertEqual(loaded.tagSizeMeters, 0.1723456789)
+        let enabled = try loaded.merging(["showPoseAxes": true])
+        XCTAssertTrue(enabled.showPoseAxes)
+        XCTAssertEqual(enabled.tagSizeSource, "ar-two-point-edge")
+        enabled.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), enabled)
+        XCTAssertFalse(try enabled.merging(["showPoseAxes": false]).showPoseAxes)
+        XCTAssertThrowsError(try enabled.merging(["showPoseAxes": 1]))
+        XCTAssertThrowsError(try enabled.merging(["showPoseAxes": "true"]))
+    }
     func testMeasuredWidthUsesReviewedEndpointDistanceAndRejectsInvalidInputs() throws {
         let points: [[String: Any]] = [["source": "sceneDepth", "segmentId": "segment", "confidence": 2, "frameId": "a"], ["source": "sceneDepth", "segmentId": "segment", "confidence": 1, "frameId": "b"]]
         XCTAssertEqual(try TagDebugMath.measuredTagSize(points: points, worldDistance: 0.1651, segmentID: "segment", tracking: "normal", frameAgeSeconds: 0.01), 0.1651)

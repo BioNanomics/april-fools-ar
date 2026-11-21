@@ -4,7 +4,11 @@ The debug screen compares two estimates from the same AR camera frame: the pose 
 
 ## Using it
 
-**Tag debug** is the default live view. Tag outlines, four corner points and IDs remain on the camera image. Tap a tag to inspect it; otherwise the view chooses a tag near the image center. The native panel displays the selected tag's pose, LiDAR depth, mismatch, angles, quality and validity. **Measure** returns to the two-point distance/vertical-difference probe.
+**Tag debug** is the default live view. The camera fills the available preview area; the debug readout floats over it instead of reserving a separate panel below it. The compact translucent overlay shows the selected tag's validity, pose Z, LiDAR Z, colored difference and live timing. Tap **Details** for translation, orientation, angles, range and decoder quality; tap **Collapse** to return to the compact view. Expanding does not crop, resize or change the camera's projection.
+
+Tag outlines, four corner points and IDs remain on the camera image. Tap a tag to inspect it; otherwise the view chooses a tag near the image center. Only the Details/Collapse button consumes overlay touches; the remaining overlay area allows tag selection beneath it. **Measure** returns to the two-point distance/vertical-difference probe.
+
+Enable **Show pose axes** in Settings and apply the change to draw a tag-centered pose gizmo: red **X**, green **Y**, blue **Z**. The axes use the solved tag-to-camera pose and the same frame's camera intrinsics, then the same image-to-screen transform as the tag corners. Each axis is half a tag width long. These are tag-local axes, not gravity or field axes; a direction pointing toward/away from the camera can appear foreshortened. The option defaults off and is saved on the phone.
 
 Open **Settings** to edit:
 

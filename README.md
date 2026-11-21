@@ -4,7 +4,9 @@ An iPhone-first AprilTag field capture app. Milestone zero detects tags and reco
 
 ## On the phone
 
-**Tag debug** shows camera-relative pose, LiDAR center/mean depth, depth mismatch, viewing angles, decode quality and validity. Tap a tag to select it. Use **Settings** for the physical tag width and quality thresholds; width defaults to FRC 165.1 mm. You can enter a width or use **Measure tag width with AR**, then review and accept the two-point edge estimate. See [debug definitions and conventions](docs/tag-debug-screen.md).
+**Tag debug** uses a compact translucent overlay over the full camera preview. It shows validity and pose/LiDAR depth agreement; tap **Details** for translation, orientation, range, angles and decode quality, or **Collapse** to reclaim the view. Tap a tag to select it. Use **Settings** for the physical tag width and quality thresholds; width defaults to FRC 165.1 mm. You can enter a width or use **Measure tag width with AR**, then review and accept the two-point edge estimate. See [debug definitions and conventions](docs/tag-debug-screen.md).
+
+Enable **Show pose axes** in Settings to add red X, green Y and blue Z axes to each solved tag pose.
 
 1. Open **April Fools AR** and allow camera access. Use a LiDAR-capable iPhone for numeric depth recording.
 2. Wait for tracking and depth to become available. Point at a `tag36h11` AprilTag to see its ID and corner outline; live detection also runs before recording. The RGB, Depth, and Confidence controls change the preview, not the recorded sensor source.

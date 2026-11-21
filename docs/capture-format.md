@@ -43,6 +43,8 @@ This pose convention differs from the ARKit camera transform above. To combine t
 
 Each detection's `depth` and `debug` dictionaries retain matching-frame center depth/confidence, filtered 3×3 mean and sample counts, the absolute difference `abs(centerDepthMeters - opticalPoseZMeters)`, quality/validity reasons, and the configured tag width/threshold context. A missing or rejected center is never replaced silently by its neighborhood mean and never receives a green depth-agreement result. The debug settings and accepted AR width-measurement provenance are retained with capture events; see [debug-screen conventions](tag-debug-screen.md).
 
+`debugSettings.showPoseAxes` is an optional display preference (default `false` when absent in older settings). It controls the projected tag-local RGB axis gizmo; it does not change the pose solution, tag size or raw recorded geometry.
+
 `events.jsonl` includes bookmarks, selected measurement endpoints, tracking changes, segment boundaries, and session lifecycle events. An endpoint records its image/depth pixel, camera-frame identity, world point, confidence when available, and depth source. With two valid endpoints in one segment, the app reports 3D Euclidean distance and signed `second.y - first.y` vertical difference separately. The vertical difference is not automatically floor-to-tag height.
 
 The writer retains at most three frames for disk work. Busy queues can omit frames or event snapshots; omissions are reported rather than assigned invented data. Capture counters distinguish accepted metadata, video, depth samples, and writer/video drops. Sample rates are targets, not guarantees.

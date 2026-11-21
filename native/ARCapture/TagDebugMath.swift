@@ -15,18 +15,44 @@ struct TagDebugSettings: Codable, Equatable {
     var rejectDepthDifferenceMeters = 0.15
     var maxReprojectionErrorPixels = 3.0
     var tagSizeSource = "frc-default"
+    var showPoseAxes = false
     static let defaultsKey = "AprilFoolsAR.TagDebugSettings.v1"
     static let tagSizeEvidenceKey = "AprilFoolsAR.TagSizeEvidence.v1"
+
+    private enum CodingKeys: String, CodingKey {
+        case tagSizeMeters, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
+        case rejectDepthDifferenceMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes
+    }
+    init() {}
+    init(from decoder: Decoder) throws {
+        self.init()
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        tagSizeMeters = try values.decodeIfPresent(Double.self, forKey: .tagSizeMeters) ?? tagSizeMeters
+        maxDistanceMeters = try values.decodeIfPresent(Double.self, forKey: .maxDistanceMeters) ?? maxDistanceMeters
+        maxPlaneAngleDegrees = try values.decodeIfPresent(Double.self, forKey: .maxPlaneAngleDegrees) ?? maxPlaneAngleDegrees
+        warningDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .warningDepthDifferenceMeters) ?? warningDepthDifferenceMeters
+        rejectDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .rejectDepthDifferenceMeters) ?? rejectDepthDifferenceMeters
+        maxReprojectionErrorPixels = try values.decodeIfPresent(Double.self, forKey: .maxReprojectionErrorPixels) ?? maxReprojectionErrorPixels
+        tagSizeSource = try values.decodeIfPresent(String.self, forKey: .tagSizeSource) ?? tagSizeSource
+        showPoseAxes = try values.decodeIfPresent(Bool.self, forKey: .showPoseAxes) ?? false
+    }
 
     var dictionary: [String: Any] {
         ["tagSizeMeters": tagSizeMeters, "maxDistanceMeters": maxDistanceMeters,
          "maxPlaneAngleDegrees": maxPlaneAngleDegrees, "warningDepthDifferenceMeters": warningDepthDifferenceMeters,
          "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
-         "tagSizeSource": tagSizeSource]
+         "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes]
     }
     func merging(_ changes: [String: Any]) throws -> TagDebugSettings {
         var result = self
         for (key, value) in changes {
+            if key == "showPoseAxes" {
+                guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+                    throw TagDebugError.invalid("showPoseAxes must be a boolean.")
+                }
+                result.showPoseAxes = number.boolValue
+                continue
+            }
             guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else {
                 throw TagDebugError.invalid("\(key) must be a finite number.")
             }

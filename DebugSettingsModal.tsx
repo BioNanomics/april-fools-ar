@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -19,6 +20,7 @@ export type DebugSettings = {
   rejectDepthDifferenceMeters: number;
   maxReprojectionErrorPixels: number;
   tagSizeSource?: string;
+  showPoseAxes?: boolean;
 };
 
 export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
@@ -28,9 +30,13 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   warningDepthDifferenceMeters: 0.1,
   rejectDepthDifferenceMeters: 0.15,
   maxReprojectionErrorPixels: 3,
+  showPoseAxes: false,
 };
 
-type SettingsKey = Exclude<keyof DebugSettings, 'tagSizeSource'>;
+type SettingsKey = Exclude<
+  keyof DebugSettings,
+  'tagSizeSource' | 'showPoseAxes'
+>;
 const fields: {
   key: SettingsKey;
   label: string;
@@ -136,10 +142,14 @@ export function DebugSettingsModal({
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialSettings));
   const [saving, setSaving] = useState(false);
   const [resetToDefaults, setResetToDefaults] = useState(false);
+  const [showPoseAxes, setShowPoseAxes] = useState(
+    initialSettings.showPoseAxes ?? false,
+  );
   useEffect(() => {
     if (visible) {
       setDraft(makeDraft(initialSettings));
       setResetToDefaults(false);
+      setShowPoseAxes(initialSettings.showPoseAxes ?? false);
     }
   }, [visible, initialSettings]);
   if (!visible) {
@@ -148,6 +158,7 @@ export function DebugSettingsModal({
   const save = async () => {
     try {
       const values = parseDebugSettings(draft);
+      values.showPoseAxes = showPoseAxes;
       // Display rounding must not turn a threshold-only edit into a new tag width.
       if (
         !resetToDefaults &&
@@ -180,6 +191,20 @@ export function DebugSettingsModal({
             contentContainerStyle={s.fields}
             style={s.scroll}
           >
+            <View style={s.toggleRow}>
+              <View style={s.toggleText}>
+                <Text style={s.label}>Show pose axes</Text>
+                <Text style={s.hint}>
+                  Tag coordinates: red X, green Y, blue Z.
+                </Text>
+              </View>
+              <Switch
+                accessibilityLabel="Show pose axes"
+                value={showPoseAxes}
+                onValueChange={setShowPoseAxes}
+                disabled={saving}
+              />
+            </View>
             {fields.map(field => (
               <View key={field.key}>
                 <Text style={s.label}>{field.label}</Text>
@@ -215,6 +240,7 @@ export function DebugSettingsModal({
               onPress={() => {
                 setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS));
                 setResetToDefaults(true);
+                setShowPoseAxes(false);
               }}
               disabled={saving}
             >
@@ -243,6 +269,13 @@ export function DebugSettingsModal({
 }
 
 const s = StyleSheet.create({
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 16,
+  },
+  toggleText: { flex: 1 },
   backdrop: {
     flex: 1,
     justifyContent: 'center',

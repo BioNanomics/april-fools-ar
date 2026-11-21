@@ -1,11 +1,17 @@
 import UIKit
 
-/// Image-space detections only. No world pose or physical tag size is inferred here.
+/// Image-space detections and optional camera-relative pose axes. No world pose is inferred here.
 final class AprilTagOverlayView: UIView {
+    struct PoseAxisProjection {
+        let origin: CGPoint
+        let endpoints: [CGPoint?]
+    }
     private var sourceFrameID: String?
     private var outlineLayers = [CAShapeLayer]()
     private var cornerLayers = [CAShapeLayer]()
     private var tagLabels = [UILabel]()
+    private var axisLayers = [CAShapeLayer]()
+    private var axisLabels = [UILabel]()
     private var hitPaths = [(Int, UIBezierPath)]()
 
     override init(frame: CGRect) {
@@ -26,31 +32,48 @@ final class AprilTagOverlayView: UIView {
         outlineLayers.removeAll()
         cornerLayers.forEach { $0.removeFromSuperlayer() }
         cornerLayers.removeAll()
+        axisLabels.forEach { $0.removeFromSuperview() }
+        axisLabels.removeAll()
+        axisLayers.forEach { $0.removeFromSuperlayer() }
+        axisLayers.removeAll()
         hitPaths.removeAll()
     }
 
     func tagID(at point: CGPoint) -> Int? { hitPaths.reversed().first(where: { $0.1.contains(point) })?.0 }
 
-    func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil) {
+    /// Intrinsics are [fx, fy, cx, cy] in the analyzed source image's pixels.
+    /// Pose R maps tag coordinates to optical camera coordinates (+X right, +Y down, +Z forward).
+    /// The default axis length is half the calibrated tag width; no 2D-only pose is synthesized.
+    func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, axisLengthMeters: Double? = nil) {
         let remaining = expiresAt - ProcessInfo.processInfo.systemUptime
-        guard remaining > 0, imageSize.width > 0, imageSize.height > 0 else { clear(); return }
+        guard remaining > 0, imageSize.width.isFinite, imageSize.height.isFinite,
+              imageSize.width > 0, imageSize.height > 0, bounds.width.isFinite, bounds.height.isFinite else { clear(); return }
         sourceFrameID = frameID
         var rendered = [(Int, [CGPoint], UIColor)]()
+        var renderedAxes = [PoseAxisProjection]()
+        func displayPoint(_ point: CGPoint) -> CGPoint? {
+            let normalized = CGPoint(x: point.x / imageSize.width, y: point.y / imageSize.height).applying(displayTransform)
+            let mapped = CGPoint(x: normalized.x * bounds.width, y: normalized.y * bounds.height)
+            return mapped.x.isFinite && mapped.y.isFinite ? mapped : nil
+        }
         for detection in detections {
             guard let id = detection["id"] as? NSNumber, let corners = detection["corners"] as? [[NSNumber]], corners.count == 4 else { continue }
             let points = corners.compactMap { corner -> CGPoint? in
                 guard corner.count == 2 else { return nil }
                 let x = corner[0].doubleValue, y = corner[1].doubleValue
                 guard x.isFinite, y.isFinite else { return nil }
-                let normalized = CGPoint(x: x / imageSize.width, y: y / imageSize.height).applying(displayTransform)
-                guard normalized.x.isFinite, normalized.y.isFinite, bounds.width.isFinite, bounds.height.isFinite else { return nil }
-                return CGPoint(x: normalized.x * bounds.width, y: normalized.y * bounds.height)
+                return displayPoint(CGPoint(x: x, y: y))
             }
             guard points.count == 4 else { continue }
             let severity = (detection["debug"] as? [String: Any])?["severity"] as? String ?? "neutral"
             let color: UIColor
             switch severity { case "good": color = .systemGreen; case "warning": color = .systemYellow; case "bad": color = .systemRed; default: color = .lightGray }
             rendered.append((id.intValue, points, color))
+            if showPoseAxes, let intrinsics, let pose = detection["pose"] as? [String: Any],
+               let projected = Self.projectPoseAxes(pose: pose, intrinsics: intrinsics, axisLengthMeters: axisLengthMeters),
+               let origin = displayPoint(projected.origin) {
+                renderedAxes.append(PoseAxisProjection(origin: origin, endpoints: projected.endpoints.map { $0.flatMap(displayPoint) }))
+            }
         }
         // Reuse only layers/views owned by this overlay. UIKit owns label backing layers.
         while tagLabels.count > rendered.count {
@@ -67,6 +90,23 @@ final class AprilTagOverlayView: UIView {
             label.font = .monospacedSystemFont(ofSize: 17, weight: .bold)
             label.textColor = .black; label.layer.cornerRadius = 4; label.clipsToBounds = true
             addSubview(label); tagLabels.append(label)
+        }
+        let axisColors: [UIColor] = [.systemRed, .systemGreen, .systemBlue]
+        while axisLabels.count > renderedAxes.count * 3 {
+            axisLabels.removeLast().removeFromSuperview()
+            axisLayers.removeLast().removeFromSuperlayer()
+        }
+        while axisLabels.count < renderedAxes.count * 3 {
+            let axis = axisLabels.count % 3, shape = CAShapeLayer(), label = UILabel()
+            shape.strokeColor = axisColors[axis].cgColor; shape.fillColor = UIColor.clear.cgColor
+            shape.lineWidth = 2.5; shape.lineCap = .round; shape.lineJoin = .round
+            shape.shadowColor = UIColor.black.cgColor; shape.shadowOpacity = 0.9; shape.shadowRadius = 1; shape.shadowOffset = .zero
+            layer.addSublayer(shape); axisLayers.append(shape)
+            label.text = [" X ", " Y ", " Z "][axis]
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .bold)
+            label.textColor = axisColors[axis]; label.backgroundColor = UIColor.black.withAlphaComponent(0.65)
+            label.layer.cornerRadius = 3; label.clipsToBounds = true
+            addSubview(label); axisLabels.append(label)
         }
         hitPaths.removeAll(keepingCapacity: true)
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -89,10 +129,65 @@ final class AprilTagOverlayView: UIView {
             label.frame.origin = CGPoint(x: max(0, min(bounds.width - label.bounds.width, points.map(\.x).min() ?? 0)), y: max(0, min(bounds.height - label.bounds.height, (points.map(\.y).min() ?? 0) - label.bounds.height)))
             hitPaths.append((id, path))
         }
+        for (tagIndex, projection) in renderedAxes.enumerated() {
+            let origin = projection.origin
+            for axis in 0..<3 {
+                let index = tagIndex * 3 + axis
+                guard let end = projection.endpoints[axis] else {
+                    axisLayers[index].isHidden = true; axisLabels[index].isHidden = true
+                    continue
+                }
+                axisLayers[index].isHidden = false; axisLabels[index].isHidden = false
+                let path = UIBezierPath()
+                path.move(to: origin); path.addLine(to: end)
+                let dx = end.x - origin.x, dy = end.y - origin.y, length = hypot(dx, dy)
+                if length > 1 {
+                    let ux = dx / length, uy = dy / length, head = min(8, length * 0.3)
+                    path.move(to: CGPoint(x: end.x - ux * head - uy * head * 0.5, y: end.y - uy * head + ux * head * 0.5))
+                    path.addLine(to: end)
+                    path.addLine(to: CGPoint(x: end.x - ux * head + uy * head * 0.5, y: end.y - uy * head - ux * head * 0.5))
+                } else {
+                    // A head-on Z axis can project to a point. Keep it visible without inventing direction.
+                    path.append(UIBezierPath(ovalIn: CGRect(x: end.x - 3, y: end.y - 3, width: 6, height: 6)))
+                }
+                axisLayers[index].path = path.cgPath
+                let label = axisLabels[index]
+                label.sizeToFit()
+                label.frame.origin = CGPoint(x: max(0, min(bounds.width - label.bounds.width, end.x + 5)),
+                                             y: max(0, min(bounds.height - label.bounds.height, end.y - label.bounds.height - 3)))
+            }
+        }
         CATransaction.commit()
         DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self] in
             guard let self, self.sourceFrameID == frameID else { return }
             self.clear()
         }
+    }
+
+    /// Pure pinhole projection in original image pixels; endpoints are ordered [+X, +Y, +Z].
+    /// A behind-camera endpoint suppresses only its axis. A bad origin suppresses the entire gizmo.
+    static func projectPoseAxes(pose: [String: Any], intrinsics: [Double], axisLengthMeters: Double? = nil) -> PoseAxisProjection? {
+        guard intrinsics.count == 4, intrinsics.allSatisfy(\.isFinite), intrinsics[0] > 0, intrinsics[1] > 0,
+              let rotation = pose["rotationRowMajor"] as? [NSNumber], rotation.count == 9,
+              let translation = pose["translation"] as? [NSNumber], translation.count == 3 else { return nil }
+        let r = rotation.map(\.doubleValue), t = translation.map(\.doubleValue)
+        let length = axisLengthMeters ?? (pose["tagSizeMeters"] as? NSNumber).map { $0.doubleValue / 2 } ?? .nan
+        guard r.allSatisfy(\.isFinite), t.allSatisfy(\.isFinite), length.isFinite, length > 0 else { return nil }
+        // A malformed matrix must not produce a plausible-looking gizmo.
+        for a in 0..<3 { for b in 0..<3 {
+            let dot = r[a] * r[b] + r[3 + a] * r[3 + b] + r[6 + a] * r[6 + b]
+            guard abs(dot - (a == b ? 1 : 0)) < 1e-3 else { return nil }
+        } }
+        let determinant = r[0] * (r[4] * r[8] - r[5] * r[7]) - r[1] * (r[3] * r[8] - r[5] * r[6]) + r[2] * (r[3] * r[7] - r[4] * r[6])
+        guard abs(determinant - 1) < 1e-3 else { return nil }
+        func project(_ x: Double, _ y: Double, _ z: Double) -> CGPoint? {
+            guard x.isFinite, y.isFinite, z.isFinite, z > 1e-6 else { return nil }
+            let pixel = CGPoint(x: intrinsics[0] * x / z + intrinsics[2], y: intrinsics[1] * y / z + intrinsics[3])
+            guard pixel.x.isFinite, pixel.y.isFinite else { return nil }
+            return pixel
+        }
+        guard let origin = project(t[0], t[1], t[2]) else { return nil }
+        let endpoints = (0..<3).map { axis in project(t[0] + length * r[axis], t[1] + length * r[3 + axis], t[2] + length * r[6 + axis]) }
+        return PoseAxisProjection(origin: origin, endpoints: endpoints)
     }
 }

@@ -2,7 +2,11 @@ import UIKit
 
 /// Native, reusable readouts. Frame-critical updates never cross the JS bridge.
 final class TagDebugPanelView: UIView {
+    private(set) var isExpanded = false
+    var preferredHeight: CGFloat { isExpanded ? 270 : 96 }
+    var onPreferredHeightChanged: ((CGFloat) -> Void)?
     private let titleLabel = UILabel()
+    private let detailsButton = UIButton(type: .system)
     private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"], valueSize: 19)
     private let rotationRow = DebugMetricRow(titles: ["Roll · °", "Pitch · °", "Yaw · °"], valueSize: 18)
     private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"], valueSize: 21)
@@ -10,15 +14,18 @@ final class TagDebugPanelView: UIView {
     private let meanLabel = UILabel()
     private let qualityLabel = UILabel()
     private let rateLabel = UILabel()
+    private var compactRateText = "No current tag measurement"
+    private var expandedRateText = "No current tag measurement"
     private var expiryToken: String?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor.black.withAlphaComponent(0.94)
+        backgroundColor = UIColor.black.withAlphaComponent(0.72)
         layer.cornerRadius = 12
         layer.borderWidth = 2
-        isUserInteractionEnabled = false
-        titleLabel.font = .monospacedSystemFont(ofSize: 19, weight: .bold)
+        isUserInteractionEnabled = true
+        titleLabel.font = .monospacedSystemFont(ofSize: 17, weight: .bold)
+        titleLabel.numberOfLines = 2
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.8
         meanLabel.font = .monospacedSystemFont(ofSize: 13, weight: .medium)
@@ -29,22 +36,63 @@ final class TagDebugPanelView: UIView {
             $0.minimumScaleFactor = 0.85
         }
         rateLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
-        rateLabel.numberOfLines = 2
         rateLabel.textColor = .lightGray
         [titleLabel, translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel, rateLabel].forEach(addSubview)
+        detailsButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        detailsButton.tintColor = .white
+        detailsButton.backgroundColor = UIColor.white.withAlphaComponent(0.10)
+        detailsButton.layer.cornerRadius = 8
+        detailsButton.accessibilityIdentifier = "tagDebugDetailsButton"
+        detailsButton.addTarget(self, action: #selector(toggleDetails), for: .touchUpInside)
+        addSubview(detailsButton)
+        updateExpansion()
         showUnavailable("Waiting for a visible tag")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let rows: [(UIView, CGFloat)] = [(titleLabel, 24), (translationRow, 38), (rotationRow, 34),
-            (depthRow, 40), (geometryRow, 34), (meanLabel, 17), (qualityLabel, 17), (rateLabel, 34)]
+        let width = max(0, bounds.width - 24)
+        detailsButton.frame = CGRect(x: max(12, bounds.width - 100), y: 0, width: 88, height: 44)
+        if !isExpanded {
+            titleLabel.frame = CGRect(x: 12, y: 0, width: max(0, width - 96), height: 42)
+            depthRow.frame = CGRect(x: 12, y: 42, width: width, height: 40)
+            rateLabel.frame = CGRect(x: 12, y: 82, width: width, height: 14)
+            return
+        }
+        let rows: [(UIView, CGFloat)] = [(titleLabel, 42), (translationRow, 36), (rotationRow, 34),
+            (depthRow, 38), (geometryRow, 34), (meanLabel, 17), (qualityLabel, 17), (rateLabel, 28)]
         var y: CGFloat = 8
         for (view, height) in rows {
-            view.frame = CGRect(x: 12, y: y, width: max(0, bounds.width - 24), height: height)
+            view.frame = CGRect(x: 12, y: y, width: view === titleLabel ? max(0, width - 96) : width, height: height)
             y += height + 2
         }
+    }
+    /// The host keeps the camera full size and lays out this overlay using preferredHeight.
+    func setExpanded(_ expanded: Bool) {
+        guard expanded != isExpanded else { return }
+        isExpanded = expanded
+        updateExpansion()
+        onPreferredHeightChanged?(preferredHeight)
+    }
+    @objc private func toggleDetails() { setExpanded(!isExpanded) }
+    private func updateExpansion() {
+        [translationRow, rotationRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        let title = isExpanded ? "Collapse" : "Details"
+        detailsButton.setTitle(title, for: .normal)
+        detailsButton.accessibilityLabel = title
+        detailsButton.accessibilityHint = isExpanded ? "Show the compact tag readout" : "Show all tag debug metrics"
+        rateLabel.numberOfLines = isExpanded ? 2 : 1
+        updateRateText()
+        setNeedsLayout()
+    }
+    private func updateRateText() { rateLabel.text = isExpanded ? expandedRateText : compactRateText }
+    /// Only the explicit control intercepts touches; readouts pass through to tag selection.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
+        let localPoint = detailsButton.convert(point, from: self)
+        guard detailsButton.point(inside: localPoint, with: event) else { return nil }
+        return detailsButton.hitTest(localPoint, with: event)
     }
     static func color(_ severity: String) -> UIColor {
         switch severity {
@@ -62,7 +110,9 @@ final class TagDebugPanelView: UIView {
         [translationRow, rotationRow, depthRow, geometryRow].forEach { $0.setValues(["—", "—", "—"]) }
         meanLabel.text = reason
         qualityLabel.text = "Point at a tag · tap its outline to select"
-        rateLabel.text = "No current tag measurement"
+        compactRateText = "No current tag measurement"
+        expandedRateText = compactRateText
+        updateRateText()
     }
     func show(debug: [String: Any]?, frameID: String, timestamp: Double, analysisHz: Double,
               latencyMilliseconds: Double?, settings: TagDebugSettings) {
@@ -70,8 +120,11 @@ final class TagDebugPanelView: UIView {
         guard age.isFinite, age <= 0.4 else { showUnavailable("Stale result · waiting for a current frame"); return }
         guard let debug else {
             showUnavailable("No tag in the current camera frame")
-            rateLabel.text = String(format: "Edge %.1f mm · %.1f/30 Hz\nFrame age %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
+            expandedRateText = String(format: "Edge %.1f mm · %.1f Hz\nFrame age %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
                 analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
+            compactRateText = String(format: "%.1f Hz · age %.0f ms · compute %.0f ms", analysisHz.isFinite ? analysisHz : 0,
+                max(0, age) * 1000, latencyMilliseconds ?? 0)
+            updateRateText()
             return
         }
         expiryToken = frameID
@@ -108,8 +161,11 @@ final class TagDebugPanelView: UIView {
         meanLabel.text = "3×3 mean \(scalar("meanDepthMeters")) m · \(confidenceText) · \(scalar("validNeighborCount", "%.0f"))/9"
         qualityLabel.text = "RMS \(scalar("reprojectionRMSEPixels", "%.2f"))px · margin \(scalar("decisionMargin", "%.1f")) · H\(scalar("hamming", "%.0f"))"
         let source = settings.tagSizeSource == "ar-two-point-edge" ? "AR estimate" : (settings.tagSizeSource == "frc-default" ? "FRC" : "manual")
-        rateLabel.text = String(format: "Edge %.1f mm (%@) · %.1f/30 Hz\nAge %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
+        expandedRateText = String(format: "Edge %.1f mm (%@) · %.1f Hz\nAge %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
             source, analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
+        compactRateText = String(format: "%.1f Hz · age %.0f ms · compute %.0f ms", analysisHz.isFinite ? analysisHz : 0,
+            max(0, age) * 1000, latencyMilliseconds ?? 0)
+        updateRateText()
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, 0.4 - age)) { [weak self] in
             guard let self, self.expiryToken == frameID else { return }
             self.showUnavailable("Stale result · waiting for a current frame")

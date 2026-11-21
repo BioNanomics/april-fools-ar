@@ -29,6 +29,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var latestTagDetections = [[String: Any]]()
     private var latestTagDisplayTransform = CGAffineTransform.identity
     private var latestTagImageSize = CGSize(width: 1, height: 1)
+    private var latestTagIntrinsics: [Double]?
     private var tagCompletionTimes = [Double]()
     private var lastJSEmissionTime = 0.0
     private weak var host: ARCaptureView?
@@ -460,7 +461,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         return value
     }
     private func invalidateAprilTags() {
-        tagGeneration += 1; tagIDs = []; latestTagDetections = []; lastTagResultTimestamp = nil; tagResultFrameID = nil
+        tagGeneration += 1; tagIDs = []; latestTagDetections = []; latestTagIntrinsics = nil; lastTagResultTimestamp = nil; tagResultFrameID = nil
         tagState = "waiting"
         DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }
     }
@@ -531,6 +532,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     self.lastTagResultTimestamp = timestamp; self.tagResultFrameID = sourceFrameID
                     self.latestTagDetections = detections; self.selectedTagID = selected
                     self.latestTagImageSize = CGSize(width: width, height: height); self.latestTagDisplayTransform = display
+                    self.latestTagIntrinsics = poseIntrinsics
                     let age = ProcessInfo.processInfo.systemUptime - timestamp
                     self.tagIDs = age <= 0.4 ? Array(Set(detections.compactMap { ($0["id"] as? NSNumber)?.intValue })).sorted() : []
                     self.tagState = error == nil ? (age <= 0.4 ? "ready" : "waiting") : "error"
@@ -569,8 +571,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
         let rows = latestTagDetections, selected = selectedTagID, debug = selectedTagDebug(), size = latestTagImageSize, display = latestTagDisplayTransform
         let settings = debugSettings, hz = analysisHz, latency = tagLatencyMilliseconds
+        let intrinsics = latestTagIntrinsics
         DispatchQueue.main.async { [weak self] in
-            self?.host?.showAprilTagOverlay(rows, imageSize: size, displayTransform: display, frameID: frameID, expiresAt: timestamp+0.4, selectedID: selected)
+            self?.host?.showAprilTagOverlay(rows, imageSize: size, displayTransform: display, frameID: frameID, expiresAt: timestamp+0.4, selectedID: selected, showPoseAxes: settings.showPoseAxes, intrinsics: intrinsics)
             self?.host?.debugPanel.show(debug: debug, frameID: frameID, timestamp: timestamp, analysisHz: hz, latencyMilliseconds: latency, settings: settings)
         }
     }
@@ -629,7 +632,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
 }
 
-final class ARCaptureView: UIView {
+final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
     let depthView = UIImageView()
     let tagOverlay = AprilTagOverlayView(frame: .zero)
@@ -644,12 +647,18 @@ final class ARCaptureView: UIView {
         addSubview(depthView)
         addSubview(tagOverlay)
         addSubview(debugPanel)
+        debugPanel.onPreferredHeightChanged = { [weak self] _ in
+            self?.setNeedsLayout()
+            self?.layoutIfNeeded()
+        }
         statusLabel.textColor = .white; statusLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
         statusLabel.numberOfLines = 3; statusLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         statusLabel.text = "Starting ARKit · tap two surfaces to measure"
         statusLabel.isHidden = true // React Native supplies the visible status overlay.
         addSubview(statusLabel)
-        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+        tap.delegate = self
+        addGestureRecognizer(tap)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func didMoveToWindow() {
@@ -659,12 +668,21 @@ final class ARCaptureView: UIView {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
-        let panelHeight = debugEnabled ? min(270, bounds.height) : 0
-        let previewFrame = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height-panelHeight))
-        arView.frame = previewFrame; depthView.frame = previewFrame; tagOverlay.frame = previewFrame
+        // Diagnostics float over the camera. Expanding them never crops or rescales it.
+        arView.frame = bounds; depthView.frame = bounds; tagOverlay.frame = bounds
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
-        debugPanel.frame = CGRect(x: 8, y: previewFrame.maxY, width: max(0, bounds.width - 16), height: panelHeight)
+        let panelHeight = min(debugPanel.preferredHeight, max(0, bounds.height - 16))
+        debugPanel.frame = CGRect(x: 8, y: max(8, bounds.height - panelHeight - 8), width: max(0, bounds.width - 16), height: panelHeight)
         ARCaptureCoordinator.shared.updateViewport(arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        // The disclosure button owns its tap; other overlay regions pass through to tag selection.
+        var view = touch.view
+        while let current = view, current !== self {
+            if current is UIControl { return false }
+            view = current.superview
+        }
+        return true
     }
     @objc private func tapped(_ gesture: UITapGestureRecognizer) {
         if debugEnabled {
@@ -686,7 +704,7 @@ final class ARCaptureView: UIView {
     }
     func setDebugMode(_ enabled: Bool) { debugEnabled = enabled; debugPanel.isHidden = !enabled; setNeedsLayout(); layoutIfNeeded() }
     func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
-    func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil) {
-        tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID)
+    func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil) {
+        tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID, showPoseAxes: showPoseAxes, intrinsics: intrinsics)
     }
 }

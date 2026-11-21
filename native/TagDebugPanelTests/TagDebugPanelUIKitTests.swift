@@ -16,8 +16,9 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         controller.view.backgroundColor = UIColor(red: 0.03, green: 0.08, blue: 0.13, alpha: 1)
         window.rootViewController = controller
         window.makeKeyAndVisible()
-        panel = TagDebugPanelView(frame: CGRect(x: 0, y: 100, width: 390, height: 270))
+        panel = TagDebugPanelView(frame: CGRect(x: 0, y: 100, width: 390, height: 96))
         controller.view.addSubview(panel)
+        panel.onPreferredHeightChanged = { [weak self] height in self?.resizePanel(to: height) }
         panel.layoutIfNeeded()
     }
     override func tearDown() {
@@ -43,11 +44,29 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     }
     private func allViews(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(allViews) }
     private func labels() -> [UILabel] { allViews(panel).compactMap { $0 as? UILabel } }
+    private func isVisible(_ view: UIView) -> Bool {
+        if view.isHidden || view.alpha <= 0 { return false }
+        guard let parent=view.superview, view !== panel else { return true }
+        return isVisible(parent)
+    }
+    private func resizePanel(to height: CGFloat) {
+        panel.frame.size.height=height
+        panel.setNeedsLayout(); panel.layoutIfNeeded()
+    }
+    private func expandPanel() {
+        panel.setExpanded(true)
+        resizePanel(to:panel.preferredHeight)
+    }
+    private func detailsButton() throws -> UIButton {
+        try XCTUnwrap(allViews(panel).compactMap { $0 as? UIButton }.first {
+            $0.accessibilityIdentifier == "tagDebugDetailsButton"
+        })
+    }
     private func label(_ text: String) throws -> UILabel {
-        try XCTUnwrap(labels().first { $0.text == text }, "Missing visible value: \(text)")
+        try XCTUnwrap(labels().first { $0.text == text && isVisible($0) }, "Missing visible value: \(text)")
     }
     private func assertReadable(file: StaticString = #filePath, line: UInt = #line) {
-        for label in labels() where !(label.text ?? "").isEmpty {
+        for label in labels() where isVisible(label) && !(label.text ?? "").isEmpty {
             let frame = label.convert(label.bounds, to: panel)
             XCTAssertGreaterThan(frame.width, 0, file: file, line: line)
             XCTAssertGreaterThan(frame.height, 0, file: file, line: line)
@@ -67,7 +86,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
             }
         }
         // Sibling metric rows must not overlap each other.
-        let rows = panel.subviews.sorted { $0.frame.minY < $1.frame.minY }
+        let rows = panel.subviews.filter { isVisible($0) && !($0 is UIButton) }.sorted { $0.frame.minY < $1.frame.minY }
         for (a, b) in zip(rows, rows.dropFirst()) {
             XCTAssertLessThanOrEqual(a.frame.maxY, b.frame.minY + 0.5, "Overlapping panel rows", file: file, line: line)
         }
@@ -83,7 +102,8 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     private func savePNG(_ name: String) throws {
         let format = UIGraphicsImageRendererFormat(); format.scale = 3; format.opaque = true
         let image = UIGraphicsImageRenderer(bounds: panel.bounds, format: format).image { context in
-            UIColor.black.setFill(); context.fill(panel.bounds)
+            // Test-only host backdrop makes the translucent overlay visible.
+            UIColor(red:0.03,green:0.08,blue:0.13,alpha:1).setFill(); context.fill(panel.bounds)
             XCTAssertTrue(panel.drawHierarchy(in: panel.bounds,afterScreenUpdates:true),
                           "UIKit failed to render the displayed panel hierarchy")
         }
@@ -97,6 +117,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     }
 
     func testValidMetricsAreVisibleAndFit390By270() throws {
+        expandPanel()
         show(validDebug())
         for text in ["TAG #42 · VALID", "+0.123", "-0.045", "+1.234", "+12.3", "-24.5", "+36.7",
                      "1.234", "1.250", "0.016", "1.241", "28.4", "6.1"] { _ = try label(text) }
@@ -108,6 +129,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     }
 
     func testAmbiguousAndMissingDepthStayReadable() throws {
+        expandPanel()
         var debug = validDebug()
         debug["status"] = "ambiguous"; debug["severity"] = "warning"
         for key in ["centerDepthMeters", "depthDifferenceMeters", "meanDepthMeters", "centerConfidence"] { debug[key] = NSNull() }
@@ -119,13 +141,14 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         try savePNG("panel-ambiguous-missing-depth-390x270")
         show(nil)
         _ = try label("TAG DEBUG · WAITING")
-        XCTAssertTrue(labels().contains { ($0.text ?? "").contains("29.7/30 Hz\nFrame age ") &&
+        XCTAssertTrue(labels().contains { ($0.text ?? "").contains("29.7 Hz\nFrame age ") &&
             ($0.text ?? "").contains("compute 12 ms") },"No-tag footer must retain current cadence/age/compute telemetry")
         assertReadable()
         try savePNG("panel-missing-390x270")
     }
 
     func testDeltaColorsAreIndependentOfOverallSeverity() throws {
+        expandPanel()
         for (delta, status, severity, color) in [(0.060,"badAngle","bad",UIColor.systemGreen),
                                                  (0.120,"ambiguous","warning",UIColor.systemYellow),
                                                  (0.180,"valid","good",UIColor.systemRed)] {
@@ -164,6 +187,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     }
 
     func testRepeatedUpdatesReuseLabelsViewsAndLayers() throws {
+        expandPanel()
         show(validDebug()); panel.layer.displayIfNeeded()
         let viewIDs = Set(allViews(panel).map(ObjectIdentifier.init))
         let labelIDs = Set(labels().map(ObjectIdentifier.init))
@@ -174,6 +198,122 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(Set(labels().map(ObjectIdentifier.init)),labelIDs)
         XCTAssertEqual(Set(layers(panel.layer).map(ObjectIdentifier.init)),layerIDs)
         assertReadable()
+    }
+
+    func testCompactDefaultShowsDepthAndTimingIn96Points() throws {
+        XCTAssertFalse(panel.isExpanded)
+        XCTAssertEqual(panel.preferredHeight,96)
+        XCTAssertEqual(panel.bounds.height,96)
+        let backdropAlpha=try XCTUnwrap(panel.backgroundColor).cgColor.alpha
+        XCTAssertGreaterThan(backdropAlpha,0)
+        XCTAssertLessThan(backdropAlpha,0.9,"Default panel must be visibly translucent")
+        show(validDebug())
+        for text in ["TAG #42 · VALID","1.234","1.250","0.016"] { _=try label(text) }
+        XCTAssertFalse(labels().contains { isVisible($0) && $0.text == "+0.123" },"Full translation row belongs in Details")
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("29.7") &&
+            ($0.text ?? "").contains("12") },"Compact telemetry must include cadence and compute latency")
+        assertReadable()
+        try savePNG("panel-compact-valid-390x96")
+        show(nil)
+        _=try label("TAG DEBUG · WAITING")
+        XCTAssertGreaterThanOrEqual(labels().filter { isVisible($0) && $0.text == "—" }.count,3)
+        assertReadable()
+        try savePNG("panel-compact-no-tag-390x96")
+    }
+
+    func testDetailsButtonExpandsCollapsesAndReportsPreferredHeight() throws {
+        var changes=[CGFloat]()
+        panel.onPreferredHeightChanged = { [weak self] height in
+            changes.append(height); self?.resizePanel(to:height)
+        }
+        let originalSuperviewBounds=try XCTUnwrap(panel.superview).bounds
+        let button=try detailsButton()
+        XCTAssertEqual(button.title(for:.normal),"Details")
+        button.sendActions(for:.touchUpInside)
+        XCTAssertTrue(panel.isExpanded)
+        XCTAssertEqual(panel.preferredHeight,270)
+        XCTAssertEqual(panel.bounds.height,270)
+        XCTAssertEqual(button.title(for:.normal),"Collapse")
+        show(validDebug()); _=try label("+0.123")
+        assertReadable()
+        button.sendActions(for:.touchUpInside)
+        XCTAssertFalse(panel.isExpanded)
+        XCTAssertEqual(panel.preferredHeight,96)
+        XCTAssertEqual(panel.bounds.height,96)
+        XCTAssertEqual(button.title(for:.normal),"Details")
+        XCTAssertEqual(changes,[270,96])
+        XCTAssertEqual(panel.superview?.bounds,originalSuperviewBounds,"Expanding the overlay must not resize its host")
+        panel.setExpanded(true); resizePanel(to:panel.preferredHeight)
+        XCTAssertTrue(panel.isExpanded)
+        panel.setExpanded(false); resizePanel(to:panel.preferredHeight)
+        XCTAssertFalse(panel.isExpanded)
+    }
+
+    func testOnly44PointDetailsButtonInterceptsTouches() throws {
+        for expanded in [false,true] {
+            panel.setExpanded(expanded); resizePanel(to:panel.preferredHeight)
+            let button=try detailsButton()
+            XCTAssertGreaterThanOrEqual(button.bounds.width,44)
+            XCTAssertGreaterThanOrEqual(button.bounds.height,44)
+            let buttonFrame=button.convert(button.bounds,to:panel)
+            XCTAssertTrue(panel.bounds.contains(buttonFrame))
+            let center=CGPoint(x:buttonFrame.midX,y:buttonFrame.midY)
+            let hit=try XCTUnwrap(panel.hitTest(center,with:nil))
+            XCTAssertTrue(hit === button || hit.isDescendant(of:button))
+            // All metric/title/background taps must continue to the camera view.
+            for y in stride(from:CGFloat(5),to:panel.bounds.height,by:17) {
+                for x in stride(from:CGFloat(5),to:panel.bounds.width,by:23) {
+                    let point=CGPoint(x:x,y:y)
+                    if !buttonFrame.contains(point) {
+                        XCTAssertNil(panel.hitTest(point,with:nil),"Panel swallowed camera tap at \(point)")
+                    }
+                }
+            }
+        }
+    }
+
+    func testLongStatusesRemainReadableInCompactAndExpanded() throws {
+        for expanded in [false,true] {
+            panel.setExpanded(expanded); resizePanel(to:panel.preferredHeight)
+            for (status,title) in [("poseUnavailable","POSE UNAVAILABLE"),("trackingLimited","TRACKING LIMITED")] {
+                var debug=validDebug(); debug["id"]=587; debug["status"]=status; debug["severity"]="neutral"
+                show(debug)
+                _=try label("TAG #587 · \(title)")
+                assertReadable()
+                try savePNG("panel-\(expanded ? "expanded" : "compact")-\(status)-390x\(Int(panel.bounds.height))")
+            }
+        }
+    }
+
+    func testRenderedDisclosureTitleSettlesToActualExpansionState() throws {
+        let button=try detailsButton()
+        button.sendActions(for:.touchUpInside)
+        button.layoutIfNeeded()
+        print("DISCLOSURE expanded immediate current=\(button.title(for:.normal) ?? "nil") rendered=\(button.titleLabel?.text ?? "nil")")
+        let expandedSettled=expectation(description:"UIKit expanded disclosure update")
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.35) { expandedSettled.fulfill() }
+        wait(for:[expandedSettled],timeout:1)
+        button.layoutIfNeeded()
+        print("DISCLOSURE expanded settled current=\(button.title(for:.normal) ?? "nil") rendered=\(button.titleLabel?.text ?? "nil")")
+        XCTAssertTrue(panel.isExpanded)
+        XCTAssertEqual(button.titleLabel?.text,"Collapse")
+        show(validDebug())
+        assertReadable()
+        try savePNG("panel-expanded-settled-Collapse-390x270")
+
+        button.sendActions(for:.touchUpInside)
+        button.layoutIfNeeded()
+        print("DISCLOSURE collapsed immediate current=\(button.title(for:.normal) ?? "nil") rendered=\(button.titleLabel?.text ?? "nil")")
+        let collapsedSettled=expectation(description:"UIKit collapsed disclosure update")
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.35) { collapsedSettled.fulfill() }
+        wait(for:[collapsedSettled],timeout:1)
+        button.layoutIfNeeded()
+        print("DISCLOSURE collapsed settled current=\(button.title(for:.normal) ?? "nil") rendered=\(button.titleLabel?.text ?? "nil")")
+        XCTAssertFalse(panel.isExpanded)
+        XCTAssertEqual(button.titleLabel?.text,"Details")
+        show(validDebug())
+        assertReadable()
+        try savePNG("panel-compact-settled-Details-390x96")
     }
 }
 

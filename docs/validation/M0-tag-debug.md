@@ -1,5 +1,7 @@
 # AprilTag pose/depth debug screen validation
 
+The subsequent [compact overlay and optional pose-axis update](M0-tag-debug-overlay.md) supersedes this build's docked layout. The validation below records the original build 4 implementation.
+
 The debug screen adds camera-relative tag pose, frame-matched LiDAR comparison, explicit quality gates, and configurable tag width/thresholds. The implementation remains within the iOS-first native AR pipeline and shared C detector. See [the screen and coordinate definitions](../tag-debug-screen.md).
 
 ## Implemented behavior

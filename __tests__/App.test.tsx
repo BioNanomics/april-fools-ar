@@ -12,6 +12,7 @@ jest.mock('react-native', () => {
   const native = jest.requireActual('react-native');
   native.NativeModules.ARCaptureEngine = {
     getStatus: jest.fn(),
+    getAppInfo: jest.fn(),
     startSession: jest.fn(),
     stopSession: jest.fn(),
     listSessions: jest.fn().mockResolvedValue([]),
@@ -43,6 +44,22 @@ beforeEach(() => {
     debugMode: enabled,
   }));
   engine.getDebugSettings.mockResolvedValue(DEFAULT_DEBUG_SETTINGS);
+  engine.getAppInfo.mockResolvedValue({
+    bundleId: 'com.doughorner.aprilfoolsar',
+    version: '0.1.1',
+    build: '6',
+    buildCommit: '1234567890abcdef1234567890abcdef12345678',
+    buildDateUTC: '2026-11-21T10:00:00Z',
+    workingTreeDirty: false,
+    releaseNotes: [
+      {
+        version: '0.1.1',
+        build: '6',
+        title: 'Build information',
+        changes: ['Stamp recordings.'],
+      },
+    ],
+  });
   engine.setDebugSettings.mockImplementation(
     async (settings: unknown) => settings,
   );
@@ -86,6 +103,23 @@ test('starts a named native recording and stops it using the same control', asyn
       .props.onPress(),
   );
   expect(engine.stopSession).toHaveBeenCalledTimes(1);
+});
+
+test('shows the native installed version and opens its build information', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('v0.1.1 (6) · 1234567');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Version and release notes' })
+      .props.onPress(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain(
+    '1234567890abcdef1234567890abcdef12345678',
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('2026-11-21T10:00:00Z');
+  expect(engine.startSession).not.toHaveBeenCalled();
 });
 
 test('falls back to a nonempty session name when the input is blank', async () => {

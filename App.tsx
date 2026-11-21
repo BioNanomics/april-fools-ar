@@ -26,6 +26,7 @@ import {
   DEFAULT_DEBUG_SETTINGS,
   type DebugSettings,
 } from './DebugSettingsModal';
+import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const Engine = NativeModules.ARCaptureEngine;
@@ -108,6 +109,8 @@ function CaptureApp() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   const [preview, setPreview] = useState('camera');
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [measuringTagSize, setMeasuringTagSize] = useState(false);
@@ -143,6 +146,21 @@ function CaptureApp() {
       clearInterval(interval);
     };
   }, [refresh]);
+  useEffect(() => {
+    let active = true;
+    Engine?.getAppInfo()
+      .then((info: AppInfo) => {
+        if (active) {
+          setAppInfo(info);
+        }
+      })
+      .catch(() => {
+        /* The version button retries if native metadata is unavailable. */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   useEffect(() => {
     if (typeof status.debugMode === 'boolean') {
       setDebugEnabled(status.debugMode);
@@ -256,6 +274,14 @@ function CaptureApp() {
       Alert.alert('Debug settings', errorText(error));
     }
   };
+  const openReleaseNotes = async () => {
+    try {
+      setAppInfo(await Engine.getAppInfo());
+      setReleaseNotesOpen(true);
+    } catch (error) {
+      Alert.alert('Build information', errorText(error));
+    }
+  };
   const saveDebugSettings = async (settings: DebugSettings) => {
     setDebugSettings(await Engine.setDebugSettings(settings));
     setSettingsOpen(false);
@@ -297,9 +323,28 @@ function CaptureApp() {
           <View style={s.mark}>
             <Text style={s.markText}>⌖</Text>
           </View>
-          <View>
+          <View style={s.brandContent}>
             <Text style={s.brand}>APRIL FOOLS AR</Text>
-            <Text style={s.kicker}>FIELD CAPTURE · MILESTONE ZERO</Text>
+            <View style={s.brandMeta}>
+              <Text style={s.kicker}>FIELD CAPTURE</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Version and release notes"
+                onPress={openReleaseNotes}
+                hitSlop={8}
+                style={s.versionButton}
+              >
+                <Text style={s.versionLabel}>
+                  {appInfo
+                    ? `v${appInfo.version} (${
+                        appInfo.build
+                      }) · ${appInfo.buildCommit.slice(0, 7)}${
+                        appInfo.workingTreeDirty ? '*' : ''
+                      }`
+                    : 'Version & release notes'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
         <View style={s.tabs}>
@@ -634,6 +679,11 @@ function CaptureApp() {
           />
         </View>
       )}
+      <ReleaseNotesModal
+        visible={releaseNotesOpen}
+        info={appInfo}
+        onClose={() => setReleaseNotesOpen(false)}
+      />
       <DebugSettingsModal
         visible={settingsOpen}
         initialSettings={debugSettings}
@@ -690,6 +740,20 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { paddingHorizontal: 20 },
   brandRow: { flexDirection: 'row', gap: 11, alignItems: 'center' },
+  brandContent: { flex: 1 },
+  brandMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: 10,
+  },
+  versionButton: { minHeight: 28, justifyContent: 'center' },
+  versionLabel: {
+    color: C.cyan,
+    fontSize: 10,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
   mark: {
     width: 39,
     height: 39,

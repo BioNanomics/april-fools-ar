@@ -1,0 +1,61 @@
+{
+  "releases": [
+    {
+      "version": "0.1.1",
+      "build": "6",
+      "title": "Build identification and release notes",
+      "changes": [
+        "Show the installed app version, build number, source revision and UTC build date, with release notes available from the header.",
+        "Save the version, build, source revision and UTC build date with each new session.",
+        "Retain the compact camera overlay, expandable diagnostics and optional tag pose axes."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "build": "5",
+      "title": "Compact overlay and optional pose axes",
+      "changes": [
+        "Keep the camera preview full size with a translucent compact readout and expandable Details.",
+        "Add optional red, green and blue tag pose axes, disabled by default.",
+        "Preserve existing measured tag widths when introducing the new preference."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "build": "4",
+      "title": "Tag pose and LiDAR diagnostics",
+      "changes": [
+        "Show selected-tag camera-relative position, angles, range, reprojection error and matched LiDAR depth comparison.",
+        "Add configurable quality thresholds and manual or reviewed AR-measured tag widths.",
+        "Preserve measured-width precision when editing other settings."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "build": "3",
+      "title": "Tag overlay stability",
+      "changes": [
+        "Fix the crash when clearing tag outlines and labels by preserving UIKit-owned views and layers.",
+        "Keep recordings and existing capture formats unchanged."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "build": "2",
+      "title": "Live AprilTag detection",
+      "changes": [
+        "Detect tag36h11 IDs and draw corner outlines while viewing the live camera, independently of recording.",
+        "Record frame-linked detections, corner coordinates and decode quality on a bounded native worker."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "build": "1",
+      "title": "Initial iPhone capture app",
+      "changes": [
+        "Add the native ARKit and LiDAR capture workflow with RGB media, numeric depth, confidence and frame metadata.",
+        "Add bookmarks, two-point measurements, saved sessions and ZIP sharing through iOS."
+      ]
+    }
+  ]
+}

@@ -17,6 +17,11 @@ final class ARCaptureEngine: RCTEventEmitter {
     override func startObserving() { listening = true }
     override func stopObserving() { listening = false }
 
+    @objc(getAppInfo:rejecter:)
+    func getAppInfo(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        DispatchQueue.main.async { resolve(AppBuildInfo.info) }
+    }
+
     private func complete(_ result: Result<[String: Any], Error>, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         DispatchQueue.main.async {
             switch result {

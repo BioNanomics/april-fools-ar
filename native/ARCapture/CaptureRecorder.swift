@@ -14,6 +14,7 @@ final class CaptureRecorder {
     let folder: URL
     private let initialDebugSettings: TagDebugSettings
     private let initialTagSizeEvidence: [String: Any]?
+    private let initialApplication: [String: Any]
     private let queue = DispatchQueue(label: "AprilFoolsAR.capture.disk", qos: .utility)
     private let slots = DispatchSemaphore(value: 3)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
@@ -49,10 +50,11 @@ final class CaptureRecorder {
             .appendingPathComponent("AprilFoolsAR/sessions", isDirectory: true)
     }
 
-    init(name: String, debugSettings: TagDebugSettings = .load()) throws {
+    init(name: String, debugSettings: TagDebugSettings = .load(), application: [String: Any] = AppBuildInfo.application) throws {
         self.name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160))
         initialDebugSettings = debugSettings
         initialTagSizeEvidence = debugSettings.matchingTagSizeEvidence()
+        initialApplication = application
         folder = Self.root.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("frames"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("depth"), withIntermediateDirectories: true)
@@ -63,7 +65,7 @@ final class CaptureRecorder {
         framesFile = try FileHandle(forWritingTo: framesURL)
         eventsFile = try FileHandle(forWritingTo: eventsURL)
         try writeManifest(finalized: false)
-        writeEvent(["type": "recordingStarted", "wallTime": Self.iso(createdAt)])
+        writeEvent(["type": "recordingStarted", "wallTime": Self.iso(createdAt), "application": initialApplication])
     }
 
     func append(frame: ARFrame, metadata: [String: Any]) -> Bool {
@@ -273,7 +275,7 @@ final class CaptureRecorder {
     private func writeManifest(finalized: Bool) throws {
         var manifest = sessionRecord()
         manifest["schemaVersion"] = 1
-        manifest["application"] = ["bundleId": Bundle.main.bundleIdentifier ?? "unknown", "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown", "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown", "buildCommit": Bundle.main.infoDictionary?["BuildCommit"] as? String ?? "unknown"]
+        manifest["application"] = initialApplication
         manifest["device"] = ["model": UIDevice.current.model, "hardwareIdentifier": Self.hardwareIdentifier(), "systemVersion": UIDevice.current.systemVersion]
         manifest["finalized"] = finalized
         manifest["clock"] = "ARFrame.timestamp: seconds since system boot; video PTS relative to first recorded AR frame"

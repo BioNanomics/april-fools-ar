@@ -4,6 +4,8 @@ An iPhone-first AprilTag field capture app. Milestone zero detects tags and reco
 
 ## On the phone
 
+The header shows the installed version, build number and short commit hash. Tap it for **Version and release notes**, including the full source hash, UTC build date and whether the build contains modified sources. New session manifests and recording-start events retain the same identity.
+
 **Tag debug** uses a compact translucent overlay over the full camera preview. It shows validity and pose/LiDAR depth agreement; tap **Details** for translation, orientation, range, angles and decode quality, or **Collapse** to reclaim the view. Tap a tag to select it. Use **Settings** for the physical tag width and quality thresholds; width defaults to FRC 165.1 mm. You can enter a width or use **Measure tag width with AR**, then review and accept the two-point edge estimate. See [debug definitions and conventions](docs/tag-debug-screen.md).
 
 Enable **Show pose axes** in Settings to add red X, green Y and blue Z axes to each solved tag pose.
@@ -45,6 +47,8 @@ cd ..
 ```
 
 `scripts/configure-ios.rb` includes the native modules and configures the development team and bundle ID. The Release build embeds JavaScript and can launch without Metro. Default output: `/tmp/april-fools-ar-build/Build/Products/Release-iphoneos/AprilFoolsAR.app`.
+
+Add each release to the front of `release-notes.json`, with its version, increasing build number and user-facing changes. The configuration script uses that first entry for Xcode's version/build. Both command-line and direct Xcode builds run `scripts/stamp-build-info.sh` before signing to embed fresh source and UTC build metadata in `BuildInfo.json`. A modified working tree is explicitly marked; release builds should come from the committed source.
 
 Install that `.app` using Device Hub → the target iPhone → Apps → Add. The current bundle ID is `com.doughorner.aprilfoolsar`.
 

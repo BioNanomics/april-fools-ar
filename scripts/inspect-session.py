@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Inspect a real April Fools AR directory or ZIP without optional dependencies."""
 import argparse
+from datetime import datetime
 import hashlib
 import json
 import math
+import re
 from pathlib import Path, PurePosixPath
 import struct
 import sys
 import zipfile
 
 
-def inspect(path: Path, require_tags: bool = False, require_debug: bool = False) -> dict:
+def inspect(path: Path, require_tags: bool = False, require_debug: bool = False, require_build_info: bool = False) -> dict:
     archive = zipfile.ZipFile(path) if path.is_file() else None
     prefix = ""
     if archive and "manifest.json" not in archive.namelist():
@@ -36,6 +38,25 @@ def inspect(path: Path, require_tags: bool = False, require_debug: bool = False)
         frames = [json.loads(line) for line in read("frames.jsonl").splitlines() if line]
         events = [json.loads(line) for line in read("events.jsonl").splitlines() if line]
         errors = []
+        application = manifest.get("application", {})
+        if require_build_info:
+            if not isinstance(application, dict):
+                errors.append("Application build metadata must be an object")
+                application = {}
+            for key in ("bundleId", "version", "build"):
+                if not isinstance(application.get(key), str) or not application[key] or application[key] == "unknown":
+                    errors.append(f"Missing application {key}")
+            if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", str(application.get("buildCommit", ""))):
+                errors.append("Missing full Git commit hash in application.buildCommit")
+            try:
+                build_date = application.get("buildDateUTC", "")
+                if not isinstance(build_date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", build_date):
+                    raise ValueError("UTC timestamp required")
+                datetime.fromisoformat(build_date[:-1] + "+00:00")
+            except (ValueError, TypeError):
+                errors.append("Missing UTC build timestamp in application.buildDateUTC")
+            if type(application.get("workingTreeDirty")) is not bool:
+                errors.append("Missing boolean application.workingTreeDirty")
         if not manifest.get("finalized"):
             errors.append("Session was not finalized")
         if not frames:
@@ -160,6 +181,7 @@ def inspect(path: Path, require_tags: bool = False, require_debug: bool = False)
             errors.append('No payload checksum inventory')
         return {"sessionId": manifest.get("sessionId", manifest.get("id")),
                 "name": manifest.get("name"), "finalized": manifest.get("finalized"),
+                "application": application,
                 "metadataFrames": len(frames), "depthFrames": depth_count,
                 "events": len(events), "eventTypes": sorted(set(e.get("type", "unknown") for e in events)),
                 "aprilTagAnalyzedFrames": len(tag_events), "aprilTagDetections": detection_count,
@@ -180,9 +202,10 @@ if __name__ == "__main__":
     parser.add_argument("session", type=Path)
     parser.add_argument("--require-tags", action="store_true", help="Require at least one decoded tag for the known-tag device check")
     parser.add_argument("--require-debug", action="store_true", help="Require solved poses and debug records for a calibrated-tag device check")
+    parser.add_argument("--require-build-info", action="store_true", help="Require version, build, full source hash, UTC build date and source-state flag")
     args = parser.parse_args()
     try:
-        result = inspect(args.session, require_tags=args.require_tags, require_debug=args.require_debug)
+        result = inspect(args.session, require_tags=args.require_tags, require_debug=args.require_debug, require_build_info=args.require_build_info)
         print(json.dumps(result, indent=2))
         sys.exit(1 if result["validationErrors"] else 0)
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:

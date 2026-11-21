@@ -91,5 +91,9 @@
 	</array>
 	<key>BuildCommit</key>
 	<string>$(APP_BUILD_COMMIT)</string>
+	<key>BuildDateUTC</key>
+	<string>$(APP_BUILD_DATE_UTC)</string>
+	<key>BuildWorkingTreeDirty</key>
+	<string>$(APP_BUILD_DIRTY)</string>
 </dict>
 </plist>

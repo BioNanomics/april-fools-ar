@@ -75,6 +75,10 @@ final class ARCaptureEngine: RCTEventEmitter {
     func setPreviewMode(_ mode: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.setPreviewMode(mode) { self.complete($0, resolve: resolve, reject: reject) }
     }
+    @objc(setDisplayZoom:resolver:rejecter:)
+    func setDisplayZoom(_ zoom: Double, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.setDisplayZoom(zoom) { self.complete($0, resolve: resolve, reject: reject) }
+    }
     @objc(listSessions:rejecter:)
     func listSessions(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.listSessions { result in

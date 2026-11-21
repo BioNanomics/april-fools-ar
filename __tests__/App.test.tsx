@@ -1,5 +1,5 @@
 import React from 'react';
-import { NativeModules, TextInput } from 'react-native';
+import { DeviceEventEmitter, NativeModules, TextInput } from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { DEFAULT_DEBUG_SETTINGS } from '../DebugSettingsModal';
@@ -20,6 +20,7 @@ jest.mock('react-native', () => {
     addListener: jest.fn(),
     removeListeners: jest.fn(),
     setPreviewMode: jest.fn().mockResolvedValue(undefined),
+    setDisplayZoom: jest.fn(),
     setDebugMode: jest.fn(),
     getDebugSettings: jest.fn(),
     setDebugSettings: jest.fn(),
@@ -38,12 +39,17 @@ beforeEach(() => {
     tracking: 'normal',
     lidarAvailable: true,
     depthAvailable: true,
+    displayZoom: 1,
   });
   engine.setDebugMode.mockImplementation(async (enabled: boolean) => ({
     ...(await engine.getStatus()),
     debugMode: enabled,
   }));
   engine.getDebugSettings.mockResolvedValue(DEFAULT_DEBUG_SETTINGS);
+  engine.setDisplayZoom.mockImplementation(async (displayZoom: number) => ({
+    ...(await engine.getStatus()),
+    displayZoom,
+  }));
   engine.getAppInfo.mockResolvedValue({
     bundleId: 'com.doughorner.aprilfoolsar',
     version: '0.1.1',
@@ -333,4 +339,81 @@ test('pose axes switch is opt-in and saves without rounding the measured tag wid
     tagSizeMeters: measuredWidth,
     showPoseAxes: true,
   });
+});
+
+test('view zoom presets request native 1×, 2× and 4× and show acknowledged status', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('View 1.0×');
+  for (const zoom of [1, 2, 4]) {
+    await act(async () =>
+      tree.root
+        .findByProps({ accessibilityLabel: `View zoom ${zoom}×` })
+        .props.onPress(),
+    );
+    expect(engine.setDisplayZoom).toHaveBeenLastCalledWith(zoom);
+    expect(JSON.stringify(tree.toJSON())).toContain(`View ${zoom.toFixed(1)}×`);
+    expect(
+      tree.root.findByProps({ accessibilityLabel: `View zoom ${zoom}×` }).props
+        .accessibilityState.selected,
+    ).toBe(true);
+  }
+});
+
+test('view zoom waits for native acknowledgement instead of showing the requested preset optimistically', async () => {
+  let acknowledge!: (value: { displayZoom: number }) => void;
+  engine.setDisplayZoom.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        acknowledge = resolve;
+      }),
+  );
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () => {
+    tree.root
+      .findByProps({ accessibilityLabel: 'View zoom 2×' })
+      .props.onPress();
+  });
+  expect(engine.setDisplayZoom).toHaveBeenCalledWith(2);
+  expect(JSON.stringify(tree.toJSON())).toContain('View 1.0×');
+  await act(async () => acknowledge({ displayZoom: 1.75 }));
+  expect(JSON.stringify(tree.toJSON())).toContain('View 1.8×');
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'View zoom 2×' }).props
+      .accessibilityState.selected,
+  ).toBe(false);
+});
+
+test('native pinch status updates the continuous view zoom without issuing another preset request', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: false,
+      tracking: 'normal',
+      lidarAvailable: true,
+      depthAvailable: true,
+      displayZoom: 2.6,
+    });
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('View 2.6×');
+  expect(engine.setDisplayZoom).not.toHaveBeenCalled();
+  for (const zoom of [1, 2, 4]) {
+    expect(
+      tree.root.findByProps({ accessibilityLabel: `View zoom ${zoom}×` }).props
+        .accessibilityState.selected,
+    ).toBe(false);
+  }
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', { displayZoom: 1 });
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('View 1.0×');
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'View zoom 1×' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
 });

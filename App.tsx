@@ -48,6 +48,7 @@ type Status = {
   bytesWritten?: number;
   lastError?: string;
   debugMode?: boolean;
+  displayZoom?: number;
   aprilTag?: {
     state?:
       | 'initializing'
@@ -282,6 +283,13 @@ function CaptureApp() {
       Alert.alert('Build information', errorText(error));
     }
   };
+  const setViewZoom = async (zoom: number) => {
+    try {
+      setStatus(await Engine.setDisplayZoom(zoom));
+    } catch (error) {
+      Alert.alert('View zoom', errorText(error));
+    }
+  };
   const saveDebugSettings = async (settings: DebugSettings) => {
     setDebugSettings(await Engine.setDebugSettings(settings));
     setSettingsOpen(false);
@@ -314,6 +322,9 @@ function CaptureApp() {
   const tagIDs = tags?.ids || [];
   const firstDepth = m?.points?.[0]?.depthMeters;
   const working = busy || status.finalizing;
+  const viewZoom = Number.isFinite(status.displayZoom)
+    ? status.displayZoom!
+    : 1;
 
   return (
     <View style={s.root}>
@@ -435,6 +446,36 @@ function CaptureApp() {
                       : 'CHECKING LiDAR'}
                   </Text>
                 </View>
+              </View>
+              <View style={s.zoomBar}>
+                <Text style={s.zoomLabel}>{`View ${viewZoom.toFixed(
+                  1,
+                )}×`}</Text>
+                {[1, 2, 4].map(zoom => (
+                  <Pressable
+                    key={zoom}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View zoom ${zoom}×`}
+                    accessibilityState={{
+                      selected: Math.abs(viewZoom - zoom) < 0.01,
+                    }}
+                    onPress={() => setViewZoom(zoom)}
+                    hitSlop={6}
+                    style={[
+                      s.zoomButton,
+                      Math.abs(viewZoom - zoom) < 0.01 && s.modeActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        s.zoomText,
+                        Math.abs(viewZoom - zoom) < 0.01 && s.dark,
+                      ]}
+                    >
+                      {zoom}×
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
               {!debugEnabled && !!status.trackingReason && (
                 <Text style={s.trackingHint}>
@@ -797,6 +838,32 @@ const s = StyleSheet.create({
   dark: { color: C.bg },
   camera: { flex: 1, backgroundColor: C.card, overflow: 'hidden' },
   cameraTop: { position: 'absolute', top: 14, left: 15, right: 15 },
+  zoomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: '#071426DB',
+  },
+  zoomLabel: {
+    color: C.text,
+    fontSize: 11,
+    fontWeight: '600',
+    marginRight: 3,
+    fontVariant: ['tabular-nums'],
+  },
+  zoomButton: {
+    minWidth: 36,
+    minHeight: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomText: { color: C.text, fontSize: 12, fontWeight: '600' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -47,6 +47,8 @@ Each detection's `depth` and `debug` dictionaries retain matching-frame center d
 
 `debugSettings.showPoseAxes` is an optional display preference (default `false` when absent in older settings). It controls the projected tag-local RGB axis gizmo; it does not change the pose solution, tag size or raw recorded geometry.
 
+View-zoom builds add `displayZoom` and `previewDisplayTransform` to frame and AprilTag-analysis metadata. `displayTransform` retains the original sensor-to-unzoomed-viewport mapping. `previewDisplayTransform` applies the centered display magnification after that mapping; it does not describe a different camera calibration. A measurement point's `viewNormalized` stays in the unzoomed viewport coordinates used to sample the image/depth, and its `displayZoom` records the factor used by that tap. Raw images, depth, intrinsics and solved poses retain their original conventions.
+
 `events.jsonl` includes bookmarks, selected measurement endpoints, tracking changes, segment boundaries, and session lifecycle events. An endpoint records its image/depth pixel, camera-frame identity, world point, confidence when available, and depth source. With two valid endpoints in one segment, the app reports 3D Euclidean distance and signed `second.y - first.y` vertical difference separately. The vertical difference is not automatically floor-to-tag height.
 
 The writer retains at most three frames for disk work. Busy queues can omit frames or event snapshots; omissions are reported rather than assigned invented data. Capture counters distinguish accepted metadata, video, depth samples, and writer/video drops. Sample rates are targets, not guarantees.

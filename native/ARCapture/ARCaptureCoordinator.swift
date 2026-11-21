@@ -45,6 +45,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var trackingReason = "initializing"
     private var depthAvailable = false
     private var previewMode = "camera"
+    private var displayZoom = PreviewZoom.minimum
     private var points = [[String: Any]]()
     private var worldPoints = [SIMD3<Float>]()
     private var lastMeasurement: [String: Any] = ["pointCount": 0, "distanceMeters": NSNull(), "verticalMeters": NSNull()]
@@ -98,8 +99,12 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         arSession.delegateQueue = captureQueue
         captureQueue.async {
             self.session = arSession; self.invalidateAprilTags()
-            let enabled = self.debugMode
-            DispatchQueue.main.async { view.setDebugMode(enabled) }
+            let enabled = self.debugMode, zoom = self.displayZoom, mode = self.previewMode
+            DispatchQueue.main.async {
+                view.setDebugMode(enabled); view.setDisplayZoom(zoom)
+                view.depthView.isHidden = mode == "camera"
+                view.tagOverlay.isHidden = mode != "camera"
+            }
         }
         guard ARWorldTrackingConfiguration.isSupported else {
             captureQueue.async { self.lastError = "ARKit live capture requires a supported physical iPhone."; self.emitStatus() }
@@ -253,6 +258,19 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
     }
 
+    func setDisplayZoom(_ factor: Double, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do {
+                self.displayZoom = try PreviewZoom.clamped(factor)
+                let zoom = self.displayZoom
+                DispatchQueue.main.async { [weak self] in self?.host?.setDisplayZoom(zoom) }
+                // Reuse the current source pose and geometry; zoom is not a tracking reset.
+                self.renderTagDebug()
+                self.emitStatus(); completion(.success(self.status()))
+            } catch { completion(.failure(error)) }
+        }
+    }
+
     func clearMeasurements(completion: @escaping ([String: Any]) -> Void) {
         captureQueue.async { self.clearPoints(); self.emitStatus(); completion(self.status()) }
     }
@@ -315,7 +333,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
     }
 
-    func tap(_ point: CGPoint, in size: CGSize, orientation: UIInterfaceOrientation) {
+    func tap(_ point: CGPoint, in size: CGSize, orientation: UIInterfaceOrientation, displayZoom tapDisplayZoom: Double? = nil) {
         captureQueue.async {
             guard let frame = self.latestFrame, let depth = frame.sceneDepth else { self.failMeasurement("Scene depth is not available at this point."); return }
             guard case .normal = frame.camera.trackingState else { self.failMeasurement("Wait for normal AR tracking before selecting points."); return }
@@ -346,7 +364,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             let record: [String: Any] = ["frameId": self.frameID, "timestamp": frame.timestamp, "segmentId": self.segment,
                 "imagePixel": [Double(u), Double(v)], "viewNormalized": [normalizedView.x, normalizedView.y],
                 "depthPixel": [x, y], "depthMeters": Double(value), "confidence": confidenceLevel as Any? ?? NSNull(),
-                "worldMeters": Self.vector(world), "source": "sceneDepth"]
+                "worldMeters": Self.vector(world), "source": "sceneDepth", "displayZoom": tapDisplayZoom ?? self.displayZoom]
             self.worldPoints.append(world); self.points.append(record)
             self.lastMeasurement = ["pointCount": self.points.count, "distanceMeters": NSNull(), "verticalMeters": NSNull(), "points": self.points, "source": "sceneDepth", "recorded": self.recorder != nil]
             if self.worldPoints.count == 2 {
@@ -386,6 +404,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 "droppedWriterFramesTotal": droppedFrames, "exposureDurationSeconds": frame.camera.exposureDuration]
             let display = frame.displayTransform(for: orientation, viewportSize: viewport)
             metadata["displayTransform"] = [display.a, display.b, display.c, display.d, display.tx, display.ty]
+            let previewDisplay = PreviewZoom.displayTransform(base: display, zoom: displayZoom)
+            metadata["displayZoom"] = displayZoom
+            metadata["previewDisplayTransform"] = [previewDisplay.a, previewDisplay.b, previewDisplay.c, previewDisplay.d, previewDisplay.tx, previewDisplay.ty]
             if frame.timestamp - lastGeometryTime >= 1 {
                 lastGeometryTime = frame.timestamp
                 metadata["planes"] = frame.anchors.compactMap { anchor -> [String: Any]? in
@@ -449,6 +470,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         value["elapsedSeconds"] = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         value["droppedFrames"] = droppedFrames; value["lastError"] = lastError as Any? ?? NSNull()
         value["measurement"] = lastMeasurement; value["previewMode"] = previewMode; value["segmentId"] = segment
+        value["displayZoom"] = displayZoom
         value["debugMode"] = debugMode
         var selectedDebug = selectedTagDebug()
         if let timestamp = lastTagResultTimestamp { selectedDebug?["ageSeconds"] = max(0, ProcessInfo.processInfo.systemUptime - timestamp) }
@@ -486,11 +508,13 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let poseIntrinsics = [Double(k.columns.0.x), Double(k.columns.1.y), Double(k.columns.2.x), Double(k.columns.2.y)]
         let depthBuffer = frame.sceneDepth?.depthMap, confidenceBuffer = frame.sceneDepth?.confidenceMap
         let display = frame.displayTransform(for: orientation, viewportSize: viewport)
+        let previewDisplay = PreviewZoom.displayTransform(base: display, zoom: displayZoom)
         let sourceMetadata: [String: Any] = ["type": "aprilTagDetections", "frameId": sourceFrameID,
             "segmentId": sourceSegmentID, "timestamp": timestamp, "family": "tag36h11",
             "imageWidth": width, "imageHeight": height, "pixelFormat": CVPixelBufferGetPixelFormatType(buffer),
             "intrinsicsColumnMajor": Self.matrix(frame.camera.intrinsics), "cameraToWorldColumnMajor": Self.matrix(frame.camera.transform),
             "displayTransform": [display.a, display.b, display.c, display.d, display.tx, display.ty],
+            "displayZoom": displayZoom, "previewDisplayTransform": [previewDisplay.a, previewDisplay.b, previewDisplay.c, previewDisplay.d, previewDisplay.tx, previewDisplay.ty],
             "viewportWidth": viewport.width, "viewportHeight": viewport.height, "interfaceOrientation": orientation.rawValue,
             "tracking": tracking, "trackingReason": trackingReason,
             "analysisSkippedFramesTotal": tagSkippedFrames, "targetAnalysisHz": 30, "maxAnalysisInFlight": 1,
@@ -569,7 +593,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         guard let frameID = tagResultFrameID, let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp <= 0.4 else {
             DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }; return
         }
-        let rows = latestTagDetections, selected = selectedTagID, debug = selectedTagDebug(), size = latestTagImageSize, display = latestTagDisplayTransform
+        let rows = latestTagDetections, selected = selectedTagID, debug = selectedTagDebug(), size = latestTagImageSize
+        let display = PreviewZoom.displayTransform(base: latestTagDisplayTransform, zoom: displayZoom)
         let settings = debugSettings, hz = analysisHz, latency = tagLatencyMilliseconds
         let intrinsics = latestTagIntrinsics
         DispatchQueue.main.async { [weak self] in
@@ -633,6 +658,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
 }
 
 final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
+    private let previewContainer = UIView()
     let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
     let depthView = UIImageView()
     let tagOverlay = AprilTagOverlayView(frame: .zero)
@@ -640,11 +666,15 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     private var debugEnabled = true
     private let statusLabel = UILabel()
     private var attached = false
+    private(set) var displayZoom = PreviewZoom.minimum
+    private var pinchStartZoom = PreviewZoom.minimum
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .black; addSubview(arView)
+        backgroundColor = .black
+        previewContainer.clipsToBounds = true
+        addSubview(previewContainer); previewContainer.addSubview(arView)
         depthView.contentMode = .scaleAspectFill; depthView.clipsToBounds = true; depthView.alpha = 0.88; depthView.isHidden = true
-        addSubview(depthView)
+        previewContainer.addSubview(depthView)
         addSubview(tagOverlay)
         addSubview(debugPanel)
         debugPanel.onPreferredHeightChanged = { [weak self] _ in
@@ -658,6 +688,10 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         addSubview(statusLabel)
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+        pinch.delegate = self
+        tap.require(toFail: pinch)
+        addGestureRecognizer(pinch)
         addGestureRecognizer(tap)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -668,12 +702,26 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Diagnostics float over the camera. Expanding them never crops or rescales it.
-        arView.frame = bounds; depthView.frame = bounds; tagOverlay.frame = bounds
+        // The camera's base viewport never changes; only its centered display scale changes.
+        previewContainer.frame = bounds
+        for view in [arView as UIView, depthView] {
+            view.bounds = CGRect(origin: .zero, size: previewContainer.bounds.size)
+            view.center = CGPoint(x: previewContainer.bounds.midX, y: previewContainer.bounds.midY)
+        }
+        applyDisplayZoom()
+        tagOverlay.frame = bounds
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
         let panelHeight = min(debugPanel.preferredHeight, max(0, bounds.height - 16))
         debugPanel.frame = CGRect(x: 8, y: max(8, bounds.height - panelHeight - 8), width: max(0, bounds.width - 16), height: panelHeight)
         ARCaptureCoordinator.shared.updateViewport(arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
+    }
+    @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
+        switch gesture.state {
+        case .began: pinchStartZoom = displayZoom
+        case .changed, .ended:
+            ARCaptureCoordinator.shared.setDisplayZoom(pinchStartZoom * Double(gesture.scale)) { _ in }
+        default: break
+        }
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         // The disclosure button owns its tap; other overlay regions pass through to tag selection.
@@ -693,7 +741,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         }
         let point = gesture.location(in: arView)
         guard arView.bounds.contains(point) else { return }
-        ARCaptureCoordinator.shared.tap(point, in: arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
+        ARCaptureCoordinator.shared.tap(point, in: arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait, displayZoom: displayZoom)
     }
     func updateLabel(_ status: [String: Any]) {
         let tracking = status["tracking"] as? String ?? "unavailable"
@@ -703,6 +751,14 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         statusLabel.text = "\(tracking) · \(depth) · \(mode)\nTap two surfaces · \(count)/2 points · estimates only"
     }
     func setDebugMode(_ enabled: Bool) { debugEnabled = enabled; debugPanel.isHidden = !enabled; setNeedsLayout(); layoutIfNeeded() }
+    func setDisplayZoom(_ factor: Double) {
+        displayZoom = (try? PreviewZoom.clamped(factor)) ?? PreviewZoom.minimum
+        applyDisplayZoom()
+    }
+    private func applyDisplayZoom() {
+        let transform = CGAffineTransform(scaleX: CGFloat(displayZoom), y: CGFloat(displayZoom))
+        arView.transform = transform; depthView.transform = transform
+    }
     func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
     func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil) {
         tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID, showPoseAxes: showPoseAxes, intrinsics: intrinsics)

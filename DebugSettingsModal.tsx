@@ -135,9 +135,11 @@ export function DebugSettingsModal({
 }) {
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialSettings));
   const [saving, setSaving] = useState(false);
+  const [resetToDefaults, setResetToDefaults] = useState(false);
   useEffect(() => {
     if (visible) {
       setDraft(makeDraft(initialSettings));
+      setResetToDefaults(false);
     }
   }, [visible, initialSettings]);
   if (!visible) {
@@ -146,6 +148,13 @@ export function DebugSettingsModal({
   const save = async () => {
     try {
       const values = parseDebugSettings(draft);
+      // Display rounding must not turn a threshold-only edit into a new tag width.
+      if (
+        !resetToDefaults &&
+        draft.tagSizeMeters === makeDraft(initialSettings).tagSizeMeters
+      ) {
+        values.tagSizeMeters = initialSettings.tagSizeMeters;
+      }
       setSaving(true);
       await onSave(values);
     } catch (error) {
@@ -202,7 +211,11 @@ export function DebugSettingsModal({
               </View>
             ))}
             <Pressable
-              onPress={() => setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS))}
+              accessibilityLabel="Reset debug settings to FRC defaults"
+              onPress={() => {
+                setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS));
+                setResetToDefaults(true);
+              }}
               disabled={saving}
             >
               <Text style={s.link}>Reset to FRC defaults</Text>

@@ -14,7 +14,7 @@ The debug screen adds camera-relative tag pose, frame-matched LiDAR comparison, 
 
 - Shared C solver tests: known frontal and oblique translations/rotations, in-plane rotation, off-axis geometry, near-frontal ambiguity behavior, tag-size scaling, independently calculated pixel RMS, and invalid/missing calibration or degenerate corners.
 - Legacy decoded tag 42, blank image, padded stride and full-resolution corner tests pass.
-- TypeScript and ESLint pass. All five React Native tests pass, including displayed-unit conversion and explicit acceptance of an AR width estimate.
+- TypeScript and ESLint pass. All seven React Native tests pass, including displayed-unit conversion, explicit acceptance of an AR width estimate, full-precision width preservation during threshold edits, and explicit reset to the FRC default.
 - The first signed iOS Release build 4 passes with the new native components.
 - Native UIKit/math suite: 12 tests passed. It covers overlay reuse and expiry, optical-Z comparison, warning/rejection boundaries, confidence/missing/NaN inputs, row-stride/normalized depth mapping and neighborhood mean, settings persistence, AR-width validation and matching evidence snapshots.
 - Native panel suite: five tests passed for readable metrics, missing/ambiguous states, independent delta colors, threshold boundaries, and 600 updates without recreating labels/layers. The final no-tag telemetry case also passed separately after adding assertions for actual analysis rate, frame age and compute time.

@@ -199,3 +199,71 @@ test('AR width estimate requires explicit acceptance before changing tag size', 
   expect(engine.applyMeasuredTagSize).toHaveBeenCalledTimes(1);
   expect(engine.setDebugSettings).not.toHaveBeenCalled();
 });
+
+test('threshold-only edits preserve the full precision of an AR-measured width', async () => {
+  const measuredWidth = 0.1723456789;
+  engine.getDebugSettings.mockResolvedValue({
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: measuredWidth,
+    tagSizeSource: 'ar-two-point-edge',
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Tag width (mm)' }).props.value,
+  ).toBe('172.3457');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Maximum range (m)' })
+      .props.onChangeText('6'),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Apply debug settings' })
+      .props.onPress(),
+  );
+  expect(engine.setDebugSettings).toHaveBeenCalledWith({
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: measuredWidth,
+    maxDistanceMeters: 6,
+  });
+});
+
+test('reset to FRC defaults replaces a measured width even when both display the same', async () => {
+  engine.getDebugSettings.mockResolvedValue({
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: 0.16510000001,
+    maxDistanceMeters: 6,
+    tagSizeSource: 'ar-two-point-edge',
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Tag width (mm)' }).props.value,
+  ).toBe('165.1');
+  await act(async () =>
+    tree.root
+      .findByProps({
+        accessibilityLabel: 'Reset debug settings to FRC defaults',
+      })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Apply debug settings' })
+      .props.onPress(),
+  );
+  expect(engine.setDebugSettings).toHaveBeenCalledWith(DEFAULT_DEBUG_SETTINGS);
+});

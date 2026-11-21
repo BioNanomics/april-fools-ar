@@ -23,5 +23,7 @@ The change is in build 3. It preserves recordings and does not change detection 
 
 - Signed iOS Release build and signature check passed with the cleanup correction.
 - Real-UIKit regression checks passed on an iPhone 17 simulator: three tests, zero failures. They cover 250 positive-to-positive-to-empty update cycles, repeated clears, unrelated view/layer preservation, and old/new frame expiry isolation. Reproduce with `ruby native/ARCapture/tests/run-uikit-regression.rb --device-id <booted-simulator-UUID>`; the harness uses the actual production view and a temporary UIKit/XCTest host.
-- Fixed-build deployment is pending; record its final revision and device result here.
+- Running the same tests with `--source-ref 9224957` fails the post-clear hierarchy, unrelated-view/layer preservation, and expiry assertions (`TEST FAILED`, exit 1). The fixed source passes all three tests. Local result bundles are `/tmp/apriltag-overlay-old-uikit/Results.xcresult` and `/tmp/apriltag-overlay-fixed-uikit/Results.xcresult`.
+- Fixed implementation `9390894`, version 0.1.0 build 3, was installed in place through Device Hub. It launched successfully on Doug's iPhone 17 Pro and reported normal tracking, live depth and active tag analysis. No physical tag was visible during the post-update observation, so the positive-label regression evidence is the UIKit test above.
+- The post-update device still has the same four crash reports, newest at 9:29:24 PM; no new report appeared during the smoke check. Both preexisting session manifests remain present after the update. No app data was uninstalled or deleted.
 - Physical tag identification, measurement accuracy, and the full field-review gate are separate from this crash fix.

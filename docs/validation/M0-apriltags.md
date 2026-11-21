@@ -4,6 +4,8 @@ Live AprilTag identification is required for Milestone 0. The new build adds the
 
 Installed implementation: `9224957`, version 0.1.0, build 2, on Doug's iPhone 17 Pro. The final immutable Release app embeds `BuildCommit=9224957`; Device Hub installation and launch were confirmed. Its final screen reported 61 analyzed frames and 7 ms analysis time, without a crash.
 
+Subsequent use with tag overlays exposed a cleanup crash in build 2. See [the crash investigation and build-3 fix](M0-overlay-crash.md); the initial empty-scene smoke observation above did not exercise positive-label removal.
+
 ## Implementation
 
 - AprilTag 3.4.5, upstream revision `b7c0ebe9aa20f82ec7a828579004f9e706bfecd9`, vendored unmodified with an explicit production source list and BSD/MIT notices.

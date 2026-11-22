@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.wpilib.GradleRIO' version '2027.0.0-alpha-8'
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+deploy {
+    targets {
+        systemcore(getTargetTypeClass('SystemCore')) {
+            team = project.wpilib.getTeamOrDefault(0)
+            useDefaultSystemcoreHostName()
+            debug = project.wpilib.getDebugOrDefault(false)
+            artifacts {
+                wpilibJava(getArtifactTypeClass('WPILibJavaArtifact')) { debugJni = false }
+            }
+        }
+    }
+}
+def deployArtifact = deploy.targets.systemcore.artifacts.wpilibJava
+dependencies {
+    annotationProcessor wpi.java.deps.wpilibAnnotations()
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
+    systemcoreDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.systemcore)
+    systemcoreDebug wpi.java.vendor.jniDebug(wpi.platforms.systemcore)
+    systemcoreRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.systemcore)
+    systemcoreRelease wpi.java.vendor.jniRelease(wpi.platforms.systemcore)
+}
+application.mainClass = 'com.aprilfools.robot.Main'
+deployArtifact.configureApplication(application)
+wpi.java.configureApplication(application)

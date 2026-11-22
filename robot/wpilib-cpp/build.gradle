@@ -1,0 +1,30 @@
+plugins {
+    id 'cpp'
+    id 'org.wpilib.GradleRIO' version '2027.0.0-alpha-8'
+}
+deploy {
+    targets {
+        systemcore(getTargetTypeClass('SystemCore')) {
+            team = project.wpilib.getTeamOrDefault(0)
+            useDefaultSystemcoreHostName()
+            debug = project.wpilib.getDebugOrDefault(false)
+            artifacts { wpilibCpp(getArtifactTypeClass('WPILibNativeArtifact')) {} }
+        }
+    }
+}
+def deployArtifact = deploy.targets.systemcore.artifacts.wpilibCpp
+model {
+    components {
+        wpilibUserProgram(NativeExecutableSpec) {
+            targetPlatform wpi.platforms.systemcore
+            sources.cpp {
+                source { srcDir 'src/main/cpp'; include '**/*.cpp' }
+                exportedHeaders { srcDir 'src/main/include' }
+            }
+            deployArtifact.component = it
+            wpi.cpp.enableExternalTasks(it)
+            wpi.cpp.vendor.cpp(it)
+            wpi.cpp.deps.wpilib(it)
+        }
+    }
+}

@@ -1,0 +1,54 @@
+name: Shared spatial core
+on:
+  push:
+    paths: ['native/SpatialCore/**', 'native/AprilTag/**', 'third_party/apriltag/**', 'robot/**', 'bindings/android/**', 'recording-format/**', 'scripts/test-spatial-core.sh', 'scripts/replay-spatial-core.py', 'scripts/tests/test_spatial_core_replay.py', '.github/workflows/spatial-core.yml']
+  pull_request:
+    paths: ['native/SpatialCore/**', 'native/AprilTag/**', 'third_party/apriltag/**', 'robot/**', 'bindings/android/**', 'recording-format/**', 'scripts/test-spatial-core.sh', 'scripts/replay-spatial-core.py', 'scripts/tests/test_spatial_core_replay.py', '.github/workflows/spatial-core.yml']
+jobs:
+  desktop:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '25'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - if: ${{ hashFiles('recording-format/npm/package-lock.json') != '' }}
+        run: npm ci --prefix recording-format/npm
+      - run: scripts/test-spatial-core.sh
+      - run: cmake --build build/spatial-core --target package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spatial-core-${{ matrix.os }}
+          path: build/spatial-core/AFSpatialCore-*.tar.gz
+  systemcore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '25'}
+      - run: robot/build-systemcore.sh
+      - run: PATH="$PWD/../build/toolchains/opensdk-v2027-1-x86_64-linux-gnu/systemcore/bin:$PATH" ./gradlew :wpilib-cpp:build :wpilib-java:build
+        working-directory: robot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spatial-core-systemcore
+          path: robot/build/maven/
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.13'}
+      - run: sdkmanager 'platforms;android-35' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - run: gradle -p bindings/android assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spatial-core-android
+          path: bindings/android/build/outputs/aar/*.aar

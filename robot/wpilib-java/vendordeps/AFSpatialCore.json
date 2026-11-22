@@ -1,0 +1,18 @@
+{
+  "fileName": "AFSpatialCore.json",
+  "name": "AFSpatialCore",
+  "version": "0.1.0",
+  "wpilibYear": "2027_alpha7",
+  "uuid": "ee72d245-38ed-4b5c-9995-3145e084ff02",
+  "mavenUrls": [],
+  "jsonUrl": "",
+  "javaDependencies": [
+    {"groupId": "com.aprilfools.spatial", "artifactId": "af-spatial-core-java", "version": "0.1.0"}
+  ],
+  "jniDependencies": [
+    {"groupId": "com.aprilfools.spatial", "artifactId": "af-spatial-core-jni", "version": "0.1.0", "skipInvalidPlatforms": true, "isJar": false, "validPlatforms": ["linuxsystemcore"]}
+  ],
+  "cppDependencies": [
+    {"groupId": "com.aprilfools.spatial", "artifactId": "af-spatial-core-cpp", "version": "0.1.0", "libName": "af_spatial_core", "headerClassifier": "headers", "sharedLibrary": false, "skipInvalidPlatforms": true, "binaryPlatforms": ["linuxsystemcore"]}
+  ]
+}

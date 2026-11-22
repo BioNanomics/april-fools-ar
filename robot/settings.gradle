@@ -1,0 +1,4 @@
+pluginManagement { repositories { gradlePluginPortal() } }
+rootProject.name = 'AFSpatialCoreRobotExamples'
+include 'wpilib-cpp', 'wpilib-java'
+System.setProperty('org.gradle.internal.native.headers.unresolved.dependencies.ignore', 'true')

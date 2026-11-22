@@ -204,4 +204,86 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         }
         wait(for: [expired], timeout: 2)
     }
+
+    func testSelectedPanelHeightTitleAndAccessibilityClearWhenUnavailable() throws {
+        let panel = TagDebugPanelView(frame: CGRect(x: 0, y: 0, width: 390, height: 96))
+        panel.show(debug: ["id": 42, "status": "valid", "severity": "good",
+            "floorHeight": ["available": true, "meters": 1.42, "source": "sceneDepth"]],
+            frameID: "height-panel", timestamp: ProcessInfo.processInfo.systemUptime,
+            analysisHz: 20, latencyMilliseconds: 5, settings: TagDebugSettings())
+        panel.layoutIfNeeded()
+        let title = try XCTUnwrap(panel.subviews.compactMap { $0 as? UILabel }.first { $0.text?.contains("TAG #42") == true })
+        XCTAssertTrue(title.text?.contains("↑ ≈1.420 m · LiDAR") == true)
+        XCTAssertEqual(title.accessibilityLabel, title.text)
+        XCTAssertTrue(title.isAccessibilityElement)
+        XCTAssertEqual(panel.preferredHeight, 96)
+        panel.showUnavailable("Stale result")
+        XCTAssertFalse(title.text?.contains("1.420") == true)
+        XCTAssertFalse(title.accessibilityLabel?.contains("1.420") == true)
+        XCTAssertEqual(title.accessibilityLabel, "TAG DEBUG · WAITING")
+    }
+
+    func testAutomaticHeightsStayWithEachDetectionEvenWhenTagIDsAreDuplicated() throws {
+        var lidar = detection(42), optical = detection(42)
+        lidar["floorHeight"] = ["available": true, "meters": 1.42, "source": "sceneDepth", "reason": "valid"]
+        optical["floorHeight"] = ["available": true, "meters": 2.31, "source": "tagPose", "reason": "poseFallbackMissingDepth"]
+        optical["corners"] = [[190, 200], [290, 200], [290, 300], [190, 300]].map { $0.map(NSNumber.init(value:)) }
+        show([lidar, optical])
+        let labels = overlay.subviews.compactMap { $0 as? UILabel }
+        XCTAssertEqual(labels.count, 2)
+        XCTAssertTrue(labels[0].text?.contains("#42 · ↑ 1.420 m") == true)
+        XCTAssertTrue(labels[1].text?.contains("#42 · ↑ 2.310 m") == true)
+        XCTAssertTrue(labels[0].accessibilityValue?.contains("LiDAR depth") == true)
+        XCTAssertTrue(labels[1].accessibilityValue?.contains("optical tag pose") == true)
+        XCTAssertTrue(labels[1].accessibilityValue?.contains("poseFallbackMissingDepth") == true)
+        for label in labels {
+            XCTAssertEqual(label.accessibilityIdentifier, "apriltag.label.42")
+            XCTAssertEqual(label.accessibilityLabel, "AprilTag 42")
+            XCTAssertTrue(label.isAccessibilityElement)
+            XCTAssertEqual(label.font.pointSize, 17)
+        }
+        let ids = labels.map(ObjectIdentifier.init)
+        for _ in 0..<30 { show([lidar, optical]) }
+        XCTAssertEqual(overlay.subviews.compactMap { $0 as? UILabel }.map(ObjectIdentifier.init), ids)
+    }
+
+    func testUnavailableOrMalformedAutomaticHeightNeverDisplaysAFakeZero() throws {
+        let records: [[String: Any]] = [
+            ["available": false, "meters": 0, "source": "unavailable", "reason": "floorNotSelected"],
+            ["available": true, "meters": Double.nan, "source": "sceneDepth"],
+            ["available": true, "meters": Double.infinity, "source": "tagPose"],
+            ["available": true, "meters": -1, "source": "sceneDepth"],
+            ["available": true, "meters": true, "source": "sceneDepth"],
+            ["available": true, "meters": 1.42, "source": "unknown-source"]]
+        for record in records {
+            var row = detection(); row["floorHeight"] = record
+            show([row])
+            let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
+            XCTAssertEqual(label.text, " #42 · H — ")
+            XCTAssertFalse(label.text?.contains("0.000") == true)
+            XCTAssertTrue(label.accessibilityValue?.contains("height unavailable") == true)
+        }
+        var noFloor = detection()
+        noFloor["floorHeight"] = ["available": false, "source": "unavailable", "reason": "floorNotSelected"]
+        show([noFloor])
+        XCTAssertTrue(overlay.subviews.compactMap { $0 as? UILabel }.first?.accessibilityValue?.contains("set a floor") == true)
+        show([detection()])
+        XCTAssertEqual(overlay.subviews.compactMap { ($0 as? UILabel)?.text }, [" #42 "])
+    }
+
+    func testAutomaticHeightLabelFitsNarrowViewportAndSelectionRetainsReadableTagID() throws {
+        overlay.frame.size = CGSize(width: 140, height: 240)
+        var row = detection(587)
+        row["floorHeight"] = ["available": true, "meters": 12.345, "source": "sceneDepth", "reason": "valid"]
+        overlay.show([row], imageSize: CGSize(width: 320, height: 480), displayTransform: .identity,
+            frameID: "height-selected", expiresAt: ProcessInfo.processInfo.systemUptime + 0.5, selectedID: 587)
+        overlay.layoutIfNeeded()
+        let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
+        XCTAssertTrue(label.text?.contains("◆ #587") == true)
+        XCTAssertTrue(label.text?.contains("12.345 m") == true)
+        XCTAssertTrue(overlay.bounds.contains(label.frame))
+        XCTAssertTrue(label.adjustsFontSizeToFitWidth)
+        XCTAssertTrue(label.accessibilityTraits.contains(.selected))
+        XCTAssertEqual(overlay.tagID(at: CGPoint(x: 40, y: 50)), 587)
+    }
 }

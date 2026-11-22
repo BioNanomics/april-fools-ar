@@ -105,6 +105,7 @@ final class TagDebugPanelView: UIView {
     func showUnavailable(_ reason: String) {
         expiryToken = nil
         titleLabel.text = "TAG DEBUG · WAITING"
+        titleLabel.accessibilityLabel = titleLabel.text
         titleLabel.textColor = .lightGray
         layer.borderColor = UIColor.darkGray.cgColor
         [translationRow, rotationRow, depthRow, geometryRow].forEach { $0.setValues(["—", "—", "—"]) }
@@ -136,6 +137,23 @@ final class TagDebugPanelView: UIView {
             "trackingLimited": "TRACKING LIMITED", "poseUnavailable": "POSE UNAVAILABLE"]
         let id = (debug["id"] as? NSNumber)?.intValue ?? -1
         titleLabel.text = "TAG #\(id) · \(titles[status] ?? status.uppercased())"
+        if let height = debug["floorHeight"] as? [String: Any] {
+            let detail: String
+            if height["available"] as? Bool == true,
+               let raw = height["meters"] as? NSNumber, CFGetTypeID(raw) != CFBooleanGetTypeID(),
+               raw.doubleValue.isFinite, raw.doubleValue >= 0, raw.doubleValue <= 30,
+               let sourceKey = height["source"] as? String,
+               let source = ["sceneDepth": "LiDAR", "tagPose": "Pose"][sourceKey] {
+                detail = String(format: "↑ ≈%.3f m · %@", raw.doubleValue, source)
+            } else {
+                detail = height["reason"] as? String == "floorNotSelected" ? "Height — · set floor" : "Height — · unavailable"
+            }
+            titleLabel.text = (titleLabel.text ?? "") + "\n" + detail
+            titleLabel.isAccessibilityElement = true
+            titleLabel.accessibilityLabel = titleLabel.text
+        } else {
+            titleLabel.accessibilityLabel = titleLabel.text
+        }
         titleLabel.textColor = Self.color(severity)
         layer.borderColor = Self.color(severity).cgColor
         func scalar(_ key: String, _ format: String = "%.3f") -> String {

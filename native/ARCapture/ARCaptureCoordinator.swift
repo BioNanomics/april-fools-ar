@@ -330,6 +330,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 guard let plane = self.floorCandidates.first(where: { $0.id == id }) else { throw CaptureError.message("That surface is no longer a current floor candidate.") }
                 try self.spatialState.confirmFloor(plane, tracking: self.tracking, frameAgeSeconds: self.frameAge(frame))
                 self.clearPoints()
+                self.invalidateAprilTags() // Clear heights and reject in-flight results using the previous floor datum.
                 self.recorder?.event(["type": "floorConfirmed", "segmentId": self.segment, "timestamp": frame.timestamp, "frameId": self.frameID, "floor": self.confirmedFloorDictionary() as Any? ?? NSNull()])
                 self.lastError = nil; self.renderSpatial(); self.emitStatus(force: true)
             } catch { self.failMeasurement(error.localizedDescription) }
@@ -677,6 +678,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let settings = debugSettings, sourceTracking = tracking
         let k = frame.camera.intrinsics
+        let sourceFloor = spatialState.floor, sourceCameraToWorld = frame.camera.transform
         let poseIntrinsics = [Double(k.columns.0.x), Double(k.columns.1.y), Double(k.columns.2.x), Double(k.columns.2.y)]
         let depthBuffer = frame.sceneDepth?.depthMap, confidenceBuffer = frame.sceneDepth?.confidenceMap
         let display = frame.displayTransform(for: orientation, viewportSize: viewport)
@@ -701,7 +703,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let detections = (result ?? []).map { detection -> [String: Any] in
                     let center = TagDebugMath.numbers(detection["center"], count: 2) ?? []
                     let depth = TagDebugMath.sampleDepth(depth: depthBuffer, confidence: confidenceBuffer, center: center, imageWidth: width, imageHeight: height)
-                    return TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                    let enriched = TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                    return TagFloorHeight.enrich(enriched, context: TagFloorHeightContext(floor: sourceFloor,
+                        cameraToWorld: sourceCameraToWorld, intrinsics: k, settings: settings, tracking: sourceTracking,
+                        frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
+                        frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))
                 }
                 let completed = ProcessInfo.processInfo.systemUptime
                 let latency = (completed - started) * 1000

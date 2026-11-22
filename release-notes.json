@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.2.1",
+      "build": "10",
+      "title": "Automatic tag height above the floor",
+      "changes": [
+        "Show a live height estimate beside every detected tag ID after selecting the floor once.",
+        "Prefer usable LiDAR depth at the detected tag center, with a labeled pose estimate when depth is unavailable.",
+        "Keep the source frame, floor reference and height provenance with tag detections; hide heights when their inputs are stale or invalid."
+      ]
+    },
+    {
       "version": "0.2.0",
       "build": "9",
       "title": "Floor planes and persistent 3D measurements",
@@ -17,7 +27,7 @@
       "title": "Single-line camera controls",
       "changes": [
         "Combine tracking status, depth status and view zoom on one compact line over the camera.",
-        "Retain pinch zoom and the 1\u00d7, 2\u00d7 and 4\u00d7 controls while freeing vertical camera space."
+        "Retain pinch zoom and the 1×, 2× and 4× controls while freeing vertical camera space."
       ]
     },
     {
@@ -25,7 +35,7 @@
       "build": "7",
       "title": "Camera view zoom",
       "changes": [
-        "Pinch to magnify the live view from 1\u00d7 to 4\u00d7, or use the 1\u00d7, 2\u00d7 and 4\u00d7 buttons.",
+        "Pinch to magnify the live view from 1× to 4×, or use the 1×, 2× and 4× buttons.",
         "Keep tag outlines and pose axes aligned, with measurement taps mapped back to the original image.",
         "Keep original camera frames, LiDAR samples and pose calculations unchanged; view zoom does not switch lenses or add optical detail."
       ]

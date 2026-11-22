@@ -85,7 +85,11 @@ enum TagFloorHeight {
         guard height.isFinite, height >= 0 else { return unavailable("invalidFloorIntersection") }
         let basis: [String: Any] = ["id": floor.id, "originWorldMeters": SpatialMeasurementMath.array(floor.origin),
             "normalWorld": SpatialMeasurementMath.array(floor.normal), "frameId": floor.frameID, "timestamp": floor.timestamp,
-            "segmentId": floor.segmentID, "classification": floor.classification, "operatorConfirmed": true]
+            "segmentId": floor.segmentID, "classification": floor.classification, "operatorConfirmed": true,
+            "observedNormalWorld": SpatialMeasurementMath.array(floor.observedNormal), "levelFloorWithGravity": floor.levelFloorWithGravity,
+            "tiltSource": floor.tiltSource, "tiltAvailable": floor.observedTiltDegrees != nil,
+            "observedTiltDegrees": floor.observedTiltDegrees as Any? ?? NSNull(), "effectiveTiltDegrees": floor.effectiveTiltDegrees as Any? ?? NSNull(),
+            "floorFit": floor.floorFit as Any? ?? NSNull()]
         output.merge(["available": true, "meters": height, "source": source,
             "reason": source == "sceneDepth" ? "valid" : "poseFallbackMissingDepth", "floor": basis,
             "worldMeters": SpatialMeasurementMath.array(world), "floorFootWorldMeters": SpatialMeasurementMath.array(foot),

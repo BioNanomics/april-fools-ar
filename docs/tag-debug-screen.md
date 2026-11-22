@@ -4,11 +4,15 @@ The debug screen compares two estimates from the same AR camera frame: the pose 
 
 ## Using it
 
-**Tag debug** is the default live view. The camera fills the available preview area; the debug readout floats over it instead of reserving a separate panel below it. Small live cards show every detected tag's floor height, LiDAR camera range and tag-geometry camera range. The default selected-tag bar is 44 points high and shows identity, validity and timing. Tap **Details** for translation, orientation, raw pose/LiDAR Z, their difference, angles, range and decoder quality; tap **Collapse** to return to the compact view. Expanding does not crop, resize or change the camera's projection.
+**Tag debug** is the default live view. The camera fills the available preview area; the debug readout floats over it instead of reserving a separate panel below it. Small live cards show every detected tag's floor height and an aligned **Distance** comparison for **LiDAR** and **Tag**. These are straight-line camera-to-tag-center distances, including horizontal/vertical offset. **LiDAR Δ** appears only when their absolute difference exceeds **Settings → Distance delta threshold (cm)** (15 cm by default). Missing estimates do not produce a delta. The default selected-tag bar is 44 points high and shows identity, validity and timing. Tap **Details** for translation, orientation, raw pose/LiDAR Z, their difference, angles, distance and decoder quality; tap **Collapse** to return to the compact view. Expanding does not crop, resize or change the camera's projection.
 
 Tag outlines, four corner points and IDs remain on the camera image. Tap a tag to inspect it; otherwise the view chooses a tag near the image center. Only the Details/Collapse button consumes overlay touches; the remaining overlay area allows tag selection beneath it. **Measure** opens floor selection and the manual distance/height tools.
 
 **Automatic floor height:** enter Measure and scan the floor. A classified floor can be highlighted automatically; tap the correct floor if needed. Press **Done** when coverage and tracking are ready, then return to Tag debug. Every usable detected tag shows its estimated center height beside its ID without a per-tag tap. The selected-tag readout identifies **LiDAR** or **Pose** as the source. LiDAR uses the accepted depth at the detected center; the pose fallback depends on the configured physical tag width. Height is vertical above the confirmed floor plane, including when that plane is slightly sloped. These are estimates, not independently verified physical dimensions. Missing/invalid input displays an unavailable height, and resetting the AR coordinate segment requires selecting the floor again. Automatic tag heights do not create persistent manual measurement vectors.
+
+Each usable tag also gets a live world-space height vector from its floor intersection to the tag center, with the height label halfway along the vector. It remains vertical with gravity, even if the detected floor is slightly tilted. These live vectors reproject as the camera moves and clear when their source detection expires, tracking is lost or the floor changes. Existing manually saved measurements retain their separate persistence.
+
+The camera view shows the **detected floor tilt** in degrees from horizontal. The estimate comes from a robust fit to usable LiDAR samples across the selected floor; insufficient coverage or inconsistent depth shows **tilt unavailable**. ARKit's horizontal plane anchors are already constrained to be level, so their rotation alone cannot establish physical floor tilt. **Settings → Level floor with gravity** is off by default. Turning it on uses a horizontal measurement plane at the selected floor's center elevation; the original tilt remains visible. Turning it off restores the detected floor plane. Apply the setting to change the current reference and save the preference. Completed manual measurements keep their original floor and values. During floor setup, leveling applies only after Done.
 
 Enable **Show pose axes** in Settings and apply the change to draw a tag-centered pose gizmo: red **X**, green **Y**, blue **Z**. The axes use the solved tag-to-camera pose and the same frame's camera intrinsics, then the same image-to-screen transform as the tag corners. Each axis is half a tag width long. These are tag-local axes, not gravity or field axes; a direction pointing toward/away from the camera can appear foreshortened. The option defaults off and is saved on the phone.
 
@@ -23,6 +27,8 @@ Open **Settings** to edit:
 | Physical tag width | 165.1 mm / 6.5 inches |
 | Maximum range | 5 m |
 | Maximum plane incidence angle | 60° |
+| Distance delta display threshold | 15 cm |
+| Level floor with gravity | Off |
 | Depth mismatch warning | 10 cm |
 | Depth mismatch rejection | 15 cm |
 | Maximum corner reprojection RMS | 3 pixels |
@@ -37,7 +43,7 @@ You can type a measured width or choose **Measure tag width with AR**. For an AR
 - These axes refer to the captured sensor image before the UI's portrait rotation/cropping. Roll/pitch/yaw are camera-relative tag orientation, not compass or gravity-referenced phone attitude.
 - The solver uses the matching ARKit intrinsics with a zero-skew pinhole model; it does not apply a separately measured lens-distortion calibration.
 - Rotation is the tag-to-optical-camera matrix. Displayed angles use **R = Rz(yaw) Ry(pitch) Rx(roll)**, in degrees. The matrix is authoritative near Euler singularities.
-- **Pose Z** is forward camera-plane depth. **Range** is the Euclidean length of the translation vector. They differ for a tag away from the image center.
+- **Pose Z** is forward camera-plane depth. **Distance** (range) is the Euclidean length of the translation vector. They differ for a tag away from the image center.
 - **LiDAR center** is the matching-frame scene-depth sample at the detected tag center. The separate small-neighborhood mean includes only finite, positive, accepted-confidence samples; it does not silently replace a missing center sample.
 - **Depth difference** is `abs(LiDAR center − pose Z)`. Green is at/below the warning threshold, amber is above warning through rejection, and red is above rejection. Missing or unusable data is neutral, not green.
 - **Plane angle** is the angle between the tag-plane normal and the line of sight: 0° is head-on, 90° is edge-on. It drives the angle gate. **Center bearing** is the angle of the translation vector away from the optical axis and is shown separately.

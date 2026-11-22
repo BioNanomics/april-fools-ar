@@ -17,11 +17,29 @@ struct SpatialPlane {
     let segmentID: String
     let frameID: String
     let timestamp: Double
+    let observedNormal: SIMD3<Float>
+    let levelFloorWithGravity: Bool
+    let tiltSource: String
+    let floorFit: [String: Any]?
+    init(id: String, classification: String, origin: SIMD3<Float>, normal: SIMD3<Float>, vertices: [SIMD3<Float>],
+         segmentID: String, frameID: String, timestamp: Double, observedNormal: SIMD3<Float>? = nil,
+         levelFloorWithGravity: Bool = false, tiltSource: String = "unavailable", floorFit: [String: Any]? = nil) {
+        self.id = id; self.classification = classification; self.origin = origin; self.normal = normal; self.vertices = vertices
+        self.segmentID = segmentID; self.frameID = frameID; self.timestamp = timestamp
+        self.observedNormal = observedNormal ?? normal; self.levelFloorWithGravity = levelFloorWithGravity
+        self.tiltSource = tiltSource; self.floorFit = floorFit
+    }
+    var observedTiltDegrees: Double? { tiltSource == "sceneDepth-plane-fit" ? SpatialMeasurementMath.floorTiltDegrees(observedNormal) : nil }
+    var effectiveTiltDegrees: Double? { levelFloorWithGravity ? 0 : observedTiltDegrees }
     var dictionary: [String: Any] {
         ["id": id, "classification": classification, "originWorldMeters": SpatialMeasurementMath.array(origin),
          "normalWorld": SpatialMeasurementMath.array(normal), "boundaryWorldMeters": vertices.map(SpatialMeasurementMath.array),
          "segmentId": segmentID, "frameId": frameID, "timestamp": timestamp,
-         "source": "ARPlaneAnchor", "operatorConfirmed": false]
+         "source": tiltSource == "sceneDepth-plane-fit" ? "ARPlaneAnchor+sceneDepth-plane-fit" : "ARPlaneAnchor", "operatorConfirmed": false,
+         "observedNormalWorld": SpatialMeasurementMath.array(observedNormal), "levelFloorWithGravity": levelFloorWithGravity,
+         "tiltSource": tiltSource, "tiltAvailable": observedTiltDegrees != nil,
+         "observedTiltDegrees": observedTiltDegrees as Any? ?? NSNull(), "effectiveTiltDegrees": effectiveTiltDegrees as Any? ?? NSNull(),
+         "floorFit": floorFit as Any? ?? NSNull()]
     }
 }
 
@@ -52,6 +70,19 @@ struct SpatialMeasurement {
 enum SpatialMeasurementMath {
     static func array(_ point: SIMD3<Float>) -> [Double] { [Double(point.x), Double(point.y), Double(point.z)] }
     static func finite(_ point: SIMD3<Float>) -> Bool { point.x.isFinite && point.y.isFinite && point.z.isFinite }
+    static func floorTiltDegrees(_ normal: SIMD3<Float>) -> Double? {
+        guard finite(normal) else { return nil }
+        let lateral = hypot(Double(normal.x), Double(normal.z)), vertical = abs(Double(normal.y))
+        guard lateral > 0 || vertical > 0 else { return nil }
+        return atan2(lateral, vertical) * 180 / .pi
+    }
+    static func effectiveFloor(_ observed: SpatialPlane, levelWithGravity: Bool) -> SpatialPlane {
+        guard levelWithGravity else { return observed }
+        return SpatialPlane(id: observed.id, classification: observed.classification, origin: observed.origin,
+            normal: SIMD3<Float>(0, 1, 0), vertices: observed.vertices.map { SIMD3<Float>($0.x, observed.origin.y, $0.z) },
+            segmentID: observed.segmentID, frameID: observed.frameID, timestamp: observed.timestamp,
+            observedNormal: observed.observedNormal, levelFloorWithGravity: true, tiltSource: observed.tiltSource, floorFit: observed.floorFit)
+    }
     /// Horizontal coverage, with a rotation-invariant minimum width to reject long narrow strips.
     static func floorCoverage(_ plane: SpatialPlane) -> (areaSquareMeters: Double, minSpanMeters: Double) {
         guard plane.vertices.count >= 3, plane.vertices.allSatisfy(finite), let origin = plane.vertices.first else { return (0, 0) }
@@ -102,10 +133,17 @@ struct SpatialMeasurementState {
     private var manualCandidateID: String?
     private(set) var pending = [SpatialPoint]()
     private(set) var completed = [SpatialMeasurement]()
-    private(set) var floor: SpatialPlane?
+    private(set) var observedFloor: SpatialPlane?
+    private(set) var levelFloorWithGravity: Bool
+    var floor: SpatialPlane? { observedFloor.map { SpatialMeasurementMath.effectiveFloor($0, levelWithGravity: levelFloorWithGravity) } }
     let maximumCount: Int
-    init(segmentID: String, maximumCount: Int = 50) {
+    init(segmentID: String, maximumCount: Int = 50, levelFloorWithGravity: Bool = false) {
         self.segmentID = segmentID; self.maximumCount = max(1, min(50, maximumCount))
+        self.levelFloorWithGravity = levelFloorWithGravity
+    }
+    mutating func setFloorLeveling(_ enabled: Bool) {
+        guard enabled != levelFloorWithGravity else { return }
+        levelFloorWithGravity = enabled; clearPending()
     }
     mutating func setMode(_ requested: SpatialMode) {
         clearPending()
@@ -164,7 +202,7 @@ struct SpatialMeasurementState {
         guard status["ready"] as? Bool == true else {
             throw SpatialMeasurementMath.SpatialError.invalid("Scan a larger floor patch (at least 1.0 m² and 0.5 m wide), then tap Done.")
         }
-        floor = latest; candidate = nil; manualCandidateID = nil; candidateSelectionSource = "none"
+        observedFloor = latest; candidate = nil; manualCandidateID = nil; candidateSelectionSource = "none"
         clearPending(); mode = requestedMode
     }
     private func validCandidate(_ plane: SpatialPlane) -> Bool {
@@ -211,7 +249,7 @@ struct SpatialMeasurementState {
     mutating func clearPending() { pending.removeAll() }
     mutating func clearMeasurements() { clearPending(); completed.removeAll() }
     mutating func reset(segmentID: String) {
-        self.segmentID = segmentID; clearMeasurements(); floor = nil
+        self.segmentID = segmentID; clearMeasurements(); observedFloor = nil
         mode = .selectFloor; candidate = nil; manualCandidateID = nil; currentCandidates = [:]; candidateSelectionSource = "none"
     }
 }

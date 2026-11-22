@@ -22,7 +22,7 @@ enum TagCameraRanges {
     }
 
     static func evaluate(_ detection: [String: Any], context: TagCameraRangesContext) -> [String: Any] {
-        var result: [String: Any] = ["lidarRangeMeters": NSNull(), "tagRangeMeters": NSNull(),
+        var result: [String: Any] = ["lidarRangeMeters": NSNull(), "tagRangeMeters": NSNull(), "distanceDeltaMeters": NSNull(),
             "lidarDepthZMeters": NSNull(), "tagDepthZMeters": NSNull(), "lidarAvailable": false, "tagAvailable": false,
             "lidarReason": "missingDepth", "tagReason": "poseUnavailable", "frameId": context.frameID,
             "segmentId": context.segmentID, "timestamp": context.timestamp.isFinite ? context.timestamp as Any : NSNull(),
@@ -53,6 +53,10 @@ enum TagCameraRanges {
         let optical = [(center[0]-cx)/fx*z, (center[1]-cy)/fy*z, z]
         guard let range = length(optical) else { result["lidarReason"] = "invalidRange"; return result }
         result["lidarRangeMeters"] = range; result["lidarAvailable"] = true; result["lidarReason"] = "valid"
+        if result["tagAvailable"] as? Bool == true, let tagRange = scalar(result["tagRangeMeters"]), tagRange > 0 {
+            let delta = abs(range-tagRange)
+            if delta.isFinite { result["distanceDeltaMeters"] = delta }
+        }
         return result
     }
 

@@ -10,7 +10,7 @@ final class AprilTagOverlayView: UIView {
     private var sourceFrameID: String?
     private var outlineLayers = [CAShapeLayer]()
     private var cornerLayers = [CAShapeLayer]()
-    private var tagLabels = [UILabel]()
+    private var tagLabels = [TagReadoutCard]()
     private var axisLayers = [CAShapeLayer]()
     private var axisLabels = [UILabel]()
     private var hitPaths = [(Int, UIBezierPath)]()
@@ -50,7 +50,7 @@ final class AprilTagOverlayView: UIView {
     /// Intrinsics are [fx, fy, cx, cy] in the analyzed source image's pixels.
     /// Pose R maps tag coordinates to optical camera coordinates (+X right, +Y down, +Z forward).
     /// The default axis length is half the calibrated tag width; no 2D-only pose is synthesized.
-    func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, axisLengthMeters: Double? = nil, showImperialHeight: Bool = true) {
+    func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, axisLengthMeters: Double? = nil, showImperialHeight: Bool = true, distanceDeltaThresholdMeters: Double = 0.15) {
         let remaining = expiresAt - ProcessInfo.processInfo.systemUptime
         guard remaining > 0, imageSize.width.isFinite, imageSize.height.isFinite,
               imageSize.width > 0, imageSize.height > 0, bounds.width.isFinite, bounds.height.isFinite,
@@ -93,16 +93,13 @@ final class AprilTagOverlayView: UIView {
             cornerLayers.removeLast().removeFromSuperlayer()
         }
         while tagLabels.count < rendered.count {
-            let shape = CAShapeLayer(), corners = CAShapeLayer(), label = UILabel()
+            let shape = CAShapeLayer(), corners = CAShapeLayer(), label = TagReadoutCard()
             shape.lineJoin = .round
             corners.lineWidth = 1; corners.strokeColor = UIColor.black.cgColor
             layer.addSublayer(shape); layer.addSublayer(corners)
             outlineLayers.append(shape); cornerLayers.append(corners)
-            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
             label.layer.cornerRadius = 5; label.clipsToBounds = true
             label.backgroundColor = UIColor.black.withAlphaComponent(0.76)
-            label.numberOfLines = 3; label.lineBreakMode = .byTruncatingTail
-            label.adjustsFontSizeToFitWidth = true; label.minimumScaleFactor = 0.9
             label.isAccessibilityElement = true
             addSubview(label); tagLabels.append(label)
         }
@@ -141,14 +138,13 @@ final class AprilTagOverlayView: UIView {
             for point in points { dots.append(UIBezierPath(ovalIn: CGRect(x: point.x-4, y: point.y-4, width: 8, height: 8))) }
             cornerLayers[index].path = dots.cgPath; cornerLayers[index].fillColor = color.cgColor
             let label = tagLabels[index]
-            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, cameraRanges: cameraRanges, showImperialHeight: showImperialHeight)
-            label.textColor = color
+            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, cameraRanges: cameraRanges, showImperialHeight: showImperialHeight, distanceDeltaThresholdMeters: distanceDeltaThresholdMeters)
+            label.setTextColor(color)
             label.layer.borderColor = color.withAlphaComponent(0.85).cgColor
             label.layer.borderWidth = id == selectedID ? 1.5 : 0.75
-            let natural = label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
-            let cardSize = CGSize(width: min(max(140, natural.width + 4), 260, max(0, bounds.width - 12)),
-                                  height: min(ceil(label.font.lineHeight * 3) + 8, bounds.height))
+            let cardSize = label.preferredSize(maximumWidth: max(0, bounds.width - 12), maximumHeight: bounds.height)
             label.frame = placeCard(size: cardSize, around: tagRects[index], occupied: placedCards, tags: tagRects)
+            label.setNeedsLayout(); label.layoutIfNeeded()
             placedCards.append(label.frame)
             let start = Self.nearestPoint(in: tagRects[index], to: CGPoint(x: label.frame.midX, y: label.frame.midY))
             let end = Self.nearestPoint(in: label.frame, to: CGPoint(x: tagRects[index].midX, y: tagRects[index].midY))
@@ -196,7 +192,7 @@ final class AprilTagOverlayView: UIView {
         }
     }
 
-    private func configure(_ label: UILabel, id: Int, selected: Bool, floorHeight: [String: Any]?, cameraRanges: [String: Any]?, showImperialHeight: Bool) {
+    private func configure(_ label: TagReadoutCard, id: Int, selected: Bool, floorHeight: [String: Any]?, cameraRanges: [String: Any]?, showImperialHeight: Bool, distanceDeltaThresholdMeters: Double) {
         let prefix = selected ? "◆ #\(id)" : "#\(id)"
         label.accessibilityIdentifier = "apriltag.label.\(id)"
         label.accessibilityLabel = "AprilTag \(id)"
@@ -205,7 +201,11 @@ final class AprilTagOverlayView: UIView {
         let source = floorHeight["source"] as? String ?? "unavailable"
         let sourceName = source == "sceneDepth" ? "LiDAR depth" : (source == "tagPose" ? "optical tag pose" : "unavailable or unrecognized")
         let reason = floorHeight["reason"] as? String ?? "No current floor-height estimate"
-        let suppliedAvailable = floorHeight["available"] as? Bool == true
+        func isTrue(_ value: Any?) -> Bool {
+            guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return false }
+            return number.boolValue
+        }
+        let suppliedAvailable = isTrue(floorHeight["available"])
         let raw = floorHeight["meters"] as? NSNumber
         let meters = raw?.doubleValue ?? .nan
         let valid = suppliedAvailable && raw.map { CFGetTypeID($0) != CFBooleanGetTypeID() } == true &&
@@ -220,19 +220,38 @@ final class AprilTagOverlayView: UIView {
             heightAccessibility = "Floor-relative tag center height unavailable. Source: \(sourceName). Reason: \(explanation)."
         }
         let ranges = cameraRanges ?? [:]
-        func range(_ key: String, available: String, reason: String, name: String) -> (String, String) {
+        func range(_ key: String, available: String, reason: String, name: String) -> (String, Double?, String) {
             let value = ranges[key] as? NSNumber
             let meters = value?.doubleValue ?? .nan
-            if ranges[available] as? Bool == true, let value, CFGetTypeID(value) != CFBooleanGetTypeID(),
+            if isTrue(ranges[available]), let value, CFGetTypeID(value) != CFBooleanGetTypeID(),
                meters.isFinite, meters > 0, let formatted = HeightDisplayFormatter.string(meters: meters, showImperial: showImperialHeight) {
-                return (formatted, "\(name) camera range available: \(formatted).")
+                return (formatted, meters, "\(name) camera range available: \(formatted).")
             }
-            return ("—", "\(name) camera range unavailable. Reason: \(ranges[reason] as? String ?? "No current range estimate").")
+            return ("—", nil, "\(name) camera range unavailable. Reason: \(ranges[reason] as? String ?? "No current range estimate").")
         }
         let lidar = range("lidarRangeMeters", available: "lidarAvailable", reason: "lidarReason", name: "LiDAR")
         let tag = range("tagRangeMeters", available: "tagAvailable", reason: "tagReason", name: "Tag pose")
-        label.text = " \(prefix) · H \(heightText) \n LiDAR \(lidar.0) \n Tag \(tag.0) "
-        label.accessibilityValue = heightAccessibility + " " + lidar.1 + " " + tag.1
+        var deltaText: String?
+        if let lidarMeters = lidar.1, let tagMeters = tag.1, distanceDeltaThresholdMeters.isFinite,
+           distanceDeltaThresholdMeters >= 0 {
+            let computed = abs(lidarMeters - tagMeters)
+            let supplied = ranges["distanceDeltaMeters"] as? NSNumber
+            let delta = supplied.flatMap { number -> Double? in
+                let value = number.doubleValue
+                guard CFGetTypeID(number) != CFBooleanGetTypeID(), value.isFinite, value >= 0,
+                      abs(value - computed) <= 1e-9 * max(1, computed) else { return nil }
+                return value
+            } ?? computed
+            if delta > distanceDeltaThresholdMeters {
+                deltaText = HeightDisplayFormatter.string(meters: delta, showImperial: showImperialHeight)
+            }
+        }
+        label.setContent(id: id, summary: "\(prefix) · H \(heightText)", lidar: lidar.0, tag: tag.0,
+                         delta: deltaText, showImperial: showImperialHeight)
+        label.accessibilityValue = heightAccessibility + " Distance. " + lidar.2 + " " + tag.2
+        if let deltaText {
+            label.accessibilityValue = (label.accessibilityValue ?? "") + " Absolute LiDAR versus Tag camera range difference: \(deltaText)."
+        }
     }
 
     private static func enclosingRect(_ points: [CGPoint]) -> CGRect {
@@ -247,9 +266,12 @@ final class AprilTagOverlayView: UIView {
     private func placeCard(size: CGSize, around tag: CGRect, occupied: [CGRect], tags: [CGRect]) -> CGRect {
         let gap: CGFloat = 6
         let horizontalMargin = min(gap, max(0, (bounds.width - size.width) / 2))
-        let desiredReserve: CGFloat = bounds.height >= size.height + 140 ? 64 : gap
-        let reserve = min(desiredReserve, max(0, (bounds.height - size.height) / 2))
-        let area = CGRect(x: horizontalMargin, y: reserve, width: max(0, bounds.width - horizontalMargin * 2), height: max(0, bounds.height - reserve * 2))
+        let normalHeight = bounds.height >= size.height + 160
+        let desiredTop: CGFloat = normalHeight ? 88 : gap
+        let desiredBottom: CGFloat = normalHeight ? 64 : gap
+        let reserveScale = min(CGFloat(1), max(0, bounds.height - size.height) / (desiredTop + desiredBottom))
+        let top = desiredTop * reserveScale, bottom = desiredBottom * reserveScale
+        let area = CGRect(x: horizontalMargin, y: top, width: max(0, bounds.width - horizontalMargin * 2), height: max(0, bounds.height - top - bottom))
         func clamped(_ point: CGPoint) -> CGRect {
             CGRect(x: max(area.minX, min(area.maxX - size.width, point.x)),
                    y: max(area.minY, min(area.maxY - size.height, point.y)), width: size.width, height: size.height)
@@ -306,5 +328,97 @@ final class AprilTagOverlayView: UIView {
         guard let origin = project(t[0], t[1], t[2]) else { return nil }
         let endpoints = (0..<3).map { axis in project(t[0] + length * r[axis], t[1] + length * r[3 + axis], t[2] + length * r[6 + axis]) }
         return PoseAxisProjection(origin: origin, endpoints: endpoints)
+    }
+}
+
+/// One reusable card per detection. Metric values share a right-aligned column;
+/// optional English units have their own column, so their varying lengths never move the cm decimals.
+private final class TagReadoutCard: UIView {
+    private let summaryLabel = UILabel()
+    private let headingLabel = UILabel()
+    private let sourceLabels = (0..<3).map { _ in UILabel() }
+    private let metricLabels = (0..<3).map { _ in UILabel() }
+    private let englishLabels = (0..<3).map { _ in UILabel() }
+    private var hasDelta = false
+    private var hasEnglish = false
+    private let rowHeight: CGFloat = 15
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        let labels = [summaryLabel, headingLabel] + sourceLabels + metricLabels + englishLabels
+        for label in labels {
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            label.numberOfLines = 1
+            label.lineBreakMode = .byTruncatingTail
+            label.adjustsFontSizeToFitWidth = true; label.minimumScaleFactor = 0.9
+            label.isAccessibilityElement = false
+            addSubview(label)
+        }
+        headingLabel.text = "Distance"
+        for label in metricLabels { label.textAlignment = .right }
+        sourceLabels[0].text = "LiDAR"; sourceLabels[1].text = "Tag"; sourceLabels[2].text = "LiDAR Δ"
+        isUserInteractionEnabled = false
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, showImperial: Bool) {
+        summaryLabel.text = summary
+        summaryLabel.accessibilityIdentifier = "apriltag.summary.\(id)"
+        headingLabel.accessibilityIdentifier = "apriltag.distanceHeading.\(id)"
+        let names = ["lidar", "tag", "delta"]
+        let values = [lidar, tag, delta ?? "—"]
+        hasDelta = delta != nil
+        hasEnglish = false
+        for index in 0..<3 {
+            let parts = values[index].components(separatedBy: " (")
+            metricLabels[index].text = parts.first ?? "—"
+            let english = showImperial && parts.count == 2 ? "(" + parts[1] : ""
+            englishLabels[index].text = english
+            let visible = index < 2 || hasDelta
+            sourceLabels[index].isHidden = !visible
+            metricLabels[index].isHidden = !visible
+            englishLabels[index].isHidden = !visible || english.isEmpty
+            hasEnglish = hasEnglish || (visible && !english.isEmpty)
+            sourceLabels[index].accessibilityIdentifier = "apriltag.\(names[index])Title.\(id)"
+            metricLabels[index].accessibilityIdentifier = "apriltag.\(names[index])Metric.\(id)"
+            englishLabels[index].accessibilityIdentifier = "apriltag.\(names[index])English.\(id)"
+        }
+        setNeedsLayout()
+    }
+
+    func setTextColor(_ color: UIColor) {
+        ([summaryLabel, headingLabel] + sourceLabels + metricLabels + englishLabels).forEach { $0.textColor = color }
+        if hasDelta {
+            [sourceLabels[2], metricLabels[2], englishLabels[2]].forEach { $0.textColor = .systemOrange }
+        }
+    }
+
+    func preferredSize(maximumWidth: CGFloat, maximumHeight: CGFloat) -> CGSize {
+        let width = hasEnglish ? 260 : max(150, min(260, summaryLabel.intrinsicContentSize.width + 12))
+        return CGSize(width: min(width, maximumWidth), height: min(rowHeight * (hasDelta ? 5 : 4) + 8, maximumHeight))
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let padding = min(CGFloat(6), bounds.width / 2)
+        let inner = max(0, bounds.width - padding * 2)
+        func frame(x: CGFloat, y: CGFloat, width: CGFloat) -> CGRect {
+            let top = min(bounds.height, y)
+            return CGRect(x: x, y: top, width: max(0, width), height: max(0, min(rowHeight, bounds.height - top)))
+        }
+        summaryLabel.frame = frame(x: padding, y: 4, width: inner)
+        headingLabel.frame = frame(x: padding, y: 4 + rowHeight, width: inner)
+        let sourceWidth = min(CGFloat(54), inner * 0.24)
+        let gap = min(CGFloat(4), max(0, inner - sourceWidth) / 2)
+        let metricX = padding + sourceWidth + gap
+        let metricWidth = hasEnglish ? min(CGFloat(72), max(0, inner - sourceWidth - gap)) : max(0, inner - sourceWidth - gap)
+        let englishX = min(bounds.width - padding, metricX + metricWidth + gap)
+        let englishWidth = max(0, bounds.width - padding - englishX)
+        for index in 0..<3 {
+            let y = 4 + rowHeight * CGFloat(index + 2)
+            sourceLabels[index].frame = frame(x: padding, y: y, width: sourceWidth)
+            metricLabels[index].frame = frame(x: metricX, y: y, width: metricWidth)
+            englishLabels[index].frame = frame(x: englishX, y: y, width: englishWidth)
+        }
     }
 }

@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "0.3.2",
+      "build": "14",
+      "title": "Distance comparison and floor height tools",
+      "changes": [
+        "Group LiDAR and tag-geometry readings under Distance with aligned numbers for direct comparison.",
+        "Show LiDAR delta only above a saved, configurable distance difference threshold; default 15 cm.",
+        "Draw each usable tag’s vertical height from the confirmed floor to its center, with the height label midway along the vector.",
+        "Show the detected floor tilt and optionally level the measurement floor with gravity while preserving original measurements."
+      ]
+    },
+    {
       "version": "0.3.1",
       "build": "13",
       "title": "Guided floor setup before measuring",

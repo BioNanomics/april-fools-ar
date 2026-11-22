@@ -13,16 +13,18 @@ struct TagDebugSettings: Codable, Equatable {
     var maxPlaneAngleDegrees = 60.0
     var warningDepthDifferenceMeters = 0.10
     var rejectDepthDifferenceMeters = 0.15
+    var distanceDeltaThresholdMeters = 0.15
     var maxReprojectionErrorPixels = 3.0
     var tagSizeSource = "frc-default"
     var showPoseAxes = false
     var showImperialHeight = true
+    var levelFloorWithGravity = false
     static let defaultsKey = "AprilFoolsAR.TagDebugSettings.v1"
     static let tagSizeEvidenceKey = "AprilFoolsAR.TagSizeEvidence.v1"
 
     private enum CodingKeys: String, CodingKey {
         case tagSizeMeters, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
-        case rejectDepthDifferenceMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes, showImperialHeight
+        case rejectDepthDifferenceMeters, distanceDeltaThresholdMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes, showImperialHeight, levelFloorWithGravity
     }
     init() {}
     init(from decoder: Decoder) throws {
@@ -33,27 +35,32 @@ struct TagDebugSettings: Codable, Equatable {
         maxPlaneAngleDegrees = try values.decodeIfPresent(Double.self, forKey: .maxPlaneAngleDegrees) ?? maxPlaneAngleDegrees
         warningDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .warningDepthDifferenceMeters) ?? warningDepthDifferenceMeters
         rejectDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .rejectDepthDifferenceMeters) ?? rejectDepthDifferenceMeters
+        distanceDeltaThresholdMeters = try values.decodeIfPresent(Double.self, forKey: .distanceDeltaThresholdMeters) ?? distanceDeltaThresholdMeters
         maxReprojectionErrorPixels = try values.decodeIfPresent(Double.self, forKey: .maxReprojectionErrorPixels) ?? maxReprojectionErrorPixels
         tagSizeSource = try values.decodeIfPresent(String.self, forKey: .tagSizeSource) ?? tagSizeSource
         showPoseAxes = try values.decodeIfPresent(Bool.self, forKey: .showPoseAxes) ?? false
         showImperialHeight = try values.decodeIfPresent(Bool.self, forKey: .showImperialHeight) ?? true
+        levelFloorWithGravity = try values.decodeIfPresent(Bool.self, forKey: .levelFloorWithGravity) ?? false
     }
 
     var dictionary: [String: Any] {
         ["tagSizeMeters": tagSizeMeters, "maxDistanceMeters": maxDistanceMeters,
          "maxPlaneAngleDegrees": maxPlaneAngleDegrees, "warningDepthDifferenceMeters": warningDepthDifferenceMeters,
-         "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
-         "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes, "showImperialHeight": showImperialHeight]
+         "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "distanceDeltaThresholdMeters": distanceDeltaThresholdMeters,
+         "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
+         "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes, "showImperialHeight": showImperialHeight,
+         "levelFloorWithGravity": levelFloorWithGravity]
     }
     func merging(_ changes: [String: Any]) throws -> TagDebugSettings {
         var result = self
         for (key, value) in changes {
-            if key == "showPoseAxes" || key == "showImperialHeight" {
+            if key == "showPoseAxes" || key == "showImperialHeight" || key == "levelFloorWithGravity" {
                 guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
                     throw TagDebugError.invalid("\(key) must be a boolean.")
                 }
                 if key == "showPoseAxes" { result.showPoseAxes = number.boolValue }
-                else { result.showImperialHeight = number.boolValue }
+                else if key == "showImperialHeight" { result.showImperialHeight = number.boolValue }
+                else { result.levelFloorWithGravity = number.boolValue }
                 continue
             }
             guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else {
@@ -68,6 +75,7 @@ struct TagDebugSettings: Codable, Equatable {
             case "maxPlaneAngleDegrees": result.maxPlaneAngleDegrees = value
             case "warningDepthDifferenceMeters": result.warningDepthDifferenceMeters = value
             case "rejectDepthDifferenceMeters": result.rejectDepthDifferenceMeters = value
+            case "distanceDeltaThresholdMeters": result.distanceDeltaThresholdMeters = value
             case "maxReprojectionErrorPixels": result.maxReprojectionErrorPixels = value
             default: throw TagDebugError.invalid("Unknown debug setting: \(key)")
             }
@@ -76,8 +84,9 @@ struct TagDebugSettings: Codable, Equatable {
               result.maxPlaneAngleDegrees > 0, result.maxPlaneAngleDegrees <= 90,
               result.warningDepthDifferenceMeters >= 0, result.rejectDepthDifferenceMeters > 0,
               result.warningDepthDifferenceMeters < result.rejectDepthDifferenceMeters, result.rejectDepthDifferenceMeters <= 10,
+              (0...10).contains(result.distanceDeltaThresholdMeters),
               result.maxReprojectionErrorPixels > 0, result.maxReprojectionErrorPixels <= 100 else {
-            throw TagDebugError.invalid("Settings out of range: positive size/distance/error, plane angle 0–90°, and 0 ≤ warning < reject depth difference are required.")
+            throw TagDebugError.invalid("Settings out of range: positive size/distance/error, plane angle 0–90°, 0 ≤ warning < reject depth difference, and distance delta threshold 0–10 m are required.")
         }
         return result
     }

@@ -18,10 +18,12 @@ export type DebugSettings = {
   maxPlaneAngleDegrees: number;
   warningDepthDifferenceMeters: number;
   rejectDepthDifferenceMeters: number;
+  distanceDeltaThresholdMeters: number;
   maxReprojectionErrorPixels: number;
   tagSizeSource?: string;
   showPoseAxes?: boolean;
   showImperialHeight?: boolean;
+  levelFloorWithGravity?: boolean;
 };
 
 export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
@@ -30,14 +32,19 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   maxPlaneAngleDegrees: 60,
   warningDepthDifferenceMeters: 0.1,
   rejectDepthDifferenceMeters: 0.15,
+  distanceDeltaThresholdMeters: 0.15,
   maxReprojectionErrorPixels: 3,
   showPoseAxes: false,
   showImperialHeight: true,
+  levelFloorWithGravity: false,
 };
 
 type SettingsKey = Exclude<
   keyof DebugSettings,
-  'tagSizeSource' | 'showPoseAxes' | 'showImperialHeight'
+  | 'tagSizeSource'
+  | 'showPoseAxes'
+  | 'showImperialHeight'
+  | 'levelFloorWithGravity'
 >;
 const fields: {
   key: SettingsKey;
@@ -64,6 +71,12 @@ const fields: {
     hint: '0° is head-on; 90° is edge-on.',
   },
   {
+    key: 'distanceDeltaThresholdMeters',
+    label: 'Distance delta threshold (cm)',
+    scale: 100,
+    hint: 'Show LiDAR Δ only when the camera-to-tag distances differ by more than this.',
+  },
+  {
     key: 'warningDepthDifferenceMeters',
     label: 'Depth warning (cm)',
     scale: 100,
@@ -88,7 +101,13 @@ const makeDraft = (settings: DebugSettings) =>
   Object.fromEntries(
     fields.map(f => [
       f.key,
-      String(Number((settings[f.key] * f.scale).toFixed(4))),
+      String(
+        Number(
+          (
+            (settings[f.key] ?? DEFAULT_DEBUG_SETTINGS[f.key]) * f.scale
+          ).toFixed(4),
+        ),
+      ),
     ]),
   ) as Draft;
 
@@ -97,6 +116,12 @@ export function parseDebugSettings(draft: Draft): DebugSettings {
   for (const field of fields) {
     result[field.key] =
       Number(draft[field.key].trim().replace(',', '.')) / field.scale;
+  }
+  if (
+    result.distanceDeltaThresholdMeters < 0 ||
+    result.distanceDeltaThresholdMeters > 10
+  ) {
+    throw new Error('Distance delta threshold must be between 0 and 1,000 cm.');
   }
   if (
     fields.some(f => !draft[f.key].trim() || !Number.isFinite(result[f.key]))
@@ -150,12 +175,16 @@ export function DebugSettingsModal({
   const [showImperialHeight, setShowImperialHeight] = useState(
     initialSettings.showImperialHeight ?? true,
   );
+  const [levelFloorWithGravity, setLevelFloorWithGravity] = useState(
+    initialSettings.levelFloorWithGravity ?? false,
+  );
   useEffect(() => {
     if (visible) {
       setDraft(makeDraft(initialSettings));
       setResetToDefaults(false);
       setShowPoseAxes(initialSettings.showPoseAxes ?? false);
       setShowImperialHeight(initialSettings.showImperialHeight ?? true);
+      setLevelFloorWithGravity(initialSettings.levelFloorWithGravity ?? false);
     }
   }, [visible, initialSettings]);
   if (!visible) {
@@ -166,6 +195,7 @@ export function DebugSettingsModal({
       const values = parseDebugSettings(draft);
       values.showPoseAxes = showPoseAxes;
       values.showImperialHeight = showImperialHeight;
+      values.levelFloorWithGravity = levelFloorWithGravity;
       // Display rounding must not turn a threshold-only edit into a new tag width.
       if (
         !resetToDefaults &&
@@ -227,6 +257,22 @@ export function DebugSettingsModal({
                 disabled={saving}
               />
             </View>
+            <View style={s.toggleRow}>
+              <View style={s.toggleText}>
+                <Text style={s.label}>Level floor with gravity</Text>
+                <Text style={s.hint}>
+                  Use a horizontal floor at the selected floor's center height.
+                  The detected tilt stays visible. Existing measurements keep
+                  their original floor.
+                </Text>
+              </View>
+              <Switch
+                accessibilityLabel="Level floor with gravity"
+                value={levelFloorWithGravity}
+                onValueChange={setLevelFloorWithGravity}
+                disabled={saving}
+              />
+            </View>
             {fields.map(field => (
               <View key={field.key}>
                 <Text style={s.label}>{field.label}</Text>
@@ -264,6 +310,7 @@ export function DebugSettingsModal({
                 setResetToDefaults(true);
                 setShowPoseAxes(false);
                 setShowImperialHeight(true);
+                setLevelFloorWithGravity(false);
               }}
               disabled={saving}
             >

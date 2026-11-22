@@ -27,6 +27,7 @@
 		3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C953581979F4BA05C64FBA /* SpatialProjection.swift */; };
 		40B3ADBE9B5EC5EEAEEDDD59 /* AFTagCore.c in Sources */ = {isa = PBXBuildFile; fileRef = E8B8A96D63698D4255EFFE75 /* AFTagCore.c */; };
 		493E2B21D726B34BB0493700 /* image_u8x4.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E3A4C79448974334F594FA9 /* image_u8x4.c */; };
+		49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */; };
 		4F14051DCE23E152A6ED7597 /* LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = EA83DAE678B40D531BAF2FFD /* LICENSE.md */; };
 		5DDFA3666B7B838AA2F47CF0 /* ArchiveModuleBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E6DDB04829654A3469E2AA17 /* ArchiveModuleBridge.m */; };
 		5F59B54D8B242E409BEC4A6E /* ARCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */; };
@@ -34,7 +35,9 @@
 		629385028333213529D5993C /* image_u8x3.c in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE2087C434A7DAD20946AB /* image_u8x3.c */; };
 		665F5DA3657666D038C6E1C6 /* ARCaptureBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = FFCDC580B5E67BFA6CECFDDF /* ARCaptureBridge.m */; };
 		68542CCFC419D2394BD96422 /* SpatialMeasurements.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6EBBD3B87383B3A1BFDE6C /* SpatialMeasurements.swift */; };
+		685796467C7CC3EC8F0334C5 /* FloorPlaneFit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */; };
 		6D19E8AB0F211742B5288C32 /* SpatialMeasurementOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9AB4B7CE616FF1D8B634D3 /* SpatialMeasurementOverlayView.swift */; };
+		6FFD3039E5A429D33A29EBAC /* TagHeightVectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */; };
 		73D92B66C9BCFD1CD5E4F15D /* time_util.c in Sources */ = {isa = PBXBuildFile; fileRef = C163298A0F6DC8A250C20E13 /* time_util.c */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
@@ -72,6 +75,7 @@
 		13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagFloorHeight.swift; path = ARCapture/TagFloorHeight.swift; sourceTree = "<group>"; };
 		2540CE28C05CEEFC3ABC83FF /* pnm.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pnm.c; path = common/pnm.c; sourceTree = "<group>"; };
 		2597B3319AD2D1C5517C152B /* pthreads_cross.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pthreads_cross.c; path = common/pthreads_cross.c; sourceTree = "<group>"; };
+		2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagHeightVectors.swift; path = ARCapture/TagHeightVectors.swift; sourceTree = "<group>"; };
 		2E3A4C79448974334F594FA9 /* image_u8x4.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8x4.c; path = common/image_u8x4.c; sourceTree = "<group>"; };
 		2E44803935F6579A749699F8 /* zmaxheap.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zmaxheap.c; path = common/zmaxheap.c; sourceTree = "<group>"; };
 		322A348F58056FBE702D49EA /* svd22.c */ = {isa = PBXFileReference; includeInIndex = 1; name = svd22.c; path = common/svd22.c; sourceTree = "<group>"; };
@@ -91,6 +95,7 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AprilFoolsAR/AppDelegate.swift; sourceTree = "<group>"; };
 		761780EE2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = AprilFoolsAR/SceneDelegate.swift; sourceTree = "<group>"; };
 		78764DD7E780CABC9B355826 /* matd.c */ = {isa = PBXFileReference; includeInIndex = 1; name = matd.c; path = common/matd.c; sourceTree = "<group>"; };
+		788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FloorDepthSampler.swift; path = ARCapture/FloorDepthSampler.swift; sourceTree = "<group>"; };
 		78CED63F155DCD2DD5BCCAC8 /* homography.c */ = {isa = PBXFileReference; includeInIndex = 1; name = homography.c; path = common/homography.c; sourceTree = "<group>"; };
 		7F8DD804A45F21BC7D954794 /* unionfind.c */ = {isa = PBXFileReference; includeInIndex = 1; name = unionfind.c; path = common/unionfind.c; sourceTree = "<group>"; };
 		7FEE2087C434A7DAD20946AB /* image_u8x3.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8x3.c; path = common/image_u8x3.c; sourceTree = "<group>"; };
@@ -100,6 +105,7 @@
 		8B743D7F395310A75BDE0593 /* string_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = string_util.c; path = common/string_util.c; sourceTree = "<group>"; };
 		8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagDebugMath.swift; path = ARCapture/TagDebugMath.swift; sourceTree = "<group>"; };
 		9959BA1C7D343658916BEE71 /* NOTICE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = NOTICE.md; sourceTree = "<group>"; };
+		A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FloorPlaneFit.swift; path = ARCapture/FloorPlaneFit.swift; sourceTree = "<group>"; };
 		AF54B392AF6AF22FF9C87B16 /* workerpool.c */ = {isa = PBXFileReference; includeInIndex = 1; name = workerpool.c; path = common/workerpool.c; sourceTree = "<group>"; };
 		BC9AB4B7CE616FF1D8B634D3 /* SpatialMeasurementOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpatialMeasurementOverlayView.swift; path = ARCapture/SpatialMeasurementOverlayView.swift; sourceTree = "<group>"; };
 		BFE5AB4C89A6209CDF6E8F3E /* pam.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pam.c; path = common/pam.c; sourceTree = "<group>"; };
@@ -182,6 +188,9 @@
 				13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */,
 				3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */,
 				86ABD46FF465A30DB753B623 /* TagCameraRanges.swift */,
+				788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */,
+				A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */,
+				2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -487,6 +496,9 @@
 				623351B9B74E274B6984B4AD /* TagFloorHeight.swift in Sources */,
 				3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */,
 				FEF4CE2E105F63F5F7452DE1 /* TagCameraRanges.swift in Sources */,
+				49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */,
+				685796467C7CC3EC8F0334C5 /* FloorPlaneFit.swift in Sources */,
+				6FFD3039E5A429D33A29EBAC /* TagHeightVectors.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -500,7 +512,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -515,7 +527,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -539,7 +551,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -553,7 +565,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

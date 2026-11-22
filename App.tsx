@@ -64,6 +64,8 @@ type Status = {
     showFloorPlanes?: boolean;
     floorSelected?: boolean;
     floorId?: string;
+    floorTiltDegrees?: number | null;
+    levelFloorWithGravity?: boolean;
     candidateCount?: number;
     measurementCount?: number;
     lastMeasurement?: Measurement | null;
@@ -424,6 +426,21 @@ function CaptureApp() {
   const settingUpFloor = spatialMode === 'selectFloor';
   const floorSetup = status.spatial?.floorSetup;
   const floorSelected = status.spatial?.floorSelected ?? false;
+  const floorTilt = status.spatial?.floorTiltDegrees;
+  const floorTiltText =
+    floorSelected || floorSetup?.candidateSelected
+      ? `${settingUpFloor ? 'Detected floor tilt' : 'Floor tilt'} ${
+          floorTilt != null && Number.isFinite(floorTilt)
+            ? `≈${floorTilt.toFixed(1)}°`
+            : 'unavailable'
+        }${
+          status.spatial?.levelFloorWithGravity
+            ? settingUpFloor
+              ? ' · level on Done'
+              : ' · using level floor (0.0°)'
+            : ''
+        }`
+      : null;
   const floorVisible = status.spatial?.showFloorPlanes ?? true;
   const measurementCount = status.spatial?.measurementCount ?? 0;
   const tags = status.aprilTag;
@@ -595,6 +612,17 @@ function CaptureApp() {
                   ))}
                 </View>
               </View>
+              {floorTiltText && (
+                <Text
+                  style={s.floorTilt}
+                  accessibilityLabel={floorTiltText}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
+                  {floorTiltText}
+                </Text>
+              )}
               {!debugEnabled && !!status.trackingReason && (
                 <Text style={s.trackingHint}>
                   {status.trackingReason.replace(/([A-Z])/g, ' $1')}
@@ -1125,6 +1153,17 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
   },
   floorRow: { marginTop: 8 },
+  floorTilt: {
+    color: C.text,
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+    backgroundColor: '#071426DB',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    marginTop: 4,
+    borderRadius: 8,
+  },
   floorState: {
     color: C.muted,
     fontSize: 10,

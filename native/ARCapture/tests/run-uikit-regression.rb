@@ -50,9 +50,12 @@ host.source_build_phase.add_file_reference(project.main_group.new_file(host_sour
  File.join(root, 'native/ARCapture/HeightDisplayFormatter.swift'), File.join(root, 'native/ARCapture/PreviewZoom.swift'),
  File.join(root, 'native/ARCapture/SpatialMeasurements.swift'), File.join(root, 'native/ARCapture/TagFloorHeight.swift'),
  File.join(root, 'native/ARCapture/TagCameraRanges.swift'),
+ File.join(root, 'native/ARCapture/TagHeightVectors.swift'), File.join(root, 'native/ARCapture/FloorPlaneFit.swift'), File.join(root, 'native/ARCapture/FloorDepthSampler.swift'),
  File.join(root, 'native/ARCapture/SpatialProjection.swift'), File.join(root, 'native/ARCapture/SpatialMeasurementOverlayView.swift'),
  File.join(__dir__, 'AprilTagOverlayUIKitTests.swift'), File.join(__dir__, 'TagDebugMathTests.swift'),
  File.join(__dir__, 'TagFloorHeightTests.swift'), File.join(__dir__, 'TagCameraRangesTests.swift'), File.join(__dir__, 'HeightDisplayFormatterTests.swift'),
+ File.join(__dir__, 'TagHeightVectorsTests.swift'), File.join(__dir__, 'FloorLevelingTests.swift'), File.join(__dir__, 'FloorPlaneFitTests.swift'), File.join(__dir__, 'FloorDepthSamplerTests.swift'),
+ File.join(root, 'native/SpatialMeasurementTests/SpatialMeasurementTests.swift'),
  File.join(root, 'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift'),
  File.join(root, 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift')].each do |path|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
@@ -94,7 +97,7 @@ success = system(*command, out: log, err: [:child, :out])
 puts File.readlines(log).select { |line| line.match?(/error:|Test Case|Executed |\*\* TEST|Testing failed|uncaught exception|NSInvalidArgumentException/) }.last(100).join
 artifacts = File.join(work, 'artifacts')
 FileUtils.mkdir_p(artifacts)
-File.readlines(log).map { |line| line[/(?:OVERLAY|PANEL)_PNG (.+\.png)/, 1] }.compact.uniq.each do |file|
+File.readlines(log).map { |line| line[/(?:OVERLAY|PANEL)_PNG[ =](.+\.png)/, 1] }.compact.uniq.each do |file|
   FileUtils.cp(file, artifacts) if File.file?(file)
 end
 puts "PNG artifacts: #{artifacts}"

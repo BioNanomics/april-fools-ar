@@ -5,6 +5,7 @@ import App from '../App';
 import {
   DebugSettingsModal,
   DEFAULT_DEBUG_SETTINGS,
+  parseDebugSettings,
 } from '../DebugSettingsModal';
 
 jest.mock(
@@ -254,6 +255,9 @@ test('debug settings convert displayed millimeters and centimeters to native met
     tree.root
       .findByProps({ accessibilityLabel: 'Depth rejection (cm)' })
       .props.onChangeText('12');
+    tree.root
+      .findByProps({ accessibilityLabel: 'Distance delta threshold (cm)' })
+      .props.onChangeText('21.5');
   });
   await act(async () =>
     tree.root
@@ -265,7 +269,26 @@ test('debug settings convert displayed millimeters and centimeters to native met
     tagSizeMeters: 0.2,
     warningDepthDifferenceMeters: 0.08,
     rejectDepthDifferenceMeters: 0.12,
+    distanceDeltaThresholdMeters: 0.215,
   });
+});
+
+test('distance delta threshold accepts zero and rejects invalid limits', () => {
+  const draft = {
+    tagSizeMeters: '165.1',
+    maxDistanceMeters: '5',
+    maxPlaneAngleDegrees: '60',
+    warningDepthDifferenceMeters: '10',
+    rejectDepthDifferenceMeters: '15',
+    distanceDeltaThresholdMeters: '0',
+    maxReprojectionErrorPixels: '3',
+  };
+  expect(parseDebugSettings(draft).distanceDeltaThresholdMeters).toBe(0);
+  for (const value of ['', '-1', '1001', 'Infinity', 'NaN']) {
+    expect(() =>
+      parseDebugSettings({ ...draft, distanceDeltaThresholdMeters: value }),
+    ).toThrow();
+  }
 });
 
 test('AR width estimate requires explicit acceptance before changing tag size', async () => {
@@ -1026,4 +1049,106 @@ test('AR-width entry scans before showing points and waits for Done acknowledgem
   expect(JSON.stringify(tree.toJSON())).toContain('0 / 2 points');
   expect(engine.applyMeasuredTagSize).not.toHaveBeenCalled();
   expect(engine.clearMeasurements).not.toHaveBeenCalled();
+});
+
+test('floor leveling defaults off, saves explicitly and reloads the saved preference', async () => {
+  engine.setDebugSettings.mockImplementation(async (settings: unknown) => {
+    engine.getDebugSettings.mockResolvedValue(settings);
+    return settings;
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Level floor with gravity' });
+  expect(toggle().props.value).toBe(false);
+  await act(async () => toggle().props.onValueChange(true));
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Apply debug settings' })
+      .props.onPress(),
+  );
+  expect(engine.setDebugSettings).toHaveBeenCalledWith({
+    ...DEFAULT_DEBUG_SETTINGS,
+    levelFloorWithGravity: true,
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  expect(toggle().props.value).toBe(true);
+  await act(async () => toggle().props.onValueChange(false));
+  await act(async () =>
+    tree.root.findByType(DebugSettingsModal).props.onCancel(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  expect(toggle().props.value).toBe(true);
+  expect(engine.setDebugSettings).toHaveBeenCalledTimes(1);
+});
+
+test('floor tilt readout preserves detected tilt while identifying a leveled measurement plane', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      spatial: {
+        mode: 'distance',
+        floorSelected: true,
+        floorTiltDegrees: 2.36,
+        levelFloorWithGravity: true,
+      },
+    }),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain(
+    'Floor tilt ≈2.4° · using level floor (0.0°)',
+  );
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      spatial: {
+        mode: 'selectFloor',
+        floorSelected: false,
+        floorTiltDegrees: 3.16,
+        levelFloorWithGravity: true,
+        floorSetup: { candidateSelected: true },
+      },
+    }),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain(
+    'Detected floor tilt ≈3.2° · level on Done',
+  );
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      spatial: {
+        mode: 'selectFloor',
+        floorSelected: false,
+        floorTiltDegrees: null,
+        levelFloorWithGravity: true,
+      },
+    }),
+  );
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Floor tilt');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Detected floor tilt');
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      spatial: {
+        mode: 'distance',
+        floorSelected: true,
+        floorTiltDegrees: null,
+      },
+    }),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('Floor tilt unavailable');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Floor tilt ≈0.0°');
 });

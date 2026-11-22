@@ -119,6 +119,51 @@ final class TagDebugMathTests: XCTestCase {
         XCTAssertThrowsError(try loaded.merging(["showImperialHeight": 1]))
         XCTAssertThrowsError(try loaded.merging(["showImperialHeight": "false"]))
     }
+    func testDistanceDeltaThresholdMigratesAndPersistsIndependentlyOfDepthWarnings() throws {
+        let suite = "DistanceDeltaSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var legacy = TagDebugSettings().dictionary
+        legacy.removeValue(forKey: "distanceDeltaThresholdMeters")
+        legacy["tagSizeMeters"] = 0.1723456789
+        legacy["tagSizeSource"] = "ar-two-point-edge"
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: TagDebugSettings.defaultsKey)
+        let loaded = TagDebugSettings.load(from: defaults)
+        XCTAssertEqual(loaded.distanceDeltaThresholdMeters, 0.15)
+        let changed = try loaded.merging(["distanceDeltaThresholdMeters": 0.215])
+        XCTAssertEqual(changed.warningDepthDifferenceMeters, loaded.warningDepthDifferenceMeters)
+        XCTAssertEqual(changed.rejectDepthDifferenceMeters, loaded.rejectDepthDifferenceMeters)
+        XCTAssertEqual(changed.tagSizeMeters, loaded.tagSizeMeters)
+        XCTAssertEqual(changed.tagSizeSource, loaded.tagSizeSource)
+        changed.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), changed)
+        XCTAssertEqual(try changed.merging(["distanceDeltaThresholdMeters": 0]).distanceDeltaThresholdMeters, 0)
+        let invalid: [Any] = [-0.01, 10.01, Double.nan, Double.infinity, true, "0.2"]
+        for value in invalid {
+            XCTAssertThrowsError(try loaded.merging(["distanceDeltaThresholdMeters": value]))
+        }
+    }
+    func testFloorLevelingDefaultsOffAndPersistsAsStrictBoolean() throws {
+        let suite = "FloorLevelingSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var legacy = TagDebugSettings().dictionary
+        legacy.removeValue(forKey: "levelFloorWithGravity")
+        legacy["tagSizeMeters"] = 0.1723456789
+        legacy["tagSizeSource"] = "ar-two-point-edge"
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: TagDebugSettings.defaultsKey)
+        let loaded = TagDebugSettings.load(from: defaults)
+        XCTAssertFalse(loaded.levelFloorWithGravity)
+        let enabled = try loaded.merging(["levelFloorWithGravity": true])
+        XCTAssertTrue(enabled.levelFloorWithGravity)
+        XCTAssertEqual(enabled.tagSizeMeters, loaded.tagSizeMeters)
+        XCTAssertEqual(enabled.tagSizeSource, loaded.tagSizeSource)
+        enabled.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), enabled)
+        XCTAssertFalse(try enabled.merging(["levelFloorWithGravity": false]).levelFloorWithGravity)
+        XCTAssertThrowsError(try enabled.merging(["levelFloorWithGravity": 1]))
+        XCTAssertThrowsError(try enabled.merging(["levelFloorWithGravity": "true"]))
+    }
     func testMeasuredWidthUsesReviewedEndpointDistanceAndRejectsInvalidInputs() throws {
         let points: [[String: Any]] = [["source": "sceneDepth", "segmentId": "segment", "confidence": 2, "frameId": "a"], ["source": "sceneDepth", "segmentId": "segment", "confidence": 1, "frameId": "b"]]
         XCTAssertEqual(try TagDebugMath.measuredTagSize(points: points, worldDistance: 0.1651, segmentID: "segment", tracking: "normal", frameAgeSeconds: 0.01), 0.1651)

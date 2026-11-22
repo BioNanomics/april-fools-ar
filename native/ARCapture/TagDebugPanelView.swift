@@ -10,7 +10,7 @@ final class TagDebugPanelView: UIView {
     private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"], valueSize: 19)
     private let rotationRow = DebugMetricRow(titles: ["Roll · °", "Pitch · °", "Yaw · °"], valueSize: 18)
     private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"], valueSize: 21)
-    private let geometryRow = DebugMetricRow(titles: ["Range · m", "Plane · °", "Bearing · °"], valueSize: 18)
+    private let geometryRow = DebugMetricRow(titles: ["Distance · m", "Plane · °", "Bearing · °"], valueSize: 18)
     private let meanLabel = UILabel()
     private let qualityLabel = UILabel()
     private let rateLabel = UILabel()

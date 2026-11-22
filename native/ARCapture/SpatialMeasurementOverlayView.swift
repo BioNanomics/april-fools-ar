@@ -31,6 +31,8 @@ final class SpatialMeasurementOverlayView: UIView {
     private var planeSlots = [PlaneSlot]()
     private var vectorSlots = [VectorSlot]()
     private var pendingSlots = [VectorSlot]()
+    private var automaticHeightSlots = [VectorSlot]()
+    private var automaticHeightDeadlines = [Double]()
     private var floorHitPaths = [(String, UIBezierPath)]()
     private var expiryDeadline: Double?
     private var expiryTimer: Timer?
@@ -56,6 +58,7 @@ final class SpatialMeasurementOverlayView: UIView {
         planeSlots.forEach { $0.remove() }; planeSlots.removeAll()
         vectorSlots.forEach { $0.remove() }; vectorSlots.removeAll()
         pendingSlots.forEach { $0.remove() }; pendingSlots.removeAll()
+        automaticHeightSlots.forEach { $0.remove() }; automaticHeightSlots.removeAll(); automaticHeightDeadlines = []
         floorHitPaths.removeAll()
     }
 
@@ -66,7 +69,7 @@ final class SpatialMeasurementOverlayView: UIView {
     func show(planes: [SpatialPlane], measurements: [SpatialMeasurement], pendingPoints: [SIMD3<Float>],
               selectedFloorID: String?, isTrackingNormal: Bool, cameraToWorld: simd_float4x4,
               intrinsics: simd_float3x3, imageSize: CGSize, displayTransform: CGAffineTransform, expiresAt: Double? = nil, showImperialHeight: Bool = true,
-              pendingSelectedFloorID: String? = nil) {
+              pendingSelectedFloorID: String? = nil, automaticTagHeights: [TagHeightVector] = []) {
         let deadline = expiresAt ?? (ProcessInfo.processInfo.systemUptime + 0.5)
         guard deadline.isFinite, deadline > ProcessInfo.processInfo.systemUptime,
               isTrackingNormal, let camera = SpatialProjection.Camera(cameraToWorld: cameraToWorld,
@@ -98,12 +101,22 @@ final class SpatialMeasurementOverlayView: UIView {
             guard let point = camera.point(world), camera.viewport.contains(point) else { return nil }
             return (index, point)
         }
+        let now = ProcessInfo.processInfo.systemUptime
+        let automatic = automaticTagHeights.prefix(64).compactMap { vector -> (TagHeightVector, [CGPoint])? in
+            guard vector.expiresAt > now, vector.heightMeters.isFinite, vector.heightMeters >= 0,
+                  SpatialMeasurementMath.finite(vector.start), SpatialMeasurementMath.finite(vector.end),
+                  let segment = camera.segment(from: vector.start, to: vector.end) else { return nil }
+            return (vector, segment)
+        }
         while planeSlots.count > planeGeometry.count { planeSlots.removeLast().remove() }
         while planeSlots.count < planeGeometry.count { planeSlots.append(PlaneSlot(in: self)) }
         while vectorSlots.count > vectors.count { vectorSlots.removeLast().remove() }
         while vectorSlots.count < vectors.count { vectorSlots.append(VectorSlot(in: self)) }
         while pendingSlots.count > pending.count { pendingSlots.removeLast().remove() }
         while pendingSlots.count < pending.count { pendingSlots.append(VectorSlot(in: self)) }
+        while automaticHeightSlots.count > automatic.count { automaticHeightSlots.removeLast().remove() }
+        while automaticHeightSlots.count < automatic.count { automaticHeightSlots.append(VectorSlot(in: self)) }
+        automaticHeightDeadlines = automatic.map { $0.0.expiresAt }
 
         floorHitPaths.removeAll(keepingCapacity: true)
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -145,10 +158,34 @@ final class SpatialMeasurementOverlayView: UIView {
             let formattedHeight = isHeight ? HeightDisplayFormatter.string(meters: abs(vertical), showImperial: showImperialHeight) : nil
             slot.label.text = isHeight ? " Height \(formattedHeight ?? "—") " : String(format: " %.3f m · ΔY %.3f m ", distance, vertical)
             slot.label.textColor = color
+            slot.label.font = .monospacedSystemFont(ofSize: isHeight ? 11 : 12, weight: isHeight ? .regular : .semibold)
             slot.label.accessibilityIdentifier = "spatial.measurement.\(measurement.id)"
             slot.label.accessibilityLabel = isHeight ? "Height measurement" : "Distance measurement"
             slot.label.accessibilityValue = isHeight ? "ID \(measurement.id). Height \(formattedHeight ?? "unavailable")." : String(format: "ID %@. Distance %.3f meters. Vertical difference %.3f meters.", measurement.id, distance, vertical)
-            place(slot.label, near: CGPoint(x: (segment[0].x + segment[1].x) / 2, y: (segment[0].y + segment[1].y) / 2 - 14))
+            if isHeight { placeAtWorldMidpoint(slot.label, world: measurement.start+(measurement.end-measurement.start)/2, camera: camera) }
+            else { slot.label.isHidden = false; place(slot.label, near: CGPoint(x: (segment[0].x + segment[1].x) / 2, y: (segment[0].y + segment[1].y) / 2 - 14)) }
+        }
+        for (index, geometry) in automatic.enumerated() {
+            let (vector, segment) = geometry, slot = automaticHeightSlots[index]
+            slot.line.isHidden = false; slot.dots.isHidden = false
+            let color: UIColor = vector.severity == "warning" ? .systemYellow : .systemCyan
+            slot.line.path = arrow(from: segment[0], to: segment[1]).cgPath
+            slot.line.strokeColor = color.cgColor; slot.line.lineWidth = 1.5
+            let dots = UIBezierPath()
+            for world in [vector.start, vector.end] {
+                if let point = camera.point(world), camera.viewport.contains(point) {
+                    dots.append(UIBezierPath(ovalIn: CGRect(x: point.x-3, y: point.y-3, width: 6, height: 6)))
+                }
+            }
+            slot.dots.path = dots.cgPath; slot.dots.fillColor = color.cgColor
+            let height = HeightDisplayFormatter.string(meters: vector.heightMeters, showImperial: showImperialHeight) ?? "—"
+            slot.label.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            slot.label.text = " #\(vector.tagID) · \(height) "
+            slot.label.textColor = color
+            slot.label.accessibilityIdentifier = "spatial.tagHeight.\(index).\(vector.tagID)"
+            slot.label.accessibilityLabel = "Tag \(vector.tagID) height above floor"
+            slot.label.accessibilityValue = "\(height). \(vector.source == "sceneDepth" ? "LiDAR" : "Tag pose estimate")."
+            placeAtWorldMidpoint(slot.label, world: vector.midpoint, camera: camera)
         }
         for (slotIndex, pointData) in pending.enumerated() {
             let (pointIndex, point) = pointData, slot = pendingSlots[slotIndex]
@@ -177,9 +214,20 @@ final class SpatialMeasurementOverlayView: UIView {
                 self.clear()
                 return
             }
+            let now = ProcessInfo.processInfo.systemUptime
+            for (index, expiresAt) in self.automaticHeightDeadlines.enumerated() where expiresAt <= now && index < self.automaticHeightSlots.count {
+                let slot = self.automaticHeightSlots[index]
+                slot.line.isHidden = true; slot.dots.isHidden = true; slot.label.isHidden = true
+            }
         }
         expiryTimer = timer
         RunLoop.main.add(timer, forMode: .common)
+    }
+    private func placeAtWorldMidpoint(_ label: UILabel, world: SIMD3<Float>, camera: SpatialProjection.Camera) {
+        guard let point = camera.point(world), camera.viewport.contains(point) else { label.isHidden = true; return }
+        label.isHidden = false; label.sizeToFit()
+        // Do not clamp an offscreen world anchor into a misleading visible location.
+        label.center = point
     }
 
     private func place(_ label: UILabel, near point: CGPoint) {

@@ -36,7 +36,10 @@ host = project.new_target(:application, 'BuildInfoTestHost', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'BuildInfoRegressionTests', :ios, '17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 ['AppBuildInfo.swift', 'CaptureRecorder.swift', 'TagDebugMath.swift'].map { |file| File.join(root, 'native/ARCapture', file) }
-  .concat([detector_stub, File.join(__dir__, 'AppBuildInfoTests.swift')]).each do |path|
+  .concat(['SessionMP4Writer.swift', 'SavedRecordingStore.swift', 'VideoOrientation.swift', 'RecordingPreview.swift'].map { |file| File.join(root, 'native/ArchiveModule', file) })
+  .concat([detector_stub, File.join(__dir__, 'AppBuildInfoTests.swift'),
+           File.join(root, 'native/ArchiveModule/tests/VideoOrientationTests.swift'),
+           File.join(root, 'native/ArchiveModule/tests/RecordingPreviewTests.swift')]).each do |path|
     tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
   end
 tests.add_dependency(host)

@@ -15,6 +15,7 @@
 		1107A3FF49E34B79CF70399E /* projection.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1A1BF92FEA660A5B4E72A05 /* projection.cpp */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1508D443397E26804536B59C /* ARCaptureReact.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */; };
+		18011C70795E9644EC325B5D /* SavedRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 243818E4794C7EE0D5DA109D /* SavedRecordingStore.swift */; };
 		1DD28336743D5D3B79AEA09D /* zarray.c in Sources */ = {isa = PBXBuildFile; fileRef = CA4D9A9C2175E6193DDC55E8 /* zarray.c */; };
 		21693BD65381C9C81688828E /* zhash.c in Sources */ = {isa = PBXBuildFile; fileRef = FD9BB39E20F049935B814282 /* zhash.c */; };
 		24A7BA2A23FCD99934CAB655 /* TagDebugPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */; };
@@ -26,6 +27,7 @@
 		313464C10DE6FE2B48D4BE03 /* version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1AC29C7674788D7D0DE7FCF9 /* version.cpp */; };
 		326ED390E11DA8D6135C4FCC /* FloorBaseMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */; };
 		34C7BC10A1B2909961E81174 /* g2d.c in Sources */ = {isa = PBXBuildFile; fileRef = 3E65C29D4D082A77C20F9142 /* g2d.c */; };
+		357ABBDD1218E6353FF2B9D8 /* RecordingPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */; };
 		3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */; };
 		3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C953581979F4BA05C64FBA /* SpatialProjection.swift */; };
 		40B3ADBE9B5EC5EEAEEDDD59 /* AFTagCore.c in Sources */ = {isa = PBXBuildFile; fileRef = E8B8A96D63698D4255EFFE75 /* AFTagCore.c */; };
@@ -63,6 +65,7 @@
 		CF00F5589ADEF5F3FD483A3B /* homography.c in Sources */ = {isa = PBXBuildFile; fileRef = 78CED63F155DCD2DD5BCCAC8 /* homography.c */; };
 		D1D2FA6D793879C11F03BF1F /* apriltag.c in Sources */ = {isa = PBXBuildFile; fileRef = E58DC96727684DC98AB58CE2 /* apriltag.c */; };
 		D3A310B212DE0D198040F522 /* apriltag_quad_thresh.c in Sources */ = {isa = PBXBuildFile; fileRef = 636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */; };
+		D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */; };
 		D67D403D684BB61E9B6F4FA1 /* pjpeg-idct.c in Sources */ = {isa = PBXBuildFile; fileRef = 65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */; };
 		DA27C35703607F1813578B2B /* pjpeg.c in Sources */ = {isa = PBXBuildFile; fileRef = D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */; };
 		E25CDE140876A1CCDA05B580 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = 9959BA1C7D343658916BEE71 /* NOTICE.md */; };
@@ -80,8 +83,10 @@
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = AprilFoolsAR/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagFloorHeight.swift; path = ARCapture/TagFloorHeight.swift; sourceTree = "<group>"; };
 		1AC29C7674788D7D0DE7FCF9 /* version.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = version.cpp; path = SpatialCore/src/version.cpp; sourceTree = "<group>"; };
+		243818E4794C7EE0D5DA109D /* SavedRecordingStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SavedRecordingStore.swift; path = ArchiveModule/SavedRecordingStore.swift; sourceTree = "<group>"; };
 		2540CE28C05CEEFC3ABC83FF /* pnm.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pnm.c; path = common/pnm.c; sourceTree = "<group>"; };
 		2597B3319AD2D1C5517C152B /* pthreads_cross.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pthreads_cross.c; path = common/pthreads_cross.c; sourceTree = "<group>"; };
+		2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoOrientation.swift; path = ArchiveModule/VideoOrientation.swift; sourceTree = "<group>"; };
 		2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagHeightVectors.swift; path = ARCapture/TagHeightVectors.swift; sourceTree = "<group>"; };
 		2E3A4C79448974334F594FA9 /* image_u8x4.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8x4.c; path = common/image_u8x4.c; sourceTree = "<group>"; };
 		2E44803935F6579A749699F8 /* zmaxheap.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zmaxheap.c; path = common/zmaxheap.c; sourceTree = "<group>"; };
@@ -133,6 +138,7 @@
 		E8B8A96D63698D4255EFFE75 /* AFTagCore.c */ = {isa = PBXFileReference; includeInIndex = 1; name = AFTagCore.c; path = AprilTag/AFTagCore.c; sourceTree = "<group>"; };
 		EA83DAE678B40D531BAF2FFD /* LICENSE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.md; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecordingPreview.swift; path = ArchiveModule/RecordingPreview.swift; sourceTree = "<group>"; };
 		EEB2EF0D8CBAF081733145FB /* geometry.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = geometry.cpp; path = SpatialCore/src/geometry.cpp; sourceTree = "<group>"; };
 		F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PreviewZoom.swift; path = ARCapture/PreviewZoom.swift; sourceTree = "<group>"; };
 		F65F24E17F0D91A4485AC78B /* image_u8.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8.c; path = common/image_u8.c; sourceTree = "<group>"; };
@@ -209,6 +215,9 @@
 				48700406B409929D15EF2E3F /* measurements.cpp */,
 				D1A1BF92FEA660A5B4E72A05 /* projection.cpp */,
 				1AC29C7674788D7D0DE7FCF9 /* version.cpp */,
+				EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */,
+				243818E4794C7EE0D5DA109D /* SavedRecordingStore.swift */,
+				2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -527,6 +536,9 @@
 				A84767D4F2E0B14D74949C83 /* measurements.cpp in Sources */,
 				1107A3FF49E34B79CF70399E /* projection.cpp in Sources */,
 				313464C10DE6FE2B48D4BE03 /* version.cpp in Sources */,
+				357ABBDD1218E6353FF2B9D8 /* RecordingPreview.swift in Sources */,
+				18011C70795E9644EC325B5D /* SavedRecordingStore.swift in Sources */,
+				D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -541,7 +553,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -556,7 +568,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.1;
+				MARKETING_VERSION = 0.7.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -581,7 +593,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -595,7 +607,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.1;
+				MARKETING_VERSION = 0.7.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

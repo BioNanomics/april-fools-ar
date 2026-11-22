@@ -10,7 +10,7 @@ struct SessionMP4Writer {
 
     enum ExportError: LocalizedError {
         case invalidSource(String), invalidEntry(String), unsupportedMovie(String)
-        case sourceChanged(String), integrity(String), limit(String), cannotCreate
+        case sourceChanged(String), integrity(String), limit(String), cannotCreate, cancelled
         var errorDescription: String? {
             switch self {
             case .invalidSource(let reason): return "Invalid session folder: \(reason)"
@@ -20,6 +20,7 @@ struct SessionMP4Writer {
             case .integrity(let name): return "Recording integrity check failed: \(name)"
             case .limit(let reason): return "Recording export limit: \(reason)"
             case .cannotCreate: return "Unable to create the MP4 recording."
+            case .cancelled: return "Recording export was cancelled."
             }
         }
     }
@@ -50,17 +51,21 @@ struct SessionMP4Writer {
 
     /// Production callers inject Documents/AprilFoolsAR/sessions. Other roots are
     /// supported for host validation; only one direct UUID child may be exported.
+    /// An optional affine playback transform changes only the visible track in the
+    /// replacement movie index; exact restoration retains the original source movie.
     func archiveSession(folderPath: String, allowedSessionsRoot: URL,
-                        destinationDirectory: URL) throws -> Result {
+                        destinationDirectory: URL, playbackTransform: [Double]? = nil,
+                        shouldCancel: () -> Bool = { false }) throws -> Result {
+        try Self.checkCancellation(shouldCancel)
         let source = try validatedSource(folderPath, root: allowedSessionsRoot)
-        let entries = try collectEntries(in: source)
+        let entries = try collectEntries(in: source, shouldCancel: shouldCancel)
         let files = Dictionary(uniqueKeysWithValues: entries.filter { !$0.directory }.map { ($0.name, $0) })
         func required(_ name: String) throws -> Entry {
             guard let entry = files[name] else { throw ExportError.invalidSource("missing \(name)") }
             return entry
         }
         let manifestEntry = try required("manifest.json")
-        let manifestData = try readMetadata(manifestEntry, inside: source)
+        let manifestData = try readMetadata(manifestEntry, inside: source, shouldCancel: shouldCancel)
         guard let manifest = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any],
               let finalized = manifest["finalized"] as? NSNumber,
               CFGetTypeID(finalized) == CFBooleanGetTypeID(), finalized.boolValue else {
@@ -69,13 +74,13 @@ struct SessionMP4Writer {
         var expected = try sourceInventory(manifest, files: files)
         expected["manifest.json"] = Expected(bytes: UInt64(manifestData.count), sha256: Self.hash(manifestData))
         let videoEntry = try required("rgb.mp4")
-        let movie = try readMovie(videoEntry, inside: source)
-        let framesData = try readMetadata(required("frames.jsonl"), inside: source)
-        let eventsData = try readMetadata(required("events.jsonl"), inside: source)
+        let movie = try readMovie(videoEntry, inside: source, shouldCancel: shouldCancel)
+        let framesData = try readMetadata(required("frames.jsonl"), inside: source, shouldCancel: shouldCancel)
+        let eventsData = try readMetadata(required("events.jsonl"), inside: source, shouldCancel: shouldCancel)
         try check(framesData, against: expected["frames.jsonl"], name: "frames.jsonl")
         try check(eventsData, against: expected["events.jsonl"], name: "events.jsonl")
-        let frames = try Self.yamlRecords(framesData)
-        let events = try Self.yamlRecords(eventsData)
+        let frames = try Self.yamlRecords(framesData, shouldCancel: shouldCancel)
+        let events = try Self.yamlRecords(eventsData, shouldCancel: shouldCancel)
         let sidecars = entries.filter { $0.name != "rgb.mp4" }
         let predictedTarBytes = try Self.checkedSum(sidecars.map {
             512 + $0.bytes + (512 - $0.bytes % 512) % 512
@@ -87,13 +92,13 @@ struct SessionMP4Writer {
         // Compute the TAR digest without a temporary TAR copy. The same bounded
         // stream is written below and checked again before the MP4 is published.
         var tarHasher = SHA256(), tarBytes: UInt64 = 0
-        try streamTar(sidecars, inside: source, expected: expected) { data in
+        try streamTar(sidecars, inside: source, expected: expected, shouldCancel: shouldCancel) { data in
             tarHasher.update(data: data); tarBytes += UInt64(data.count)
             guard tarBytes < Self.maximum else { throw ExportError.limit("exports must remain below 4 GiB") }
         }
         let tarSHA = Self.hex(tarHasher.finalize())
         guard tarBytes == predictedTarBytes else { throw ExportError.integrity("unexpected TAR length") }
-        let videoSHA = try hashFile(videoEntry, inside: source)
+        let videoSHA = try hashFile(videoEntry, inside: source, shouldCancel: shouldCancel)
         guard let expectedVideo = expected["rgb.mp4"], expectedVideo.sha256 == videoSHA else {
             throw ExportError.integrity("rgb.mp4 does not match its original manifest")
         }
@@ -102,19 +107,21 @@ struct SessionMP4Writer {
             "afar.events": Self.payload(events, mime: "application/yaml"),
             "afar.files": ["bytes": tarBytes, "sha256": tarSHA, "mimeType": "application/x-tar"]
         ]
-        let envelope: [String: Any] = [
+        var envelope: [String: Any] = [
             "format": "april-fools-ar-recording", "version": 1, "draft": false,
             "session": manifest,
             "sourceVideo": ["bytes": videoEntry.bytes, "sha256": videoSHA, "moovOffset": movie.sourceOffset],
             "payloads": payloads
         ]
+        if let playbackTransform { envelope["playbackTransform"] = playbackTransform }
         var sessionYAML = YAMLBuffer(limit: Self.yamlLimit)
         try sessionYAML.emit(envelope)
         let metadata = [sessionYAML.data, frames, events]
         let payloadSizes = metadata.map { UInt64($0.count) } + [tarBytes]
         let mdatSize = try Self.checkedSum(payloadSizes + [8])
         let replacement = try replacementMovie(movie, payloadSizes: payloadSizes,
-                                               firstOffset: videoEntry.bytes + 8)
+                                               firstOffset: videoEntry.bytes + 8,
+                                               playbackTransform: playbackTransform)
         let total = try Self.checkedSum([videoEntry.bytes, mdatSize, UInt64(replacement.count)])
 
         let manager = FileManager.default
@@ -131,6 +138,7 @@ struct SessionMP4Writer {
             if !succeeded { try? manager.removeItem(at: temporary) }
         }
         func append(_ data: Data) throws {
+            try Self.checkCancellation(shouldCancel)
             guard UInt64(data.count) < Self.maximum, written < Self.maximum - UInt64(data.count) else {
                 throw ExportError.limit("exports must remain below 4 GiB")
             }
@@ -138,7 +146,7 @@ struct SessionMP4Writer {
         }
 
         var copiedVideoHasher = SHA256(), copyOffset: UInt64 = 0
-        try streamFile(videoEntry, inside: source) { chunk in
+        try streamFile(videoEntry, inside: source, shouldCancel: shouldCancel) { chunk in
             copiedVideoHasher.update(data: chunk)
             var patched = chunk
             let typeStart = movie.sourceOffset + 4
@@ -155,22 +163,30 @@ struct SessionMP4Writer {
         try append(mdatHeader)
         for data in metadata { try append(data) }
         var copiedTarHasher = SHA256()
-        try streamTar(sidecars, inside: source, expected: expected) { data in
+        try streamTar(sidecars, inside: source, expected: expected, shouldCancel: shouldCancel) { data in
             copiedTarHasher.update(data: data); try append(data)
         }
         guard Self.hex(copiedTarHasher.finalize()) == tarSHA else { throw ExportError.sourceChanged("sidecar archive") }
         try append(replacement)
         guard written == total else { throw ExportError.integrity("unexpected final MP4 length") }
-        let finalEntries = try collectEntries(in: source)
+        let finalEntries = try collectEntries(in: source, shouldCancel: shouldCancel)
         guard finalEntries.map(\.name) == entries.map(\.name) else { throw ExportError.sourceChanged("session contents") }
-        for entry in entries { try verifyEntry(entry, inside: source) }
+        for entry in entries {
+            try Self.checkCancellation(shouldCancel)
+            try verifyEntry(entry, inside: source)
+        }
         try output.synchronize(); try output.close()
+        try Self.checkCancellation(shouldCancel)
         try manager.moveItem(at: temporary, to: destination)
         succeeded = true
         return Result(url: destination, bytes: written)
     }
 
     // MARK: Source identity, containment and integrity
+
+    private static func checkCancellation(_ shouldCancel: () -> Bool) throws {
+        if shouldCancel() { throw ExportError.cancelled }
+    }
 
     private func validatedSource(_ folderPath: String, root: URL) throws -> URL {
         let decoded = folderPath.removingPercentEncoding ?? folderPath
@@ -206,7 +222,7 @@ struct SessionMP4Writer {
         return URL(fileURLWithPath: values.canonicalPath ?? resolved.path)
     }
 
-    private func collectEntries(in source: URL) throws -> [Entry] {
+    private func collectEntries(in source: URL, shouldCancel: () -> Bool) throws -> [Entry] {
         var enumerationError: Error?
         guard let enumerator = FileManager.default.enumerator(at: source, includingPropertiesForKeys: nil,
             errorHandler: { _, error in enumerationError = error; return false }) else {
@@ -215,6 +231,7 @@ struct SessionMP4Writer {
         var result: [Entry] = [], names = Set<String>(), totalBytes: UInt64 = 0
         let prefix = source.path + "/"
         for case let url as URL in enumerator {
+            try Self.checkCancellation(shouldCancel)
             guard url.path.hasPrefix(prefix) else { throw ExportError.invalidEntry(url.lastPathComponent) }
             let name = String(url.path.dropFirst(prefix.count))
             try Self.safePath(name)
@@ -279,11 +296,14 @@ struct SessionMP4Writer {
         return FileHandle(fileDescriptor: fd, closeOnDealloc: true)
     }
 
-    private func streamFile(_ entry: Entry, inside source: URL, consume: (Data) throws -> Void) throws {
+    private func streamFile(_ entry: Entry, inside source: URL, shouldCancel: () -> Bool,
+                            consume: (Data) throws -> Void) throws {
+        try Self.checkCancellation(shouldCancel)
         let input = try openEntry(entry, inside: source)
         defer { try? input.close() }
         var read: UInt64 = 0
         while let data = try input.read(upToCount: Self.chunkBytes), !data.isEmpty {
+            try Self.checkCancellation(shouldCancel)
             read += UInt64(data.count)
             guard read <= entry.bytes else { throw ExportError.sourceChanged(entry.name) }
             try consume(data)
@@ -291,15 +311,15 @@ struct SessionMP4Writer {
         guard read == entry.bytes else { throw ExportError.sourceChanged(entry.name) }
         try verifyEntry(entry, inside: source)
     }
-    private func readMetadata(_ entry: Entry, inside source: URL) throws -> Data {
+    private func readMetadata(_ entry: Entry, inside source: URL, shouldCancel: () -> Bool) throws -> Data {
         guard entry.bytes <= UInt64(Self.jsonLimit) else { throw ExportError.limit("each source metadata file must be at most 16 MiB") }
         var result = Data(); result.reserveCapacity(Int(entry.bytes))
-        try streamFile(entry, inside: source) { result.append($0) }
+        try streamFile(entry, inside: source, shouldCancel: shouldCancel) { result.append($0) }
         return result
     }
-    private func hashFile(_ entry: Entry, inside source: URL) throws -> String {
+    private func hashFile(_ entry: Entry, inside source: URL, shouldCancel: () -> Bool) throws -> String {
         var hasher = SHA256()
-        try streamFile(entry, inside: source) { hasher.update(data: $0) }
+        try streamFile(entry, inside: source, shouldCancel: shouldCancel) { hasher.update(data: $0) }
         return Self.hex(hasher.finalize())
     }
     private static func hash(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
@@ -356,7 +376,11 @@ struct SessionMP4Writer {
             if let number = value as? NSNumber {
                 if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "true" : "false" }
                 guard number.doubleValue.isFinite else { throw ExportError.integrity("non-finite JSON number") }
-                return number.stringValue
+                // NSNumber.stringValue rounds some Double values to 16 digits.
+                // JSON's scalar encoder preserves the original binary64 value,
+                // and JSON numeric syntax is also valid YAML 1.2 syntax.
+                let encoded = try JSONSerialization.data(withJSONObject: number, options: [.fragmentsAllowed])
+                return String(decoding: encoded, as: UTF8.self)
             }
             if let mapping = value as? [String: Any], mapping.isEmpty { return "{}" }
             if let sequence = value as? [Any], sequence.isEmpty { return "[]" }
@@ -386,10 +410,11 @@ struct SessionMP4Writer {
             } else { try append(pad + scalar(value) + "\n") }
         }
     }
-    private static func yamlRecords(_ data: Data) throws -> Data {
+    private static func yamlRecords(_ data: Data, shouldCancel: () -> Bool) throws -> Data {
         guard String(data: data, encoding: .utf8) != nil else { throw ExportError.integrity("metadata is not UTF-8") }
         var output = YAMLBuffer(limit: yamlLimit), count = 0
         for line in data.split(separator: 10, omittingEmptySubsequences: false) {
+            try checkCancellation(shouldCancel)
             let bytes = Data(line)
             if String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
             guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
@@ -443,13 +468,14 @@ struct SessionMP4Writer {
         return data
     }
     private func streamTar(_ entries: [Entry], inside source: URL, expected: [String: Expected],
-                           consume: (Data) throws -> Void) throws {
+                           shouldCancel: () -> Bool, consume: (Data) throws -> Void) throws {
         for entry in entries {
+            try Self.checkCancellation(shouldCancel)
             try verifyEntry(entry, inside: source)
             try consume(Self.tarHeader(entry))
             if !entry.directory {
                 var hash = SHA256()
-                try streamFile(entry, inside: source) { chunk in hash.update(data: chunk); try consume(chunk) }
+                try streamFile(entry, inside: source, shouldCancel: shouldCancel) { chunk in hash.update(data: chunk); try consume(chunk) }
                 guard let expectation = expected[entry.name], expectation.bytes == entry.bytes,
                       expectation.sha256 == Self.hex(hash.finalize()) else { throw ExportError.integrity(entry.name) }
                 let padding = Int((512 - entry.bytes % 512) % 512)
@@ -461,11 +487,12 @@ struct SessionMP4Writer {
 
     // MARK: Bounded ISO BMFF movie index parsing and metadata-track writing
 
-    private func readMovie(_ entry: Entry, inside source: URL) throws -> Movie {
+    private func readMovie(_ entry: Entry, inside source: URL, shouldCancel: () -> Bool) throws -> Movie {
         let input = try openEntry(entry, inside: source)
         defer { try? input.close() }
         var offset: UInt64 = 0, top: [(String, UInt64, UInt64, Int)] = []
         while offset < entry.bytes {
+            try Self.checkCancellation(shouldCancel)
             guard entry.bytes - offset >= 8 else { throw ExportError.unsupportedMovie("truncated top-level box") }
             try input.seek(toOffset: offset)
             let header = try Self.exactRead(input, count: 8)
@@ -590,11 +617,15 @@ struct SessionMP4Writer {
         var contents = Data(); contents.mp4U32(flags); contents.append(payload)
         return try box(type, contents)
     }
-    private func replacementMovie(_ movie: Movie, payloadSizes: [UInt64], firstOffset: UInt64) throws -> Data {
+    private func replacementMovie(_ movie: Movie, payloadSizes: [UInt64], firstOffset: UInt64,
+                                  playbackTransform: [Double]?) throws -> Data {
         var contents = Data()
         for child in movie.children {
             var original = movie.bytes.subdata(in: child.offset..<child.end)
             if child.type == "mvhd" { original.mp4Set32(movie.trackID + 5, at: original.count - 4) }
+            if child.type == "trak", let playbackTransform {
+                original = try Self.applyingPlaybackTransform(playbackTransform, to: original)
+            }
             contents.append(original)
         }
         var offset = firstOffset
@@ -609,6 +640,40 @@ struct SessionMP4Writer {
         }
         guard contents.count <= Self.movieLimit else { throw ExportError.limit("replacement movie index exceeds 64 MiB") }
         return try Self.box("moov", contents)
+    }
+
+    private static func applyingPlaybackTransform(_ affine: [Double], to track: Data) throws -> Data {
+        guard affine.count == 6, affine.allSatisfy(\.isFinite) else {
+            throw ExportError.unsupportedMovie("playback transform must contain six finite affine values")
+        }
+        func fixed(_ value: Double) throws -> UInt32 {
+            let scaled = (value * 65536).rounded()
+            guard scaled >= Double(Int32.min), scaled <= Double(Int32.max) else {
+                throw ExportError.unsupportedMovie("playback transform exceeds signed 16.16 range")
+            }
+            return UInt32(bitPattern: Int32(scaled))
+        }
+        let root = try one(atoms(track, from: 0, to: track.count), "trak")
+        let header = try one(atoms(track, from: root.payload, to: root.end), "tkhd")
+        let matrixOffset = header.payload + (try version(track, header) == 1 ? 52 : 40)
+        guard matrixOffset + 44 <= header.end else {
+            throw ExportError.unsupportedMovie("truncated video track matrix")
+        }
+        let width = Double(try track.mp4Read32(matrixOffset + 36)) / 65536
+        let height = Double(try track.mp4Read32(matrixOffset + 40)) / 65536
+        let rotations: [[Double]] = [[1, 0, 0, 1, 0, 0], [0, 1, -1, 0, height, 0],
+                                     [-1, 0, 0, -1, width, height], [0, -1, 1, 0, 0, width]]
+        guard rotations.contains(affine) else {
+            throw ExportError.unsupportedMovie("playback transform must be a canonical quarter-turn rotation")
+        }
+        // ISO BMFF stores [a,b,u,c,d,v,tx,ty,w]. Affine entries are signed
+        // 16.16 values; perspective entries u/v/w use signed 2.30 values.
+        let matrix: [UInt32] = [try fixed(affine[0]), try fixed(affine[1]), 0,
+                                try fixed(affine[2]), try fixed(affine[3]), 0,
+                                try fixed(affine[4]), try fixed(affine[5]), 0x40000000]
+        var result = track
+        for (index, value) in matrix.enumerated() { result.mp4Set32(value, at: matrixOffset + index * 4) }
+        return result
     }
     private func metadataTrack(_ id: UInt32, name: String, bytes: UInt32, offset: UInt32, movie: Movie) throws -> Data {
         // An MP4 sample is an AVPacket when FFmpeg demuxes it. Split the TAR

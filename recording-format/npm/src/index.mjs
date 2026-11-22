@@ -161,6 +161,7 @@ function publicInfo(loaded) {
   return {
     format: envelope.format, version: envelope.version, draft: envelope.draft,
     session: envelope.session, sourceVideo: envelope.sourceVideo, payloads: envelope.payloads,
+    ...(Object.hasOwn(envelope, 'playbackTransform') ? { playbackTransform: envelope.playbackTransform } : {}),
     tracks: info.tracks.map(track => ({ id: track.id, name: track.name, sampleEntry: track.sampleEntry, mimeType: track.mimeType, bytes: track.bytes, sampleCount: track.sampleCount, maxSampleBytes: track.maxSampleBytes })),
   };
 }
@@ -241,20 +242,7 @@ function validateRecording(buffer) {
   source.write('moov', original.moovOffset + 4, 4, 'latin1');
   if (digest(source) !== original.sha256) throw new Error('Restored source-video checksum mismatch');
   const sourceInfo = validateSourceMovie(source);
-  const originalChildren = info.parts.filter(atom => !dataTracks.some(track => track.trak.start === atom.start));
-  if (originalChildren.length !== sourceInfo.parts.length) throw new Error('Replacement movie changes the original movie structure');
-  for (let index = 0; index < originalChildren.length; index++) {
-    const actual = originalChildren[index], expected = sourceInfo.parts[index];
-    if (actual.type !== expected.type || actual.size !== expected.size) throw new Error('Replacement movie changes an original movie box');
-    const actualBytes = Buffer.from(buffer.subarray(actual.start, actual.end));
-    const expectedBytes = source.subarray(expected.start, expected.end);
-    if (actual.type === 'mvhd') {
-      const nextID = Math.max(...sourceInfo.tracks.map(track => track.id)) + TRACK_NAMES.length + 1;
-      if (actualBytes.readUInt32BE(actualBytes.length - 4) !== nextID) throw new Error('Invalid replacement movie next track ID');
-      expectedBytes.copy(actualBytes, actualBytes.length - 4, expectedBytes.length - 4);
-    }
-    if (!actualBytes.equals(expectedBytes)) throw new Error('Replacement movie does not preserve original video/metadata boxes');
-  }
+  validateMoviePreservation(buffer, source, info, sourceInfo, dataTracks, envelope);
   return { envelope, info, samples, source };
 }
 // Large recordings are read by range. Only movie headers and YAML are buffered.
@@ -328,14 +316,42 @@ async function assertZeroRange(handle, offset, bytes) {
 function sourcePatch(envelope) {
   return { offset: envelope.sourceVideo.moovOffset + 4, data: Buffer.from('moov') };
 }
-function validateMoviePreservation(movie, sourceMovie, info, sourceInfo, dataTracks) {
+function trackWithPlaybackTransform(track, affine) {
+  if (!Array.isArray(affine) || affine.length !== 6 || !affine.every(Number.isFinite)) throw new Error('Invalid playback transform');
+  const root = boxes(track);
+  if (root.length !== 1 || root[0].type !== 'trak') throw new Error('Invalid playback video track');
+  const headers = boxes(track, root[0].payload, root[0].end).filter(atom => atom.type === 'tkhd');
+  if (headers.length !== 1) throw new Error('Invalid playback video track header');
+  const header = headers[0], version = track[header.payload];
+  if (version > 1) throw new Error('Unsupported playback video track header');
+  const matrixOffset = header.payload + (version === 1 ? 52 : 40);
+  if (matrixOffset + 44 > header.end) throw new Error('Truncated playback video track header');
+  const width = track.readUInt32BE(matrixOffset + 36) / 65536;
+  const height = track.readUInt32BE(matrixOffset + 40) / 65536;
+  const rotations = [[1, 0, 0, 1, 0, 0], [0, 1, -1, 0, height, 0],
+    [-1, 0, 0, -1, width, height], [0, -1, 1, 0, 0, width]];
+  if (!rotations.some(candidate => candidate.every((value, index) => affine[index] === value))) throw new Error('Playback transform must be a canonical quarter-turn rotation');
+  const fixed = value => {
+    const scaled = value * 65536;
+    if (!Number.isInteger(scaled) || scaled < -0x80000000 || scaled > 0x7fffffff) throw new Error('Playback transform exceeds signed 16.16 range');
+    return scaled;
+  };
+  const matrix = [fixed(affine[0]), fixed(affine[1]), 0, fixed(affine[2]), fixed(affine[3]), 0,
+    fixed(affine[4]), fixed(affine[5]), 0x40000000];
+  const result = Buffer.from(track);
+  matrix.forEach((value, index) => result.writeInt32BE(value, matrixOffset + index * 4));
+  return result;
+}
+function validateMoviePreservation(movie, sourceMovie, info, sourceInfo, dataTracks, envelope) {
   const originalChildren = info.parts.filter(atom => !dataTracks.some(track => track.trak.start === atom.start));
   if (originalChildren.length !== sourceInfo.parts.length) throw new Error('Replacement movie changes the original movie structure');
+  const hasPlaybackTransform = Object.hasOwn(envelope, 'playbackTransform');
   for (let index = 0; index < originalChildren.length; index++) {
     const actual = originalChildren[index], expected = sourceInfo.parts[index];
     if (actual.type !== expected.type || actual.size !== expected.size) throw new Error('Replacement movie changes an original movie box');
     const actualBytes = Buffer.from(movie.subarray(actual.start, actual.end));
-    const expectedBytes = sourceMovie.subarray(expected.start, expected.end);
+    let expectedBytes = sourceMovie.subarray(expected.start, expected.end);
+    if (actual.type === 'trak' && hasPlaybackTransform) expectedBytes = trackWithPlaybackTransform(expectedBytes, envelope.playbackTransform);
     if (actual.type === 'mvhd') {
       const nextID = Math.max(...sourceInfo.tracks.map(track => track.id)) + TRACK_NAMES.length + 1;
       if (actualBytes.readUInt32BE(actualBytes.length - 4) !== nextID) throw new Error('Invalid replacement movie next track ID');
@@ -391,7 +407,7 @@ async function inspectHandle(handle, size) {
   sourceMovie.write('moov', 4, 4, 'latin1');
   const sourceInfo = parseMovieBox(sourceMovie, original.bytes);
   if (sourceInfo.tracks.length !== 1 || sourceInfo.tracks[0].handler !== 'vide' || !['avc1', 'avc3'].includes(sourceInfo.tracks[0].sampleEntry)) throw new Error('Original movie must have one H.264 track');
-  validateMoviePreservation(movie, sourceMovie, info, sourceInfo, dataTracks);
+  validateMoviePreservation(movie, sourceMovie, info, sourceInfo, dataTracks, envelope);
   return { handle, size, envelope, info, tracks, samples };
 }
 async function withRecording(recordingPath, operation) {

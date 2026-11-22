@@ -27,11 +27,11 @@ Tracking, depth status and zoom controls share one compact line at the top of th
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
 4. In **Measure** mode, tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
-6. Tap **Stop & save**. Open **Saved sessions**, then **Export MP4** and send the recording through AirDrop or save it to Files.
+6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to preview it, or **Share** to send the same recording through AirDrop or Files.
 
 Keep recordings short initially and check an export before the first field visit. Files stay on the phone until you explicitly share them. No server, account, BLE meter, or internet connection is needed for capture.
 
-The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. MP4 exports must remain below 4 GiB and temporarily need space for both the original session and its exported MP4.
+The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage.
 
 ## Capture contents
 
@@ -44,7 +44,7 @@ The app stops and saves an active recording when it goes into the background. Ke
 
 The recorder uses bounded frame retention. Counters and saved diagnostics identify omitted samples; UI update rate is separate from native capture. A heatmap is only a preview—the numeric depth files are the measurement evidence.
 
-The exported MP4 carries that camera video plus readable session/frame/event YAML and a TAR data track containing the original images, numeric buffers and JSON/JSONL files. A normal player shows the clean video. Tag outlines, measurements and other live graphics stay separate from the pixels so later analysis can use the original imagery; their recorded geometry supports a future overlay viewer. The app does not yet include an offline overlay player.
+The automatically saved MP4 carries that camera video plus readable session/frame/event YAML and a TAR data track containing the original images, numeric buffers and JSON/JSONL files. A normal player shows the clean video. Tag outlines, measurements and other live graphics stay separate from the pixels so later analysis can use the original imagery; their recorded geometry supports a future overlay viewer. The app does not yet include an offline overlay player.
 
 See [the recording format and extraction commands](recording-format/README.md) and [the capture data conventions](docs/capture-format.md). Install the local extractor with `npm ci --prefix recording-format/npm`, then run `python3 scripts/inspect-session.py /path/to/recording.mp4` to inspect a returned recording. Legacy ZIPs and copied session directories remain readable by the inspector.
 

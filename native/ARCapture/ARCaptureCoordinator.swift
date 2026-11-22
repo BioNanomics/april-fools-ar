@@ -431,6 +431,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     guard let data = try? Data(contentsOf: folder.appendingPathComponent("manifest.json")), var value = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
                     value["folderPath"] = folder.path
                     value["sizeBytes"] = CaptureRecorder.directorySize(folder)
+                    value.merge(SavedRecordingStore.shared.descriptor(sessionID: folder.lastPathComponent)) { _, new in new }
                     return value
                 }.sorted { ($0["createdAt"] as? String ?? "") > ($1["createdAt"] as? String ?? "") }
                 completion(.success(records))

@@ -72,7 +72,7 @@ final class AppBuildInfoTests: XCTestCase {
         }
     }
     @MainActor
-    func testNewRecorderPersistsIdenticalBuildSnapshotInManifestAndStartEvent() throws {
+    func testEmptyRecorderRetainsBuildSnapshotAndDoesNotClaimFinalizedVideo() throws {
         let bundle = try fixture(metadata: application)
         var supplied = AppBuildInfo.application(in: bundle)
         let expected = supplied
@@ -84,14 +84,14 @@ final class AppBuildInfoTests: XCTestCase {
         XCTAssertEqual(initial["finalized"] as? Bool, false)
         let finished = expectation(description: "recorder finalized without live AR frames")
         recorder.finish(droppedFrames: 0) { result in
-            if case .failure(let error) = result { XCTFail(error.localizedDescription) }
+            if case .success = result { XCTFail("An empty capture must not claim a playable recording") }
             finished.fulfill()
         }
         wait(for: [finished], timeout: 5)
         let manifest = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: recorder.folder.appendingPathComponent("manifest.json"))) as? [String: Any])
         let saved = try XCTUnwrap(manifest["application"] as? [String: Any])
         XCTAssertTrue(NSDictionary(dictionary: saved).isEqual(to: expected))
-        XCTAssertEqual(manifest["finalized"] as? Bool, true)
+        XCTAssertEqual(manifest["finalized"] as? Bool, false)
         let core = try XCTUnwrap(manifest["calculationCore"] as? [String: Any])
         XCTAssertEqual(core["version"] as? String, "0.1.0")
         XCTAssertEqual(core["abiVersion"] as? UInt32, 1)

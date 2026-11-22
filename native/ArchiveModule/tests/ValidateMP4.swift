@@ -2,21 +2,23 @@ import Foundation
 import CryptoKit
 
 /// Host-only executable; compile with SessionMP4Writer.swift, without React/iOS.
-/// Usage: ValidateMP4 export|check SESSIONS_ROOT SESSION_DIRECTORY OUTPUT_DIRECTORY
+/// Usage: ValidateMP4 export|check SESSIONS_ROOT SESSION_DIRECTORY OUTPUT_DIRECTORY [AFFINE_JSON]
 @main
 enum ValidateMP4 {
     static func main() throws {
         let arguments = Array(CommandLine.arguments.dropFirst())
-        guard arguments.count == 4, ["export", "check"].contains(arguments[0]) else {
-            throw failure("Usage: ValidateMP4 export|check SESSIONS_ROOT SESSION_DIRECTORY OUTPUT_DIRECTORY")
+        guard (4...5).contains(arguments.count), ["export", "check"].contains(arguments[0]) else {
+            throw failure("Usage: ValidateMP4 export|check SESSIONS_ROOT SESSION_DIRECTORY OUTPUT_DIRECTORY [AFFINE_JSON]")
         }
         let fileManager = FileManager.default
         let root = URL(fileURLWithPath: arguments[1], isDirectory: true)
         let session = URL(fileURLWithPath: arguments[2], isDirectory: true)
         let output = URL(fileURLWithPath: arguments[3], isDirectory: true)
+        let playbackTransform = arguments.count == 5
+            ? try JSONSerialization.jsonObject(with: Data(arguments[4].utf8)) as? [Double] : nil
         let writer = SessionMP4Writer()
         let result = try writer.archiveSession(folderPath: session.path, allowedSessionsRoot: root,
-                                               destinationDirectory: output)
+                                               destinationDirectory: output, playbackTransform: playbackTransform)
         guard result.url.pathExtension == "mp4" else { throw failure("Export did not use .mp4") }
         let actualBytes = (try fileManager.attributesOfItem(atPath: result.url.path)[.size] as! NSNumber).uint64Value
         guard actualBytes == result.bytes else { throw failure("Result byte count does not match output file") }
@@ -30,6 +32,28 @@ enum ValidateMP4 {
                                                destinationDirectory: output)
         guard result.url != second.url else { throw failure("Export filenames must be unique") }
         let completedExports = Set(try fileManager.contentsOfDirectory(at: output, includingPropertiesForKeys: nil).map(\.lastPathComponent))
+        for transform in [[0.0, 1, -1, 0, 48], [0, 1, -1, 0, .infinity, 0], [0, 1, -1, 0, 32768, 0]] {
+            try expectRejection("invalid playback transform") {
+                _ = try writer.archiveSession(folderPath: session.path, allowedSessionsRoot: root,
+                                             destinationDirectory: output, playbackTransform: transform)
+            }
+        }
+        try expectRejection("cancelled before export") {
+            _ = try writer.archiveSession(folderPath: session.path, allowedSessionsRoot: root,
+                                         destinationDirectory: output, shouldCancel: { true })
+        }
+        var cancelledDuringWrite = false
+        try expectRejection("cancelled while streaming output") {
+            _ = try writer.archiveSession(folderPath: session.path, allowedSessionsRoot: root,
+                                         destinationDirectory: output, shouldCancel: {
+                let files = (try? fileManager.contentsOfDirectory(at: output, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+                cancelledDuringWrite = files.contains {
+                    $0.pathExtension == "partial" && ((try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 65536
+                }
+                return cancelledDuringWrite
+            })
+        }
+        guard cancelledDuringWrite else { throw failure("Cancellation fixture did not reach streaming output") }
         try expectRejection("path traversal") {
             _ = try writer.archiveSession(folderPath: session.path + "/../" + session.lastPathComponent,
                                          allowedSessionsRoot: root, destinationDirectory: output)

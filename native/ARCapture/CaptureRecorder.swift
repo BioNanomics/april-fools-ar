@@ -22,6 +22,7 @@ final class CaptureRecorder {
     private var eventsFile: FileHandle!
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
+    private var videoPlaybackTransform: [Double]?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var firstTimestamp: TimeInterval?
     private var lastVideoTimestamp = -Double.infinity
@@ -82,7 +83,7 @@ final class CaptureRecorder {
                     record["videoAppended"] = false
                     if frame.timestamp - lastVideoTimestamp >= (1.0 / 30.0 - 0.002) {
                         lastVideoTimestamp = frame.timestamp
-                        try ensureVideo(buffer: frame.capturedImage)
+                        try ensureVideo(buffer: frame.capturedImage, metadata: metadata)
                         if let input = videoInput, let adaptor = adaptor, input.isReadyForMoreMediaData {
                             let ok = adaptor.append(frame.capturedImage, withPresentationTime: CMTime(seconds: pts, preferredTimescale: 600_000))
                             record["videoAppended"] = ok
@@ -167,11 +168,24 @@ final class CaptureRecorder {
                         try framesFile.synchronize(); try eventsFile.synchronize()
                         try framesFile.close(); try eventsFile.close()
                         if let error = assetWriter?.error { throw error }
+                        guard let writer = assetWriter, writer.status == .completed, videoFrames > 0 else {
+                            throw CaptureError.message("No completed camera video was saved. The capture files remain available for recovery.")
+                        }
                         if wasBackgroundExpired { throw CaptureError.message("Background finalization expired; session remains unfinalized.") }
                         try writeManifest(finalized: true)
                         finalized = true
                         var result = sessionRecord()
-                        result["errors"] = errors
+                        // A completed capture remains recoverable even if packaging fails.
+                        // Keep finalizing/background ownership until the durable MP4 is ready.
+                        do {
+                            _ = try SavedRecordingStore.shared.prepare(folderPath: folder.path, shouldCancel: { self.wasBackgroundExpired })
+                            result.merge(SavedRecordingStore.shared.descriptor(sessionID: id)) { _, new in new }
+                        } catch {
+                            result["recordingReady"] = false
+                            result["recordingError"] = error.localizedDescription
+                            result["errors"] = errors + ["Capture saved; MP4 preparation pending: \(error.localizedDescription)"]
+                        }
+                        if result["errors"] == nil { result["errors"] = errors }
                         completion(.success(result))
                     } catch {
                         finalized = false
@@ -188,7 +202,7 @@ final class CaptureRecorder {
         }
     }
 
-    private func ensureVideo(buffer: CVPixelBuffer) throws {
+    private func ensureVideo(buffer: CVPixelBuffer, metadata: [String: Any]) throws {
         guard assetWriter == nil else { return }
         let writer = try AVAssetWriter(outputURL: folder.appendingPathComponent("rgb.mp4"), fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -196,6 +210,11 @@ final class CaptureRecorder {
             AVVideoWidthKey: CVPixelBufferGetWidth(buffer), AVVideoHeightKey: CVPixelBufferGetHeight(buffer),
             AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 10_000_000, AVVideoExpectedSourceFrameRateKey: 30, AVVideoMaxKeyFrameIntervalKey: 30]
         ])
+        var orientationFrame = metadata
+        orientationFrame["imageWidth"] = CVPixelBufferGetWidth(buffer)
+        orientationFrame["imageHeight"] = CVPixelBufferGetHeight(buffer)
+        videoPlaybackTransform = VideoOrientation.playbackTransform(frame: orientationFrame)
+        if let values = videoPlaybackTransform, let transform = VideoOrientation.affine(values) { input.transform = transform }
         input.expectsMediaDataInRealTime = true
         let pixelAdaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
         guard writer.canAdd(input) else { throw CaptureError.message("Video writer cannot accept camera format") }
@@ -288,7 +307,11 @@ final class CaptureRecorder {
         manifest["tagSizeEvidenceAtStart"] = initialTagSizeEvidence as Any? ?? NSNull()
         manifest["counts"] = ["metadataFrames": framesWritten, "depthFrames": depthFrames, "videoFrames": videoFrames, "writerDroppedFrames": recentDropCount, "videoDroppedFrames": droppedVideoFrames]
         manifest["files"] = ["frames": "frames.jsonl", "events": "events.jsonl", "video": "rgb.mp4", "images": "frames/", "depth": "depth/"]
-        manifest["videoContent"] = ["source": "ARFrame.capturedImage", "codec": "h264", "overlaysBurnedIn": false, "audioRecorded": false]
+        var videoContent: [String: Any] = ["source": "ARFrame.capturedImage", "codec": "h264", "overlaysBurnedIn": false, "audioRecorded": false,
+            "orientationLockedAtFirstFrame": true]
+        videoContent["playbackTransform"] = videoPlaybackTransform as Any? ?? NSNull()
+        videoContent["orientationSource"] = videoPlaybackTransform == nil ? "unavailable" : "first-frame-sensor-to-display-rotation"
+        manifest["videoContent"] = videoContent
         manifest["evidence"] = "Live capture; measurement accuracy has not been independently validated. AR world poses are not surveyed field truth."
         manifest["errors"] = errors
         manifest["backgroundFinalizationExpired"] = wasBackgroundExpired

@@ -69,6 +69,8 @@ payloads:
 
 The numbers and digest placeholders above are illustrative. The actual `session` mapping contains the full original manifest, not just the example fields. Preserve build identity, coordinate conventions, errors and dropped-frame diagnostics. The session envelope does not hash itself; its payload digests provide corruption checks, not authenticity or a digital signature.
 
+An optional top-level `playbackTransform` contains six affine values `[a, b, c, d, tx, ty]`. It declares a playback-only correction for a legacy source movie whose sensor pixels lack an orientation transform. The only permitted values are a canonical 0°, 90°, 180° or 270° rotation with translation keeping the source track's rectangle at a nonnegative origin. Readers validate finite, signed-16.16-representable values and the exact expected track-header matrix. New captures normally already store their playback orientation in the original video track and do not need this override.
+
 `afar.frames` and `afar.events` contain one YAML document for each original JSONL record, in the original file order. Each document begins with `---`. A stream with no source records contains only `# No records.` and a newline, so its MP4 sample is nonempty without adding a YAML document. For example:
 
 ```yaml
@@ -106,6 +108,8 @@ The writer copies the original `rgb.mp4` without moving any source bytes, then:
 1. Changes its original top-level movie box's four-byte type from `moov` to `free`.
 2. Appends an `mdat` box containing the four payloads.
 3. Appends a replacement `moov` containing the original movie's tracks and the four metadata tracks. It updates the next available track ID.
+
+When `playbackTransform` is present, the replacement video track's `tkhd` matrix is the sole additional permitted change. ISO BMFF stores its affine entries as signed 16.16 values in the order `[a, b, 0, c, d, 0, tx, ty, 1]`, with the three perspective entries encoded as signed 2.30. Readers compare every other original movie-box byte exactly. The original prefix, source-video hash, source manifest and source files remain unchanged. Older readers that require an entirely identical replacement track may reject an export containing this optional correction.
 
 Original video sample offsets remain correct. `sourceVideo.bytes` gives the length of the original file, `sourceVideo.moovOffset` identifies the original movie-box header, and `sourceVideo.sha256` hashes the original, unmodified `rgb.mp4`.
 

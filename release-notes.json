@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "0.7.0",
+      "build": "21",
+      "title": "Play saved recordings",
+      "changes": [
+        "Save the complete MP4 automatically when you stop a recording; Play and Share reuse the saved file.",
+        "Preview saved camera recordings on your phone with standard playback controls.",
+        "Show video upright using the recording orientation while preserving original camera pixels and calibration.",
+        "Preserve full sensor-number precision in MP4 metadata so exported recordings import and replay correctly."
+      ]
+    },
+    {
       "version": "0.6.1",
       "build": "20",
       "title": "Shared measurement core",

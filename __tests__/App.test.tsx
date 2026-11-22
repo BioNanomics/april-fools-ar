@@ -40,7 +40,10 @@ jest.mock('react-native', () => {
     setDebugSettings: jest.fn(),
     applyMeasuredTagSize: jest.fn(),
   };
-  native.NativeModules.ArchiveModule = { archiveSession: jest.fn() };
+  native.NativeModules.ArchiveModule = {
+    archiveSession: jest.fn(),
+    previewSession: jest.fn(),
+  };
   return native;
 });
 
@@ -50,6 +53,9 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   engine.listSessions.mockResolvedValue([]);
+  engine.exportSession.mockReset();
+  NativeModules.ArchiveModule.archiveSession.mockReset();
+  NativeModules.ArchiveModule.previewSession.mockReset();
   engine.completeFloorSetup.mockReset();
   engine.getStatus.mockResolvedValue({
     recording: false,
@@ -173,14 +179,37 @@ async function openSavedSessions() {
   await act(async () => tab!.props.onPress());
 }
 
-test('shares the native self-contained MP4 from a finalized saved session', async () => {
+test('plays the validated saved session in the native player', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockResolvedValue({
+    finalized: true,
+    folderPath: '/sessions/session-1',
+  });
+  NativeModules.ArchiveModule.previewSession.mockResolvedValue(undefined);
+  await openSavedSessions();
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.native-camera' }),
+  ).toHaveLength(0);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Play recording North field' })
+      .props.onPress(),
+  );
+  expect(engine.exportSession).toHaveBeenCalledWith('session-1');
+  expect(NativeModules.ArchiveModule.previewSession).toHaveBeenCalledWith(
+    '/sessions/session-1',
+  );
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+});
+
+test('shares the reusable native MP4 from a finalized saved session', async () => {
   engine.listSessions.mockResolvedValue([savedSession]);
   engine.exportSession.mockResolvedValue({
     finalized: true,
     folderPath: '/sessions/session-1',
   });
   NativeModules.ArchiveModule.archiveSession.mockResolvedValue({
-    url: 'file:///exports/recording.mp4',
+    url: 'file:///recordings/session-1.mp4',
     format: 'mp4',
     mimeType: 'video/mp4',
   });
@@ -188,39 +217,220 @@ test('shares the native self-contained MP4 from a finalized saved session', asyn
     .spyOn(Share, 'share')
     .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
   await openSavedSessions();
-  expect(
-    tree.root.findAllByProps({ children: 'Export MP4 ↗' }).length,
-  ).toBeGreaterThan(0);
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Export recording as MP4' })
-      .props.onPress(),
+  expect(tree.root.findAllByProps({ children: 'Export MP4 ↗' })).toHaveLength(
+    0,
   );
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await act(async () =>
+      tree.root
+        .findByProps({ accessibilityLabel: 'Share recording North field' })
+        .props.onPress(),
+    );
+  }
   expect(engine.exportSession).toHaveBeenCalledWith('session-1');
   expect(NativeModules.ArchiveModule.archiveSession).toHaveBeenCalledWith(
     '/sessions/session-1',
   );
   expect(share).toHaveBeenCalledWith({
-    url: 'file:///exports/recording.mp4',
+    url: 'file:///recordings/session-1.mp4',
     title: 'April Fools AR by The REFINERY — North field',
   });
+  expect(share).toHaveBeenCalledTimes(2);
+  expect(NativeModules.ArchiveModule.previewSession).not.toHaveBeenCalled();
 });
 
-test('does not package an unfinished recording', async () => {
+test('does not open a recording that is no longer finalized', async () => {
   engine.listSessions.mockResolvedValue([savedSession]);
   engine.exportSession.mockResolvedValue({ finalized: false });
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   await openSavedSessions();
   await act(async () =>
     tree.root
-      .findByProps({ accessibilityLabel: 'Export recording as MP4' })
+      .findByProps({ accessibilityLabel: 'Play recording North field' })
       .props.onPress(),
   );
   expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+  expect(NativeModules.ArchiveModule.previewSession).not.toHaveBeenCalled();
   expect(alert).toHaveBeenCalledWith(
-    'Export',
-    'Stop and save the recording before exporting.',
+    'Play recording',
+    'Stop and save the recording first.',
   );
+});
+
+test('disables Play and Share for unfinished saved recordings', async () => {
+  engine.listSessions.mockResolvedValue([
+    { ...savedSession, finalized: false },
+  ]);
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  for (const action of ['Play', 'Share']) {
+    const button = tree.root.findByProps({
+      accessibilityLabel: `${action} recording North field`,
+    });
+    expect(button.props.disabled).toBe(true);
+    expect(button.props.accessibilityState.disabled).toBe(true);
+    await act(async () => button.props.onPress());
+  }
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  expect(NativeModules.ArchiveModule.previewSession).not.toHaveBeenCalled();
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+});
+
+test('keeps saved-session controls disabled until the player is dismissed', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockResolvedValue({
+    finalized: true,
+    folderPath: '/sessions/session-1',
+  });
+  let dismiss!: () => void;
+  NativeModules.ArchiveModule.previewSession.mockImplementation(
+    () =>
+      new Promise<void>(resolve => {
+        dismiss = resolve;
+      }),
+  );
+  await openSavedSessions();
+  const play = tree.root.findByProps({
+    accessibilityLabel: 'Play recording North field',
+  });
+  await act(async () => {
+    void play.props.onPress();
+    void play.props.onPress();
+  });
+  expect(NativeModules.ArchiveModule.previewSession).toHaveBeenCalledTimes(1);
+  expect(
+    tree.root.findAllByProps({ children: 'Opening recording…' }),
+  ).not.toHaveLength(0);
+  for (const action of ['Play', 'Share']) {
+    expect(
+      tree.root.findByProps({
+        accessibilityLabel: `${action} recording North field`,
+      }).props.disabled,
+    ).toBe(true);
+  }
+  await act(async () => {
+    DeviceEventEmitter.emit('url', { url: 'aprilfoolsar://capture/start' });
+    jest.advanceTimersByTime(1200);
+  });
+  expect(engine.startSession).not.toHaveBeenCalled();
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.native-camera' }),
+  ).toHaveLength(0);
+  await act(async () => dismiss());
+  expect(
+    tree.root.findAllByProps({ children: 'Opening recording…' }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Play recording North field' })
+      .props.disabled,
+  ).toBe(false);
+});
+
+test.each(['Play', 'Share'])(
+  '%s reports native preparation failures and restores the controls',
+  async action => {
+    engine.listSessions.mockResolvedValue([savedSession]);
+    engine.exportSession.mockResolvedValue({
+      finalized: true,
+      folderPath: '/sessions/session-1',
+    });
+    const method = action === 'Play' ? 'previewSession' : 'archiveSession';
+    NativeModules.ArchiveModule[method].mockRejectedValue(
+      new Error('Missing saved MP4'),
+    );
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const share = jest.spyOn(Share, 'share');
+    await openSavedSessions();
+    await act(async () =>
+      tree.root
+        .findByProps({ accessibilityLabel: `${action} recording North field` })
+        .props.onPress(),
+    );
+    expect(alert).toHaveBeenCalledWith(
+      `${action} recording`,
+      'Missing saved MP4',
+    );
+    expect(share).not.toHaveBeenCalled();
+    expect(
+      tree.root.findByProps({
+        accessibilityLabel: `${action} recording North field`,
+      }).props.disabled,
+    ).toBe(false);
+  },
+);
+
+test('reports session lookup failure without opening the native player', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockRejectedValue(new Error('Session not found'));
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Play recording North field' })
+      .props.onPress(),
+  );
+  expect(alert).toHaveBeenCalledWith('Play recording', 'Session not found');
+  expect(NativeModules.ArchiveModule.previewSession).not.toHaveBeenCalled();
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Play recording North field' })
+      .props.disabled,
+  ).toBe(false);
+});
+
+test('rejects a finalized session with no validated folder', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockResolvedValue({ finalized: true });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Share recording North field' })
+      .props.onPress(),
+  );
+  expect(alert).toHaveBeenCalledWith(
+    'Share recording',
+    'The saved recording could not be found.',
+  );
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+});
+
+test('shows the saved MP4 size when it is ready', async () => {
+  engine.listSessions.mockResolvedValue([
+    { ...savedSession, recordingReady: true, recordingBytes: 2 * 1048576 },
+  ]);
+  await openSavedSessions();
+  expect(
+    tree.root.findAll(
+      node =>
+        Array.isArray(node.props.children) &&
+        node.props.children.includes('2.0 MB'),
+    ),
+  ).not.toHaveLength(0);
+});
+
+test('explains how to retry an MP4 preparation failure after saving', async () => {
+  engine.getStatus.mockResolvedValue({ recording: true });
+  engine.stopSession.mockImplementation(async () => {
+    engine.getStatus.mockResolvedValue({ recording: false });
+    return { recordingReady: false, recordingError: 'Disk full' };
+  });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Stop and save recording' })
+      .props.onPress(),
+  );
+  expect(alert).toHaveBeenCalledWith(
+    'Recording saved',
+    'The original recording was saved, but its MP4 is not ready yet. Tap Play or Share in Saved sessions to retry.\n\nDisk full',
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Start recording' }).props
+      .disabled,
+  ).toBe(false);
 });
 
 test('starts a named native recording and stops it using the same control', async () => {

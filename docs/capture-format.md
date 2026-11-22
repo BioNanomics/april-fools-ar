@@ -94,3 +94,12 @@ New session manifests and AprilTag events include `calculationCore`: library nam
 Each AprilTag event also records the exact `floorSnapshot` selected for that source frame, or explicit null if no floor was selected. Each detection's `floorHeight.frameAgeSeconds` records the age used by the live eligibility check. A reader must respect an explicit null snapshot; only old records without the key may fall back to saved height provenance. Historical records without age cannot reproduce the complete stale-frame gate and must say so.
 
 These fields travel unchanged through the existing MP4 YAML tracks and original-sidecar extraction. Replay uses original event order and capture timestamps; MP4 metadata packet timestamps are not sensor timestamps. `videoAppended:false` remains valid metadata and must not be discarded. See [shared-core replay](../native/SpatialCore/README.md).
+
+
+## Saved playback and presentation orientation
+
+On Stop & save, the recorder completes the raw session then automatically publishes a self-contained MP4 under the sibling `recordings/` directory. Source session folders remain recovery/analysis copies. A failed MP4 preparation does not delete or invalidate a completed source capture; Play/Share retry it. A zero-frame capture is never marked finalized.
+
+New `videoContent` fields include `playbackTransform` (`[a,b,c,d,tx,ty]` in image-pixel coordinates), `orientationSource`, and `orientationLockedAtFirstFrame`. The movie uses the first frame's sensor-to-display rotation, without viewport cropping or display zoom. Raw images, intrinsics and all recorded display transforms retain their original conventions. A phone rotation during recording is visible as camera movement; it does not rewrite earlier frame coordinates or change the single movie-track orientation.
+
+Play opens the saved camera video with native AVKit controls. It does not yet render historical tag/measurement overlays. Share uses the persistent MP4; it is no longer a packaging step. Legacy sessions are prepared lazily, using their first frame to infer presentation rotation, while preserving byte-exact source restoration.

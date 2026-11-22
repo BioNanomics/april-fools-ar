@@ -113,6 +113,9 @@ type Session = {
   durationSeconds: number;
   sizeBytes: number;
   finalized: boolean;
+  recordingReady?: boolean;
+  recordingBytes?: number;
+  recordingError?: string;
 };
 const C = {
   bg: '#071426',
@@ -155,6 +158,11 @@ function CaptureApp() {
   const [name, setName] = useState('Field walk');
   const [editingName, setEditingName] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sessionAction, setSessionAction] = useState<{
+    id: string;
+    action: 'play' | 'share';
+  } | null>(null);
+  const sessionActionRef = useRef(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -237,10 +245,13 @@ function CaptureApp() {
   useEffect(() => {
     const handle = async (url: string) => {
       if (url.startsWith('aprilfoolsar://capture/start')) {
+        if (sessionActionRef.current) {
+          return;
+        }
         setTab('capture');
         setTimeout(async () => {
           try {
-            if (!recordingRef.current) {
+            if (!recordingRef.current && !sessionActionRef.current) {
               await Engine.startSession('Device capture check');
               await refresh();
             }
@@ -273,7 +284,13 @@ function CaptureApp() {
     setBusy(true);
     try {
       if (status.recording) {
-        await Engine.stopSession();
+        const saved = await Engine.stopSession();
+        if (saved?.recordingReady === false && saved.recordingError) {
+          Alert.alert(
+            'Recording saved',
+            `The original recording was saved, but its MP4 is not ready yet. Tap Play or Share in Saved sessions to retry.\n\n${saved.recordingError}`,
+          );
+        }
       } else {
         await Engine.startSession(name.trim() || 'Field walk');
       }
@@ -284,21 +301,40 @@ function CaptureApp() {
       setBusy(false);
     }
   };
-  const exportSession = async (session: Session) => {
+  const openSession = async (session: Session, action: 'play' | 'share') => {
+    if (sessionActionRef.current || busy || status.finalizing) {
+      return;
+    }
+    const title = action === 'play' ? 'Play recording' : 'Share recording';
+    if (!session.finalized) {
+      Alert.alert(title, 'Stop and save the recording first.');
+      return;
+    }
+    sessionActionRef.current = true;
+    setSessionAction({ id: session.id, action });
     setBusy(true);
     try {
       const data = await Engine.exportSession(session.id);
       if (!data.finalized) {
-        throw new Error('Stop and save the recording before exporting.');
+        throw new Error('Stop and save the recording first.');
       }
-      const recording = await Archive.archiveSession(data.folderPath);
-      await Share.share({
-        url: recording.url,
-        title: `April Fools AR by The REFINERY — ${session.name}`,
-      });
+      if (typeof data.folderPath !== 'string' || !data.folderPath) {
+        throw new Error('The saved recording could not be found.');
+      }
+      if (action === 'play') {
+        await Archive.previewSession(data.folderPath);
+      } else {
+        const recording = await Archive.archiveSession(data.folderPath);
+        await Share.share({
+          url: recording.url,
+          title: `April Fools AR by The REFINERY — ${session.name}`,
+        });
+      }
     } catch (e) {
-      Alert.alert('Export', errorText(e));
+      Alert.alert(title, errorText(e));
     } finally {
+      sessionActionRef.current = false;
+      setSessionAction(null);
       setBusy(false);
     }
   };
@@ -1147,8 +1183,8 @@ function CaptureApp() {
             </Pressable>
           </View>
           <Text style={s.description}>
-            Share camera video, images, numeric depth, tag detections,
-            measurements, and notes in one MP4.
+            Play your saved camera video, or share the MP4 with its images,
+            numeric depth, tag detections, measurements, and notes.
           </Text>
           <FlatList
             key={`sessions-${sessionColumns}`}
@@ -1181,25 +1217,62 @@ function CaptureApp() {
                 <Text style={s.description}>
                   {new Date(item.createdAt).toLocaleString()}
                 </Text>
-                <View style={s.row}>
-                  <Text style={s.description}>
-                    {duration(item.durationSeconds)} ·{' '}
-                    {fileSize(item.sizeBytes)}
-                  </Text>
+                <Text style={s.description}>
+                  {duration(item.durationSeconds)} ·{' '}
+                  {fileSize(
+                    item.recordingReady && item.recordingBytes != null
+                      ? item.recordingBytes
+                      : item.sizeBytes,
+                  )}
+                </Text>
+                <View style={s.sessionActions}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Export recording as MP4"
-                    disabled={busy}
-                    style={s.export}
-                    onPress={() => exportSession(item)}
+                    accessibilityLabel={`Play recording ${item.name}`}
+                    accessibilityState={{
+                      disabled: Boolean(working || !item.finalized),
+                    }}
+                    disabled={Boolean(working || !item.finalized)}
+                    style={[
+                      s.sessionButton,
+                      (working || !item.finalized) && s.dim,
+                    ]}
+                    onPress={() => openSession(item, 'play')}
                   >
-                    {busy ? (
-                      <ActivityIndicator color={C.bg} />
-                    ) : (
-                      <Text style={s.exportText}>Export MP4 ↗</Text>
-                    )}
+                    <Text style={s.exportText}>Play</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Share recording ${item.name}`}
+                    accessibilityState={{
+                      disabled: Boolean(working || !item.finalized),
+                    }}
+                    disabled={Boolean(working || !item.finalized)}
+                    style={[
+                      s.sessionButton,
+                      (working || !item.finalized) && s.dim,
+                    ]}
+                    onPress={() => openSession(item, 'share')}
+                  >
+                    <Text style={s.exportText}>Share ↗</Text>
                   </Pressable>
                 </View>
+                {sessionAction?.id === item.id ? (
+                  <View style={s.sessionProgress}>
+                    <ActivityIndicator color={C.cyan} size="small" />
+                    <Text
+                      accessibilityRole="text"
+                      accessibilityLiveRegion="polite"
+                      style={s.small}
+                    >
+                      {sessionAction.action === 'play'
+                        ? 'Opening recording…'
+                        : 'Preparing to share…'}
+                    </Text>
+                  </View>
+                ) : !item.finalized ? (
+                  <Text style={s.small}>This recording is not finished.</Text>
+                ) : null}
               </View>
             )}
           />
@@ -1639,6 +1712,22 @@ const s = StyleSheet.create({
     borderRadius: 17,
     padding: 17,
     gap: 6,
+  },
+  sessionActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  sessionButton: {
+    backgroundColor: C.cyan,
+    minHeight: 44,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 13,
+    borderRadius: 9,
+  },
+  sessionProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
   },
   export: {
     backgroundColor: C.cyan,

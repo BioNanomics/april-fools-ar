@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.6.1",
+      "build": "20",
+      "title": "Shared measurement core",
+      "changes": [
+        "Run tag distance, height, floor fitting and overlay projection through the shared phone/robot calculation core.",
+        "Record the calculation version, source floor and frame age for repeatable measurement analysis.",
+        "Keep self-contained MP4 exports compatible with the recording importer and extraction tools."
+      ]
+    },
+    {
       "version": "0.6.0",
       "build": "19",
       "title": "Self-contained MP4 recordings",

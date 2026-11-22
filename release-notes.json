@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.1.3",
+      "build": "8",
+      "title": "Single-line camera controls",
+      "changes": [
+        "Combine tracking status, depth status and view zoom on one compact line over the camera.",
+        "Retain pinch zoom and the 1×, 2× and 4× controls while freeing vertical camera space."
+      ]
+    },
+    {
       "version": "0.1.2",
       "build": "7",
       "title": "Camera view zoom",

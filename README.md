@@ -12,6 +12,8 @@ Enable **Show pose axes** in Settings to add red X, green Y and blue Z axes to e
 
 Use **1× / 2× / 4×** or pinch the live preview for view zoom. It magnifies the image and keeps tag graphics and measurement taps aligned. The recorded RGB/depth and pose calculation keep their original camera calibration; this is display magnification, not a lens change or added optical detail.
 
+Tracking, depth status and zoom controls share one compact line at the top of the preview.
+
 1. Open **April Fools AR** and allow camera access. Use a LiDAR-capable iPhone for numeric depth recording.
 2. Wait for tracking and depth to become available. Point at a `tag36h11` AprilTag to see its ID and corner outline; live detection also runs before recording. The RGB, Depth, and Confidence controls change the preview, not the recorded sensor source.
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.

@@ -1,5 +1,7 @@
 # View zoom
 
+The subsequent [single-line status/zoom layout](M0-status-row.md) replaces this build's separate zoom row.
+
 Version 0.1.2 (build 7) adds centered 1×–4× live-preview magnification through pinch and 1×/2×/4× buttons. The label explicitly says **View**. The AR camera, sensor samples, intrinsics and pose solver retain their original capture configuration.
 
 The camera/depth previews magnify together. The tag overlay projects through the same centered zoom while retaining readable label sizes. Measurement input converts back through the view transform before the existing image/depth mapping. The native diagnostic panel and React Native controls do not scale.

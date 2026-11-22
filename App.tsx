@@ -422,7 +422,7 @@ function CaptureApp() {
               <Text style={s.failure}>Native capture module unavailable.</Text>
             )}
             <View style={s.cameraTop} pointerEvents="box-none">
-              <View style={s.row}>
+              <View style={s.cameraStatusBar}>
                 <View style={s.pill}>
                   <View
                     style={[
@@ -433,12 +433,22 @@ function CaptureApp() {
                       },
                     ]}
                   />
-                  <Text style={s.pillText}>
+                  <Text
+                    style={s.pillText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {(status.tracking || 'STARTING').toUpperCase()}
                   </Text>
                 </View>
                 <View style={s.pill}>
-                  <Text style={s.pillText}>
+                  <Text
+                    style={s.pillText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {status.depthAvailable
                       ? 'DEPTH LIVE'
                       : status.lidarAvailable
@@ -446,36 +456,36 @@ function CaptureApp() {
                       : 'CHECKING LiDAR'}
                   </Text>
                 </View>
-              </View>
-              <View style={s.zoomBar}>
-                <Text style={s.zoomLabel}>{`View ${viewZoom.toFixed(
-                  1,
-                )}×`}</Text>
-                {[1, 2, 4].map(zoom => (
-                  <Pressable
-                    key={zoom}
-                    accessibilityRole="button"
-                    accessibilityLabel={`View zoom ${zoom}×`}
-                    accessibilityState={{
-                      selected: Math.abs(viewZoom - zoom) < 0.01,
-                    }}
-                    onPress={() => setViewZoom(zoom)}
-                    hitSlop={6}
-                    style={[
-                      s.zoomButton,
-                      Math.abs(viewZoom - zoom) < 0.01 && s.modeActive,
-                    ]}
-                  >
-                    <Text
+                <View style={s.zoomBar}>
+                  <Text style={s.zoomLabel}>{`View ${viewZoom.toFixed(
+                    1,
+                  )}×`}</Text>
+                  {[1, 2, 4].map(zoom => (
+                    <Pressable
+                      key={zoom}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View zoom ${zoom}×`}
+                      accessibilityState={{
+                        selected: Math.abs(viewZoom - zoom) < 0.01,
+                      }}
+                      onPress={() => setViewZoom(zoom)}
+                      hitSlop={6}
                       style={[
-                        s.zoomText,
-                        Math.abs(viewZoom - zoom) < 0.01 && s.dark,
+                        s.zoomButton,
+                        Math.abs(viewZoom - zoom) < 0.01 && s.modeActive,
                       ]}
                     >
-                      {zoom}×
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Text
+                        style={[
+                          s.zoomText,
+                          Math.abs(viewZoom - zoom) < 0.01 && s.dark,
+                        ]}
+                      >
+                        {zoom}×
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
               {!debugEnabled && !!status.trackingReason && (
                 <Text style={s.trackingHint}>
@@ -838,22 +848,27 @@ const s = StyleSheet.create({
   dark: { color: C.bg },
   camera: { flex: 1, backgroundColor: C.card, overflow: 'hidden' },
   cameraTop: { position: 'absolute', top: 14, left: 15, right: 15 },
+  cameraStatusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 44,
+    gap: 8,
+    paddingHorizontal: 8,
+    borderRadius: 22,
+    backgroundColor: '#071426DB',
+  },
   zoomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
-    gap: 8,
-    marginTop: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
-    backgroundColor: '#071426DB',
+    flexShrink: 0,
+    gap: 2,
   },
   zoomLabel: {
     color: C.text,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    marginRight: 3,
+    marginRight: 1,
     fontVariant: ['tabular-nums'],
   },
   zoomButton: {
@@ -871,16 +886,15 @@ const s = StyleSheet.create({
     gap: 10,
   },
   pill: {
-    backgroundColor: '#071426DB',
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 16,
     flexDirection: 'row',
-    gap: 7,
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 4,
     alignItems: 'center',
   },
   pillText: {
     fontSize: 9,
+    flexShrink: 1,
     color: C.text,
     fontWeight: '700',
     letterSpacing: 0.6,

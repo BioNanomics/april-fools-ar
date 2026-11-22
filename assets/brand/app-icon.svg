@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>April Fools AR by The REFINERY</title>
+  <desc>The REFINERY wrench inside a camera viewfinder, using the organization's original green and blue.</desc>
+  <defs><style>.cls-3{fill:#40a578}.cls-5{fill:#115a40}</style></defs>
+  <rect width="1024" height="1024" fill="#f4f8f6"/>
+  <rect x="112" y="112" width="800" height="800" rx="110" fill="#e6efec"/>
+  <rect x="136" y="136" width="752" height="752" rx="88" fill="#ffffff"/>
+  <path d="M338 212H248Q212 212 212 248V338 M686 212H776Q812 212 812 248V338 M812 686V776Q812 812 776 812H686 M338 812H248Q212 812 212 776V686" fill="none" stroke="#134b70" stroke-width="48" stroke-linecap="square"/>
+  <g transform="translate(512 512) scale(4.95) translate(-303.85 -129.05)">
+<path class="cls-3" d="M315.54,171.75l-.22-57.26c6.96-3.73,11.53-10.72,11.5-18.59-.03-7.88-6.55-17.17-15.51-20.1l.08,20.15c.01,3.94-3.43,7.13-7.69,7.14-4.27,0-7.73-3.16-7.74-7.09l-.08-20.15c-8.93,2.98-15.48,10.88-15.36,20.2.03,7.88,4.65,14.83,11.64,18.52l.22,57.26c-.17,5.38-.17,10.64,11.62,10.64,12.39,0,10.97-7.61,11.53-10.72h0ZM303.9,175.42c-1.47,0-2.3-.6-2.8-1.05s-1.15-1.21-1.16-2.57l-.21-54.68c1.24.22,2.62.29,3.95.29s2.62-.16,3.93-.32l.21,54.68c0,1.97-1.71,3.57-3.85,3.57l-.09.08h.02Z"/>
+<path class="cls-5" d="M292.02,114.2l.02,4.88c2.48,1.06,5.04,1.74,7.77,2.11l-.02-4.42c-2.81-.45-5.45-1.35-7.77-2.57Z"/>
+<path class="cls-5" d="M315.31,114.12c-2.4,1.3-4.94,2.15-7.75,2.62l.02,4.42c2.72-.39,5.28-1.08,7.76-2.16l-.02-4.88h-.01Z"/>
+  </g>
+</svg>

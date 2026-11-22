@@ -125,7 +125,7 @@ beforeEach(() => {
     return next;
   });
   engine.getAppInfo.mockResolvedValue({
-    bundleId: 'com.doughorner.aprilfoolsar',
+    bundleId: 'com.bionanomics.aprilfoolsar',
     version: '0.1.1',
     build: '6',
     buildCommit: '1234567890abcdef1234567890abcdef12345678',
@@ -202,7 +202,7 @@ test('shares the native self-contained MP4 from a finalized saved session', asyn
   );
   expect(share).toHaveBeenCalledWith({
     url: 'file:///exports/recording.mp4',
-    title: 'April Fools AR — North field',
+    title: 'April Fools AR by The REFINERY — North field',
   });
 });
 

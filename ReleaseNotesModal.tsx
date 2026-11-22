@@ -40,7 +40,7 @@ const C = {
   bg: '#071426',
   card: '#102239',
   line: '#24415A',
-  cyan: '#27E4EF',
+  cyan: '#A1D18B',
   text: '#F3F8FD',
   muted: '#A6BACD',
   amber: '#FFD16A',

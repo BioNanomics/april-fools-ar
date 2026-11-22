@@ -52,3 +52,7 @@ After the short sensor/export check passes, use T0 in [TESTER_CHECKLIST.md](../.
 ## Floor and persistent measurement update — 2026-11-22
 
 Device Hub installed and launched version **0.2.0 (9)** from `d08a7b868aad3057ca06822eabf3a2136a9e7958`. Installed version/build and running PID `9311` were verified, with the original three session directories preserved. No screen sharing or phone test runners were started; device release was verified before further repository work. See [the spatial measurement validation](M0-spatial-measurements.md) for tests, exact build identity and remaining tester checks.
+
+## Automatic tag height update — 2026-11-22
+
+Device Hub installed and launched **0.2.1 (10)** from `cc1e3a9357128a4338ae43bfc3f781e166275f0b`. Installed version/build and running PID `9451` were verified; the original three session directories remain. Task-owned screen sharing was stopped, all deployment commands exited and no phone test runners were started. See [automatic tag-height validation](M0-tag-height.md) for geometry/UI tests, exact build details and pending real-floor checks.

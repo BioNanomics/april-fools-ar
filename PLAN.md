@@ -4,7 +4,7 @@ Draft for developer handoff
 
 Build a React Native app for quickly inspecting AprilTag placement, producing calibrated field maps with optional physical measurements, and debugging what a robot camera should observe. Make the iPhone experience reliable first. Share TypeScript workflows and a native AprilTag/calibration core, with ARKit components on iOS and ARCore components on Android.
 
-The active scope is **Milestone 0 only: put a working AprilTag detection, capture, and measurement MVP on a real LiDAR-capable iPhone, take it to a real field, and bring the recordings back here for review**. Live AprilTag detection is required for this MVP. The developer builds the app; the tester performs the field capture using the [Milestone 0 tester checklist](TESTER_CHECKLIST.md). No synthetic-data generator, test rig, surveyed fixture, BLE meter, or competitor benchmark is required for this milestone.
+The original active scope is **Milestone 0: put a working AprilTag detection, capture, and measurement MVP on a real LiDAR-capable iPhone, take it to a real field, and bring the recordings back here for review**. The separately authorized SC extraction below is also active. Live AprilTag detection is required for this MVP. The developer builds the app; the tester performs the field capture using the [Milestone 0 tester checklist](TESTER_CHECKLIST.md). No synthetic-data generator, test rig, surveyed fixture, BLE meter, or competitor benchmark is required for this milestone.
 
 Milestone 0 is complete only after the app works on the phone, the tester has recorded real field data, the exported bundle has been opened and checked here, and we have reviewed the findings together. The later roadmap is retained as a provisional draft. Revise it together after that review before starting later milestones. Implementation has started: the iPhone app is built, installed, and launch-verified; live capture/export validation is pending. See [the device validation record](docs/validation/M0-device.md).
 
@@ -40,6 +40,18 @@ Milestone 0 is complete only after the app works on the phone, the tester has re
 **Commit theme:** `feat(M0.x): build the iPhone ARKit LiDAR capture MVP`. Each development step is committed with its checkbox update; record tester evidence and the joint review in a separate M0 completion commit after they actually occur.
 
 **Scope boundary:** Capture the richest useful native data that the phone can sustain, while preserving a usable app and a reliable export. Record the chosen rates/formats and any unavailable or dropped data. Defer synthetic datasets, calibration research, test rigs, BLE purchases/integration, full solver work, Android, and production polish until the real-field review establishes what is needed.
+
+## Authorized shared-core extraction — SC
+
+The user explicitly authorized this implementation on November 22, 2026, including attention to MP4 import/export/extraction. This bounded extraction may proceed before the remaining M0 field-review gate; it does not mark that field gate complete or authorize unrelated deferred solver work.
+
+- [x] **SC.1 Portable library.** Extract existing range, quality, height, floor and projection math into C++ behind a plain C ABI; retain the shared AprilTag C detector. Document frames, units, ownership, optional sensor inputs and clock metadata. Verify numerical/rejection cases and deterministic floor fitting. **Commit checkpoint:** `feat(SC.1): extract portable spatial calculation core`.
+- [ ] **SC.2 iOS integration.** Route the live Swift calculation/overlay adapters through the shared implementation. Preserve settings, captured fields and native rendering; add core identity, source floor snapshot and frame age. Pass the existing simulator regressions and compile the iOS app. **Commit checkpoint:** `feat(SC.2): use shared core in iOS measurements`.
+- [ ] **SC.3 Recording replay.** Import directories, legacy ZIP and the current MP4 format through its existing extractor. Recompute original observations into a separate result file; retain timestamps, segments, raw records, source build identity and video-appended state. Verify byte preservation, metadata-only frames, missing sensors, corruption and safe extraction. **Commit checkpoint:** `feat(SC.3): replay extracted recordings through shared core`.
+- [ ] **SC.4 Platform delivery.** Package C++ and Java/JNI consumers; build with the pinned 2027 Systemcore toolchain and WPILib pipeline. Compile Android ARM64 JNI and retain a standalone Android library target. Add reproducible commands and CI. **Commit checkpoint:** `build(SC.4): verify Systemcore and Android core bindings`.
+- [ ] **SC.T Physical acceptance.** Run a tester session on the phone using this core, export a real recording and compare replay, then load/run the robot consumer on the matching Systemcore image. Verify hardware timing, acquisition and behavior. Record actual hardware evidence separately; cross-compilation is not this check.
+
+Implementation evidence and remaining limits: [SC validation](docs/validation/SC-shared-core.md). No new Kalman filter or sensor-fusion policy is part of this extraction.
 
 ## Later roadmap awaiting the Milestone 0 review
 

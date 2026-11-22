@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22)
+project(AFSpatialCoreConsumer LANGUAGES CXX)
+find_package(AFSpatialCore 0.1 REQUIRED CONFIG)
+add_executable(afsc_installed_consumer example.cpp)
+target_compile_features(afsc_installed_consumer PRIVATE cxx_std_17)
+target_link_libraries(afsc_installed_consumer PRIVATE AFSpatialCore::core)

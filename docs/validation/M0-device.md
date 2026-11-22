@@ -60,3 +60,7 @@ Device Hub installed and launched **0.2.1 (10)** from `cc1e3a9357128a4338ae43bfc
 ## Height unit preference update — 2026-11-22
 
 Device Hub installed and launched **0.2.2 (11)** from `4398ff7a02526513278c582c9efc99be310fc132`, preserving the three saved sessions. A fresh global device lease covered all physical actions. Accepted full-window evidence and the guard's final `released` status verified cleanup before documentation and push. No test runner, recording or settings changes were made. See [height unit validation](M0-height-units.md).
+
+## Compact multi-tag update — 2026-11-22
+
+Device Hub installed and launched **0.3.0 (12)** from `c24e70a64cedf6ed12eb868fa638411709e2e90c`, preserving three saved sessions. All physical actions used a fresh global device lease; full-window capture proof and final `released` status verified cleanup before repository work resumed. No mirroring, phone-coordinate input, recording or test runners were started. See [multi-tag validation](M0-multi-tag.md).

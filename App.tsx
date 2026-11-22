@@ -4,17 +4,22 @@ import {
   Alert,
   FlatList,
   Linking,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
   Modal,
   NativeModules,
   NativeEventEmitter,
   Pressable,
   requireNativeComponent,
   Share,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type ViewProps,
 } from 'react-native';
 import {
@@ -127,9 +132,26 @@ const fileSize = (b = 0) => `${(b / 1048576).toFixed(1)} MB`;
 
 function CaptureApp() {
   const inset = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const usableWidth = width - inset.left - inset.right;
+  const tablet = Math.min(width, height) >= 600;
+  const landscape = width > height;
+  const wide =
+    (landscape && usableWidth >= 620) || (tablet && usableWidth >= 740);
+  const compactLandscape = wide && height < 500;
+  const railWidth = tablet && !compactLandscape ? 336 : 276;
+  const sessionColumns = usableWidth >= 1050 ? 3 : usableWidth >= 680 ? 2 : 1;
+  const sessionCardWidth =
+    (Math.min(width, 1440) -
+      inset.left -
+      inset.right -
+      40 -
+      14 * (sessionColumns - 1)) /
+    sessionColumns;
   const [tab, setTab] = useState<'capture' | 'sessions'>('capture');
   const [status, setStatus] = useState<Status>({});
   const [name, setName] = useState('Field walk');
+  const [editingName, setEditingName] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -242,6 +264,8 @@ function CaptureApp() {
     return () => sub.remove();
   }, [refresh]);
   const toggle = async () => {
+    Keyboard.dismiss();
+    setEditingName(false);
     setBusy(true);
     try {
       if (status.recording) {
@@ -446,103 +470,512 @@ function CaptureApp() {
   const tags = status.aprilTag;
   const tagIDs = tags?.ids || [];
   const firstDepth = m?.points?.[0]?.depthMeters;
+  const compactNameEditing = compactLandscape && editingName;
   const working = busy || status.finalizing;
   const viewZoom = Number.isFinite(status.displayZoom)
     ? status.displayZoom!
     : 1;
 
-  return (
-    <View style={s.root}>
-      <StatusBar barStyle="light-content" />
-      <View style={[s.header, { paddingTop: inset.top + 9 }]}>
-        <View style={s.brandRow}>
-          <View style={s.mark}>
-            <Text style={s.markText}>⌖</Text>
+  const modeControls = (
+    <View style={s.debugBar} testID="capture.toolbar">
+      <View style={s.debugSwitch}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Tag debug mode"
+          accessibilityState={{ selected: debugEnabled }}
+          onPress={() => changeDebugMode(true)}
+          style={[s.debugChoice, debugEnabled && s.modeActive]}
+        >
+          <Text style={[s.modeText, debugEnabled && s.dark]}>Tag debug</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Measurement mode"
+          accessibilityState={{ selected: !debugEnabled }}
+          onPress={() => changeDebugMode(false)}
+          style={[s.debugChoice, !debugEnabled && s.modeActive]}
+        >
+          <Text style={[s.modeText, !debugEnabled && s.dark]}>Measure</Text>
+        </Pressable>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Debug settings"
+        onPress={openDebugSettings}
+      >
+        <Text style={s.link}>Settings</Text>
+      </Pressable>
+    </View>
+  );
+  const measurementTools = !debugEnabled ? (
+    <View style={[s.measure, wide && s.measureInRail]}>
+      {settingUpFloor ? (
+        <>
+          <Text style={s.kicker}>SET UP THE FLOOR</Text>
+          <Text style={s.floorInstructions}>
+            Point at the floor and move slowly to scan a larger area.
+          </Text>
+          <View style={[s.row, s.floorSetupRow]}>
+            <View style={s.floorCoverage}>
+              <Text style={s.floorCoverageValue}>
+                {floorSetup?.candidateSelected &&
+                floorSetup.areaSquareMeters != null &&
+                Number.isFinite(floorSetup.areaSquareMeters)
+                  ? `${(
+                      Math.floor(floorSetup.areaSquareMeters * 100) / 100
+                    ).toFixed(2)} m² scanned`
+                  : 'Looking for the floor…'}
+              </Text>
+              <Text style={s.small}>Target: 1.00 m², at least 50 cm wide</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Finish floor setup"
+              accessibilityState={{
+                disabled:
+                  !floorSetup?.ready ||
+                  !floorSetup?.candidateId ||
+                  finishingFloor,
+              }}
+              disabled={
+                !floorSetup?.ready || !floorSetup?.candidateId || finishingFloor
+              }
+              onPress={completeFloorSetup}
+              style={[
+                s.floorDone,
+                (!floorSetup?.ready ||
+                  !floorSetup?.candidateId ||
+                  finishingFloor) &&
+                  s.dim,
+              ]}
+            >
+              {finishingFloor ? (
+                <ActivityIndicator color={C.bg} />
+              ) : (
+                <Text style={s.exportText}>Done</Text>
+              )}
+            </Pressable>
           </View>
-          <View style={s.brandContent}>
-            <Text style={s.brand}>APRIL FOOLS AR</Text>
-            <View style={s.brandMeta}>
-              <Text style={s.kicker}>FIELD CAPTURE</Text>
+          <Text style={s.hint}>
+            {floorSetup?.ready
+              ? 'Check that the highlighted surface is the floor, then tap Done.'
+              : (
+                  {
+                    trackingLimited:
+                      'Move slowly and wait for normal tracking.',
+                    staleFrame: 'Waiting for a current camera frame.',
+                    insufficientArea:
+                      'Keep moving to extend the highlighted floor to at least 1.00 m².',
+                    insufficientSpan:
+                      'Scan a wider patch of floor before continuing.',
+                  } as Record<string, string>
+                )[floorSetup?.reason || ''] ||
+                'Tap the floor if it is not selected automatically. Keep moving to extend the highlighted area.'}
+          </Text>
+        </>
+      ) : measuringTagSize ? (
+        <>
+          <Text style={s.kicker}>MEASURE ONE TAG EDGE</Text>
+          <Text style={s.value}>
+            {m?.pointCount === 2 && m.distanceMeters != null
+              ? `${(m.distanceMeters * 1000).toFixed(1)} mm`
+              : `${m?.pointCount || 0} / 2 points`}
+          </Text>
+          <Text style={s.hint}>
+            Tap adjacent black/white boundary corners on one edge. Review this
+            AR/LiDAR estimate before using it.
+          </Text>
+          <View style={[s.row, s.measureActions]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel tag width measurement"
+              onPress={() => changeDebugMode(true)}
+            >
+              <Text style={s.link}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reset tag width points"
+              onPress={setStatusFromTagWidthReset}
+            >
+              <Text style={s.link}>Clear</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Use measured tag width"
+              onPress={applyTagSizeMeasurement}
+              disabled={m?.pointCount !== 2 || !m.distanceMeters}
+              style={[
+                s.export,
+                (m?.pointCount !== 2 || !m.distanceMeters) && s.dim,
+              ]}
+            >
+              <Text style={s.exportText}>Use width</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={s.row}>
+            <View style={s.measureModeSwitch}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Version and release notes"
-                onPress={openReleaseNotes}
-                hitSlop={8}
-                style={s.versionButton}
+                accessibilityLabel="Two-point measurement mode"
+                accessibilityState={{
+                  selected: spatialMode === 'distance',
+                }}
+                onPress={() => setSpatialMode('distance')}
+                style={[
+                  s.measureChoice,
+                  spatialMode === 'distance' && s.modeActive,
+                ]}
               >
-                <Text style={s.versionLabel}>
-                  {appInfo
-                    ? `v${appInfo.version} (${
-                        appInfo.build
-                      }) · ${appInfo.buildCommit.slice(0, 7)}${
-                        appInfo.workingTreeDirty ? '*' : ''
-                      }`
-                    : 'Version & release notes'}
+                <Text
+                  style={[s.modeText, spatialMode === 'distance' && s.dark]}
+                >
+                  Two points
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Floor height measurement mode"
+                accessibilityState={{
+                  selected: spatialMode === 'height',
+                }}
+                onPress={() => setSpatialMode('height')}
+                style={[
+                  s.measureChoice,
+                  spatialMode === 'height' && s.modeActive,
+                ]}
+              >
+                <Text style={[s.modeText, spatialMode === 'height' && s.dark]}>
+                  Floor height
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-        <View style={s.tabs}>
-          {(['capture', 'sessions'] as const).map(t => (
             <Pressable
-              key={t}
-              style={[s.tab, tab === t && s.tabActive]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: tab === t }}
-              onPress={() => {
-                if (!status.recording && !working) {
-                  setTab(t);
-                  if (t === 'sessions') {
-                    refreshSessions();
-                  }
-                }
-              }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all measurements"
+              onPress={clearMeasurements}
+              hitSlop={8}
             >
-              <Text style={[s.tabText, tab === t && s.cyan]}>
-                {t === 'capture' ? 'Live capture' : 'Saved sessions'}
+              <Text style={s.link}>Clear</Text>
+            </Pressable>
+          </View>
+          <View style={[s.row, s.floorRow]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Toggle floor planes"
+              accessibilityState={{ selected: floorVisible }}
+              onPress={toggleFloor}
+              hitSlop={6}
+            >
+              <Text style={s.link}>
+                {floorVisible ? 'Floor on' : 'Floor off'}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Select floor plane"
+              onPress={() => setSpatialMode('selectFloor')}
+              hitSlop={6}
+            >
+              <Text style={s.link}>
+                {floorSelected ? 'Change floor' : 'Set floor'}
+              </Text>
+            </Pressable>
+            <Text style={s.floorState}>{`${measurementCount} measurement${
+              measurementCount === 1 ? '' : 's'
+            } · ${floorSelected ? 'floor set' : 'no floor'}`}</Text>
+          </View>
+          <View style={s.values}>
+            <View style={m?.kind === 'height' && s.heightValueBlock}>
+              <Text
+                style={m?.kind === 'height' ? s.heightValue : s.value}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
+                {m?.kind === 'height'
+                  ? formatHeight(
+                      m.heightMeters ?? m.verticalMeters ?? m.distanceMeters,
+                      debugSettings.showImperialHeight ?? true,
+                    )
+                  : m?.distanceMeters != null
+                  ? `${m.distanceMeters.toFixed(3)} m`
+                  : '—'}
+              </Text>
+              <Text style={s.small}>
+                {m?.kind === 'height' ? 'Floor height' : '3D distance'}
+              </Text>
+            </View>
+            {m?.kind !== 'height' && (
+              <>
+                <View style={s.divider} />
+                <View>
+                  <Text style={s.value}>
+                    {m?.verticalMeters != null
+                      ? `${
+                          m.verticalMeters >= 0 ? '+' : ''
+                        }${m.verticalMeters.toFixed(3)} m`
+                      : '—'}
+                  </Text>
+                  <Text style={s.small}>Vertical difference</Text>
+                </View>
+              </>
+            )}
+          </View>
+          <Text style={s.hint}>
+            {spatialMode === 'height'
+              ? 'Tap the tag center or target surface. Height is vertical above the selected floor.'
+              : m?.pointCount === 1
+              ? `First point${
+                  firstDepth != null
+                    ? ` · ${firstDepth.toFixed(3)} m depth`
+                    : ''
+                }. Tap the second surface.`
+              : 'Tap two surfaces. Lines stay in this AR session; record to save them.'}
+          </Text>
+        </>
+      )}
+    </View>
+  ) : null;
+  const recordingControls = (
+    <View
+      style={[
+        s.controls,
+        wide && s.controlsInRail,
+        compactNameEditing && s.nameEditingControls,
+        {
+          paddingBottom: compactNameEditing ? 6 : wide ? 12 : inset.bottom + 12,
+        },
+      ]}
+    >
+      {!compactNameEditing &&
+        (status.lastError ? (
+          <Text numberOfLines={2} style={s.failure}>
+            {status.lastError}
+          </Text>
+        ) : (
+          <View style={[s.row, wide && s.railTelemetry]}>
+            <Text style={s.telemetry}>
+              {status.recording
+                ? '● RECORDING'
+                : status.depthAvailable
+                ? 'READY TO RECORD'
+                : 'WAITING FOR LIVE DEPTH'}
+            </Text>
+            <Text style={s.telemetry}>
+              {duration(status.elapsedSeconds)} · {status.framesWritten || 0}{' '}
+              frames · {status.depthFrames || 0} depth ·{' '}
+              {status.droppedFrames || 0} skipped
+            </Text>
+          </View>
+        ))}
+      {!status.recording && (
+        <TextInput
+          accessibilityLabel="Session name"
+          value={name}
+          onChangeText={setName}
+          onFocus={() => setEditingName(true)}
+          onBlur={() => setEditingName(false)}
+          onSubmitEditing={() => setEditingName(false)}
+          style={s.input}
+          placeholder="Session name"
+          placeholderTextColor={C.muted}
+          returnKeyType="done"
+        />
+      )}
+      <View style={s.recordRow}>
+        <Pressable
+          onPress={toggle}
+          disabled={working || !Engine}
+          style={[s.record, compactLandscape && s.recordCompact]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            status.recording ? 'Stop and save recording' : 'Start recording'
+          }
+        >
+          {working ? (
+            <ActivityIndicator color={C.bg} />
+          ) : (
+            <>
+              <View style={[s.recordDot, status.recording && s.square]} />
+              <Text style={s.recordText}>
+                {status.recording ? 'Stop & save' : 'Start recording'}
+              </Text>
+            </>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={() => setNoteOpen(true)}
+          disabled={!status.recording || working}
+          accessibilityRole="button"
+          accessibilityLabel="Bookmark"
+          style={[
+            s.bookmark,
+            compactLandscape && s.bookmarkInRail,
+            !status.recording && s.dim,
+          ]}
+        >
+          <Text style={s.plus}>+</Text>
+          {!compactLandscape && <Text style={s.bookmarkText}>Bookmark</Text>}
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const sceneTools = (
+    <>
+      {floorTiltText && (
+        <Text
+          style={s.floorTilt}
+          accessibilityLabel={floorTiltText}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
+          {floorTiltText}
+        </Text>
+      )}
+      {!debugEnabled && !!status.trackingReason && (
+        <Text style={s.trackingHint}>
+          {status.trackingReason.replace(/([A-Z])/g, ' $1')}
+        </Text>
+      )}
+      {!debugEnabled && !settingUpFloor && (
+        <View style={s.modes}>
+          {['camera', 'depth', 'confidence'].map(mode => (
+            <Pressable
+              key={mode}
+              style={[s.mode, preview === mode && s.modeActive]}
+              onPress={() => setMode(mode)}
+            >
+              <Text style={[s.modeText, preview === mode && s.dark]}>
+                {mode === 'camera'
+                  ? 'RGB'
+                  : mode === 'depth'
+                  ? 'Depth'
+                  : 'Confidence'}
               </Text>
             </Pressable>
           ))}
         </View>
-        {tab === 'capture' && (
-          <View style={s.debugBar}>
-            <View style={s.debugSwitch}>
-              <Pressable
-                accessibilityLabel="Tag debug mode"
-                accessibilityState={{ selected: debugEnabled }}
-                onPress={() => changeDebugMode(true)}
-                style={[s.debugChoice, debugEnabled && s.modeActive]}
-              >
-                <Text style={[s.modeText, debugEnabled && s.dark]}>
-                  Tag debug
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Measurement mode"
-                accessibilityState={{ selected: !debugEnabled }}
-                onPress={() => changeDebugMode(false)}
-                style={[s.debugChoice, !debugEnabled && s.modeActive]}
-              >
-                <Text style={[s.modeText, !debugEnabled && s.dark]}>
-                  Measure
-                </Text>
-              </Pressable>
+      )}
+      {!debugEnabled && !settingUpFloor && (
+        <View style={s.tagStatus} pointerEvents="none">
+          <Text style={s.tagText} numberOfLines={1}>
+            {tags?.state === 'error'
+              ? tags.error || 'Detector unavailable'
+              : tagIDs.length
+              ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
+              : tags?.state === 'running' || tags?.state === 'ready'
+              ? 'Looking for tags'
+              : 'Waiting for camera frames'}
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
+  return (
+    <KeyboardAvoidingView
+      style={s.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <StatusBar barStyle="light-content" />
+      <View
+        style={[
+          s.header,
+          wide && s.headerWide,
+          compactNameEditing && s.hideForKeyboard,
+          {
+            paddingTop: inset.top + (compactLandscape ? 4 : 9),
+            paddingLeft: inset.left + 20,
+            paddingRight: inset.right + 20,
+          },
+        ]}
+      >
+        <View style={[s.headerMain, wide && s.headerMainWide]}>
+          <View style={[s.brandRow, wide && s.brandRowWide]}>
+            <View style={[s.mark, compactLandscape && s.markCompact]}>
+              <Text style={s.markText}>⌖</Text>
             </View>
-            <Pressable
-              accessibilityLabel="Debug settings"
-              onPress={openDebugSettings}
-            >
-              <Text style={s.link}>Settings</Text>
-            </Pressable>
+            <View style={s.brandContent}>
+              <Text style={[s.brand, compactLandscape && s.brandCompact]}>
+                APRIL FOOLS AR
+              </Text>
+              <View style={s.brandMeta}>
+                {!compactLandscape && (
+                  <Text style={s.kicker}>FIELD CAPTURE</Text>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Version and release notes"
+                  onPress={openReleaseNotes}
+                  hitSlop={8}
+                  style={s.versionButton}
+                >
+                  <Text style={s.versionLabel}>
+                    {appInfo
+                      ? `v${appInfo.version} (${
+                          appInfo.build
+                        }) · ${appInfo.buildCommit.slice(0, 7)}${
+                          appInfo.workingTreeDirty ? '*' : ''
+                        }`
+                      : 'Version & release notes'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
-        )}
+          <View style={[s.tabs, wide && s.tabsWide]}>
+            {(['capture', 'sessions'] as const).map(t => (
+              <Pressable
+                key={t}
+                style={[s.tab, tab === t && s.tabActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === t }}
+                onPress={() => {
+                  if (!status.recording && !working) {
+                    setTab(t);
+                    if (t === 'sessions') {
+                      refreshSessions();
+                    }
+                  }
+                }}
+              >
+                <Text style={[s.tabText, tab === t && s.cyan]}>
+                  {t === 'capture' ? 'Live capture' : 'Saved sessions'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        {tab === 'capture' && !wide && modeControls}
       </View>
       {tab === 'capture' ? (
-        <>
-          <View style={s.camera}>
+        <View
+          testID="capture.workspace"
+          style={[
+            s.workspace,
+            wide && s.workspaceWide,
+            wide && {
+              paddingLeft: inset.left + 12,
+              paddingRight: inset.right + 12,
+              paddingBottom: inset.bottom + 10,
+            },
+          ]}
+        >
+          <View
+            key="camera"
+            testID="capture.camera"
+            style={[s.camera, wide && s.cameraWide]}
+          >
             {Engine ? (
-              <CameraView style={StyleSheet.absoluteFill} />
+              <CameraView
+                testID="capture.native-camera"
+                style={StyleSheet.absoluteFill}
+              />
             ) : (
               <Text style={s.failure}>Native capture module unavailable.</Text>
             )}
@@ -612,374 +1045,74 @@ function CaptureApp() {
                   ))}
                 </View>
               </View>
-              {floorTiltText && (
-                <Text
-                  style={s.floorTilt}
-                  accessibilityLabel={floorTiltText}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.8}
-                >
-                  {floorTiltText}
-                </Text>
-              )}
-              {!debugEnabled && !!status.trackingReason && (
-                <Text style={s.trackingHint}>
-                  {status.trackingReason.replace(/([A-Z])/g, ' $1')}
-                </Text>
-              )}
-              {!debugEnabled && !settingUpFloor && (
-                <View style={s.modes}>
-                  {['camera', 'depth', 'confidence'].map(mode => (
-                    <Pressable
-                      key={mode}
-                      style={[s.mode, preview === mode && s.modeActive]}
-                      onPress={() => setMode(mode)}
-                    >
-                      <Text style={[s.modeText, preview === mode && s.dark]}>
-                        {mode === 'camera'
-                          ? 'RGB'
-                          : mode === 'depth'
-                          ? 'Depth'
-                          : 'Confidence'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-              {!debugEnabled && !settingUpFloor && (
-                <View style={s.tagStatus} pointerEvents="none">
-                  <Text style={s.tagText} numberOfLines={1}>
-                    {tags?.state === 'error'
-                      ? tags.error || 'Detector unavailable'
-                      : tagIDs.length
-                      ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
-                      : tags?.state === 'running' || tags?.state === 'ready'
-                      ? 'Looking for tags'
-                      : 'Waiting for camera frames'}
-                  </Text>
-                </View>
-              )}
+              {!wide && sceneTools}
             </View>
-            {!debugEnabled && (
-              <View style={s.measure}>
-                {settingUpFloor ? (
-                  <>
-                    <Text style={s.kicker}>SET UP THE FLOOR</Text>
-                    <Text style={s.floorInstructions}>
-                      Point at the floor and move slowly to scan a larger area.
-                    </Text>
-                    <View style={[s.row, s.floorSetupRow]}>
-                      <View style={s.floorCoverage}>
-                        <Text style={s.floorCoverageValue}>
-                          {floorSetup?.candidateSelected &&
-                          floorSetup.areaSquareMeters != null &&
-                          Number.isFinite(floorSetup.areaSquareMeters)
-                            ? `${(
-                                Math.floor(floorSetup.areaSquareMeters * 100) /
-                                100
-                              ).toFixed(2)} m² scanned`
-                            : 'Looking for the floor…'}
-                        </Text>
-                        <Text style={s.small}>
-                          Target: 1.00 m², at least 50 cm wide
-                        </Text>
-                      </View>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Finish floor setup"
-                        accessibilityState={{
-                          disabled:
-                            !floorSetup?.ready ||
-                            !floorSetup?.candidateId ||
-                            finishingFloor,
-                        }}
-                        disabled={
-                          !floorSetup?.ready ||
-                          !floorSetup?.candidateId ||
-                          finishingFloor
-                        }
-                        onPress={completeFloorSetup}
-                        style={[
-                          s.floorDone,
-                          (!floorSetup?.ready ||
-                            !floorSetup?.candidateId ||
-                            finishingFloor) &&
-                            s.dim,
-                        ]}
-                      >
-                        {finishingFloor ? (
-                          <ActivityIndicator color={C.bg} />
-                        ) : (
-                          <Text style={s.exportText}>Done</Text>
-                        )}
-                      </Pressable>
-                    </View>
-                    <Text style={s.hint}>
-                      {floorSetup?.ready
-                        ? 'Check that the highlighted surface is the floor, then tap Done.'
-                        : (
-                            {
-                              trackingLimited:
-                                'Move slowly and wait for normal tracking.',
-                              staleFrame: 'Waiting for a current camera frame.',
-                              insufficientArea:
-                                'Keep moving to extend the highlighted floor to at least 1.00 m².',
-                              insufficientSpan:
-                                'Scan a wider patch of floor before continuing.',
-                            } as Record<string, string>
-                          )[floorSetup?.reason || ''] ||
-                          'Tap the floor if it is not selected automatically. Keep moving to extend the highlighted area.'}
-                    </Text>
-                  </>
-                ) : measuringTagSize ? (
-                  <>
-                    <Text style={s.kicker}>MEASURE ONE TAG EDGE</Text>
-                    <Text style={s.value}>
-                      {m?.pointCount === 2 && m.distanceMeters != null
-                        ? `${(m.distanceMeters * 1000).toFixed(1)} mm`
-                        : `${m?.pointCount || 0} / 2 points`}
-                    </Text>
-                    <Text style={s.hint}>
-                      Tap adjacent black/white boundary corners on one edge.
-                      Review this AR/LiDAR estimate before using it.
-                    </Text>
-                    <View style={[s.row, s.measureActions]}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Cancel tag width measurement"
-                        onPress={() => changeDebugMode(true)}
-                      >
-                        <Text style={s.link}>Cancel</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Reset tag width points"
-                        onPress={setStatusFromTagWidthReset}
-                      >
-                        <Text style={s.link}>Clear</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Use measured tag width"
-                        onPress={applyTagSizeMeasurement}
-                        disabled={m?.pointCount !== 2 || !m.distanceMeters}
-                        style={[
-                          s.export,
-                          (m?.pointCount !== 2 || !m.distanceMeters) && s.dim,
-                        ]}
-                      >
-                        <Text style={s.exportText}>Use width</Text>
-                      </Pressable>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <View style={s.row}>
-                      <View style={s.measureModeSwitch}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Two-point measurement mode"
-                          accessibilityState={{
-                            selected: spatialMode === 'distance',
-                          }}
-                          onPress={() => setSpatialMode('distance')}
-                          style={[
-                            s.measureChoice,
-                            spatialMode === 'distance' && s.modeActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              s.modeText,
-                              spatialMode === 'distance' && s.dark,
-                            ]}
-                          >
-                            Two points
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Floor height measurement mode"
-                          accessibilityState={{
-                            selected: spatialMode === 'height',
-                          }}
-                          onPress={() => setSpatialMode('height')}
-                          style={[
-                            s.measureChoice,
-                            spatialMode === 'height' && s.modeActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              s.modeText,
-                              spatialMode === 'height' && s.dark,
-                            ]}
-                          >
-                            Floor height
-                          </Text>
-                        </Pressable>
-                      </View>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Clear all measurements"
-                        onPress={clearMeasurements}
-                        hitSlop={8}
-                      >
-                        <Text style={s.link}>Clear</Text>
-                      </Pressable>
-                    </View>
-                    <View style={[s.row, s.floorRow]}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Toggle floor planes"
-                        accessibilityState={{ selected: floorVisible }}
-                        onPress={toggleFloor}
-                        hitSlop={6}
-                      >
-                        <Text style={s.link}>
-                          {floorVisible ? 'Floor on' : 'Floor off'}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Select floor plane"
-                        onPress={() => setSpatialMode('selectFloor')}
-                        hitSlop={6}
-                      >
-                        <Text style={s.link}>
-                          {floorSelected ? 'Change floor' : 'Set floor'}
-                        </Text>
-                      </Pressable>
-                      <Text
-                        style={s.floorState}
-                      >{`${measurementCount} measurement${
-                        measurementCount === 1 ? '' : 's'
-                      } · ${floorSelected ? 'floor set' : 'no floor'}`}</Text>
-                    </View>
-                    <View style={s.values}>
-                      <View style={m?.kind === 'height' && s.heightValueBlock}>
-                        <Text
-                          style={m?.kind === 'height' ? s.heightValue : s.value}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.85}
-                        >
-                          {m?.kind === 'height'
-                            ? formatHeight(
-                                m.heightMeters ??
-                                  m.verticalMeters ??
-                                  m.distanceMeters,
-                                debugSettings.showImperialHeight ?? true,
-                              )
-                            : m?.distanceMeters != null
-                            ? `${m.distanceMeters.toFixed(3)} m`
-                            : '—'}
-                        </Text>
-                        <Text style={s.small}>
-                          {m?.kind === 'height'
-                            ? 'Floor height'
-                            : '3D distance'}
-                        </Text>
-                      </View>
-                      {m?.kind !== 'height' && (
-                        <>
-                          <View style={s.divider} />
-                          <View>
-                            <Text style={s.value}>
-                              {m?.verticalMeters != null
-                                ? `${
-                                    m.verticalMeters >= 0 ? '+' : ''
-                                  }${m.verticalMeters.toFixed(3)} m`
-                                : '—'}
-                            </Text>
-                            <Text style={s.small}>Vertical difference</Text>
-                          </View>
-                        </>
-                      )}
-                    </View>
-                    <Text style={s.hint}>
-                      {spatialMode === 'height'
-                        ? 'Tap the tag center or target surface. Height is vertical above the selected floor.'
-                        : m?.pointCount === 1
-                        ? `First point${
-                            firstDepth != null
-                              ? ` · ${firstDepth.toFixed(3)} m depth`
-                              : ''
-                          }. Tap the second surface.`
-                        : 'Tap two surfaces. Lines stay in this AR session; record to save them.'}
-                    </Text>
-                  </>
-                )}
+            {!wide && measurementTools}
+          </View>
+          <View
+            key="console"
+            testID="capture.console"
+            style={[
+              s.console,
+              wide && s.consoleWide,
+              wide && { width: railWidth },
+            ]}
+          >
+            {wide && (
+              <View
+                style={[s.toolsHeader, compactNameEditing && s.hideForKeyboard]}
+              >
+                {modeControls}
               </View>
             )}
-          </View>
-          <View style={[s.controls, { paddingBottom: inset.bottom + 12 }]}>
-            {status.lastError ? (
-              <Text numberOfLines={2} style={s.failure}>
-                {status.lastError}
-              </Text>
-            ) : (
-              <View style={s.row}>
-                <Text style={s.telemetry}>
-                  {status.recording
-                    ? '● RECORDING'
-                    : status.depthAvailable
-                    ? 'READY TO RECORD'
-                    : 'WAITING FOR LIVE DEPTH'}
-                </Text>
-                <Text style={s.telemetry}>
-                  {duration(status.elapsedSeconds)} ·{' '}
-                  {status.framesWritten || 0} frames · {status.depthFrames || 0}{' '}
-                  depth · {status.droppedFrames || 0} skipped
-                </Text>
-              </View>
-            )}
-            {!status.recording && (
-              <TextInput
-                accessibilityLabel="Session name"
-                value={name}
-                onChangeText={setName}
-                style={s.input}
-                placeholder="Session name"
-                placeholderTextColor={C.muted}
-                returnKeyType="done"
-              />
-            )}
-            <View style={s.recordRow}>
-              <Pressable
-                onPress={toggle}
-                disabled={working || !Engine}
-                style={s.record}
-                accessibilityLabel={
-                  status.recording
-                    ? 'Stop and save recording'
-                    : 'Start recording'
-                }
+            {wide && (
+              <ScrollView
+                style={[s.toolsScroll, compactNameEditing && s.hideForKeyboard]}
+                contentContainerStyle={s.toolsContent}
+                keyboardShouldPersistTaps="handled"
               >
-                {working ? (
-                  <ActivityIndicator color={C.bg} />
-                ) : (
-                  <>
-                    <View style={[s.recordDot, status.recording && s.square]} />
-                    <Text style={s.recordText}>
-                      {status.recording ? 'Stop & save' : 'Start recording'}
+                {sceneTools}
+                {debugEnabled ? (
+                  <View style={s.sceneSummary}>
+                    <Text style={s.kicker}>LIVE TAGS</Text>
+                    <Text style={s.sceneCount}>
+                      {tagIDs.length
+                        ? tagIDs.map(id => `#${id}`).join(' · ')
+                        : status.tracking === 'unavailable'
+                        ? 'Camera unavailable'
+                        : tags?.state === 'error'
+                        ? 'Detector unavailable'
+                        : 'Looking for tags'}
                     </Text>
-                  </>
+                    <Text style={s.description}>
+                      Point at an AprilTag. Tap its outline to inspect distance
+                      and height.
+                    </Text>
+                    <Text style={s.hint}>
+                      {floorSelected
+                        ? 'Floor selected for height estimates.'
+                        : 'Set up the floor in Measure to see tag heights.'}
+                    </Text>
+                  </View>
+                ) : (
+                  measurementTools
                 )}
-              </Pressable>
-              <Pressable
-                onPress={() => setNoteOpen(true)}
-                disabled={!status.recording || working}
-                style={[s.bookmark, !status.recording && s.dim]}
-              >
-                <Text style={s.plus}>＋</Text>
-                <Text style={s.bookmarkText}>Bookmark</Text>
-              </Pressable>
-            </View>
+              </ScrollView>
+            )}
+            {recordingControls}
           </View>
-        </>
+        </View>
       ) : (
-        <View style={s.sessionPage}>
+        <View
+          style={[
+            s.sessionPage,
+            {
+              paddingLeft: inset.left + 20,
+              paddingRight: inset.right + 20,
+              paddingBottom: inset.bottom,
+            },
+          ]}
+        >
           <View style={s.row}>
             <Text style={s.title}>Your field recordings</Text>
             <Pressable onPress={refreshSessions}>
@@ -991,6 +1124,11 @@ function CaptureApp() {
             measurements, and notes in one ZIP.
           </Text>
           <FlatList
+            key={`sessions-${sessionColumns}`}
+            numColumns={sessionColumns}
+            columnWrapperStyle={
+              sessionColumns > 1 ? s.sessionColumns : undefined
+            }
             data={sessions}
             keyExtractor={item => item.id}
             contentContainerStyle={s.list}
@@ -1005,7 +1143,13 @@ function CaptureApp() {
               </View>
             }
             renderItem={({ item }) => (
-              <View style={s.session}>
+              <View
+                style={[
+                  s.session,
+                  sessionColumns > 1 && s.sessionTile,
+                  sessionColumns > 1 && { maxWidth: sessionCardWidth },
+                ]}
+              >
                 <Text style={s.title}>{item.name}</Text>
                 <Text style={s.description}>
                   {new Date(item.createdAt).toLocaleString()}
@@ -1046,12 +1190,33 @@ function CaptureApp() {
       />
       <Modal
         visible={noteOpen}
+        supportedOrientations={[
+          'portrait',
+          'landscape-left',
+          'landscape-right',
+          'portrait-upside-down',
+        ]}
         transparent
         animationType="fade"
         onRequestClose={() => setNoteOpen(false)}
       >
-        <View style={s.backdrop}>
-          <View style={s.modal}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[
+            s.backdrop,
+            {
+              paddingTop: inset.top + 12,
+              paddingBottom: inset.bottom + 12,
+              paddingLeft: inset.left + 16,
+              paddingRight: inset.right + 16,
+            },
+          ]}
+        >
+          <ScrollView
+            style={s.modal}
+            contentContainerStyle={s.modalContent}
+            keyboardShouldPersistTaps="handled"
+          >
             <Text style={s.title}>Mark this moment</Text>
             <Text style={s.description}>
               Tag ID, reference value, or an observation. A source image is
@@ -1074,10 +1239,10 @@ function CaptureApp() {
                 <Text style={s.exportText}>Save bookmark</Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1091,7 +1256,58 @@ export default function App() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
+  workspace: { flex: 1, minHeight: 0 },
+  workspaceWide: { flexDirection: 'row', gap: 12 },
   header: { paddingHorizontal: 20 },
+  headerWide: { paddingBottom: 8 },
+  headerMain: {},
+  headerMainWide: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  brandRowWide: { flex: 1, minWidth: 0 },
+  brandCompact: { fontSize: 13, letterSpacing: 0.8 },
+  markCompact: { width: 32, height: 32 },
+  tabsWide: { marginTop: 0, alignSelf: 'stretch', alignItems: 'center' },
+  console: { flexShrink: 0 },
+  consoleWide: {
+    justifyContent: 'flex-end',
+    backgroundColor: C.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.line,
+    overflow: 'hidden',
+  },
+  toolsScroll: { flex: 1, minHeight: 0 },
+  hideForKeyboard: { display: 'none' },
+  nameEditingControls: { paddingTop: 6 },
+  toolsHeader: { paddingHorizontal: 14 },
+  toolsContent: { paddingHorizontal: 14, paddingBottom: 16 },
+  sceneSummary: {
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+  },
+  sceneCount: { color: C.text, fontSize: 20, fontWeight: '600', marginTop: 8 },
+  cameraWide: { borderRadius: 18, minWidth: 0 },
+  measureInRail: {
+    position: 'relative',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 0,
+    paddingTop: 14,
+    borderWidth: 0,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+  },
+  controlsInRail: {
+    paddingHorizontal: 14,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+  },
+  railTelemetry: { flexWrap: 'wrap', gap: 0 },
+  recordCompact: { height: 44 },
+  bookmarkInRail: { minWidth: 44 },
+  sessionColumns: { gap: 14, alignItems: 'flex-start' },
+  sessionTile: { flex: 1 },
   brandRow: { flexDirection: 'row', gap: 11, alignItems: 'center' },
   brandContent: { flex: 1 },
   brandMeta: {
@@ -1127,6 +1343,8 @@ const s = StyleSheet.create({
   },
   tabs: { flexDirection: 'row', gap: 24, marginTop: 18 },
   tab: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingBottom: 11,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
@@ -1139,20 +1357,32 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 9,
   },
+  toolbarAction: {
+    minHeight: 44,
+    minWidth: 54,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
   debugSwitch: {
     flexDirection: 'row',
     backgroundColor: C.card,
     borderRadius: 15,
     padding: 3,
   },
-  debugChoice: { borderRadius: 12, paddingVertical: 7, paddingHorizontal: 13 },
+  debugChoice: {
+    borderRadius: 12,
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+  },
   measureModeSwitch: { flexDirection: 'row', gap: 2 },
   measureChoice: {
     borderRadius: 12,
     paddingVertical: 7,
     paddingHorizontal: 10,
   },
-  floorRow: { marginTop: 8 },
+  floorRow: { marginTop: 8, flexWrap: 'wrap' },
   floorTilt: {
     color: C.text,
     fontSize: 11,
@@ -1176,8 +1406,8 @@ const s = StyleSheet.create({
     lineHeight: 18,
     marginTop: 7,
   },
-  floorSetupRow: { marginTop: 12 },
-  floorCoverage: { flex: 1 },
+  floorSetupRow: { marginTop: 12, flexWrap: 'wrap' },
+  floorCoverage: { flex: 1, minWidth: 120 },
   floorCoverageValue: {
     color: C.cyan,
     fontSize: 16,
@@ -1293,7 +1523,8 @@ const s = StyleSheet.create({
   link: { fontSize: 12, fontWeight: '600', color: C.cyan },
   values: {
     flexDirection: 'row',
-    gap: 23,
+    flexWrap: 'wrap',
+    gap: 16,
     alignItems: 'center',
     marginTop: 10,
   },
@@ -1356,7 +1587,14 @@ const s = StyleSheet.create({
   bookmarkText: { color: C.text, fontSize: 10, marginTop: 2 },
   dim: { opacity: 0.4 },
   failure: { color: '#FFAB95', fontSize: 11, marginBottom: 10 },
-  sessionPage: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
+  sessionPage: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 1440,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
   title: { color: C.text, fontSize: 18, fontWeight: '700' },
   description: { color: C.muted, fontSize: 12, lineHeight: 19, marginTop: 8 },
   list: { paddingTop: 18, paddingBottom: 35, gap: 12 },
@@ -1383,7 +1621,16 @@ const s = StyleSheet.create({
     padding: 23,
     justifyContent: 'center',
   },
-  modal: { backgroundColor: C.card, padding: 22, borderRadius: 21, gap: 14 },
+  modal: {
+    flexGrow: 0,
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '100%',
+    alignSelf: 'center',
+    backgroundColor: C.card,
+    borderRadius: 21,
+  },
+  modalContent: { padding: 22, gap: 14 },
   noteInput: {
     minHeight: 100,
     borderWidth: 1,

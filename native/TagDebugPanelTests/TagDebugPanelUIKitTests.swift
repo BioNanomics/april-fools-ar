@@ -166,7 +166,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         missing["validNeighborCount"] = 0
         show(missing)
         _ = try label("TAG #42 · MISSING DEPTH")
-        let deltaRow = try XCTUnwrap(panel.subviews.first { row in
+        let deltaRow = try XCTUnwrap(allViews(panel).first { row in
             row.subviews.contains { ($0 as? UILabel)?.text == "|Δ Z| · m" }
         })
         let deltaValue = try XCTUnwrap(deltaRow.subviews.compactMap { $0 as? UILabel }.last)
@@ -320,6 +320,57 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         show(validDebug())
         assertReadable()
         try savePNG("panel-compact-settled-Details-390x44")
+    }
+
+    func testShortLandscapePanelKeepsCollapseFixedAndFooterReachableByScrolling() throws {
+        expandPanel()
+        panel.frame = CGRect(x: 0, y: 0, width: 440, height: 162)
+        show(validDebug())
+        let scroll = try XCTUnwrap(panel.subviews.compactMap { $0 as? UIScrollView }.first)
+        let button = try detailsButton()
+        let originalButtonFrame = button.frame
+        let disclosureSettled = expectation(description: "Landscape disclosure title rendered")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { disclosureSettled.fulfill() }
+        wait(for: [disclosureSettled], timeout: 1)
+        button.layoutIfNeeded()
+        XCTAssertEqual(button.titleLabel?.text, "Collapse")
+        XCTAssertTrue(scroll.isScrollEnabled)
+        XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height)
+        XCTAssertTrue(panel.bounds.contains(button.frame))
+        let point = CGPoint(x: scroll.frame.midX, y: scroll.frame.midY)
+        let hit = try XCTUnwrap(panel.hitTest(point, with: nil))
+        XCTAssertTrue(hit === scroll || hit.isDescendant(of: scroll), "Constrained metrics must accept a scroll gesture")
+        try savePNG("panel-expanded-landscape-440x162-top")
+        scroll.contentOffset.y = scroll.contentSize.height - scroll.bounds.height
+        let footer = try XCTUnwrap(labels().first { ($0.text ?? "").contains("compute 12 ms") })
+        XCTAssertTrue(panel.bounds.contains(footer.convert(footer.bounds, to: panel)), "Last metrics remain reachable")
+        XCTAssertEqual(button.frame, originalButtonFrame, "Collapse must not scroll away with the metrics")
+        try savePNG("panel-expanded-landscape-440x162-bottom")
+
+        resizePanel(to: panel.preferredHeight)
+        XCTAssertFalse(scroll.isScrollEnabled)
+        XCTAssertEqual(scroll.contentOffset, .zero, "Growing the viewport must restore all metric rows")
+        XCTAssertNil(panel.hitTest(CGPoint(x: 20, y: 100), with: nil), "Unconstrained readout returns taps to tag selection")
+        scroll.contentOffset.y = -12
+        panel.setNeedsLayout(); panel.layoutIfNeeded()
+        XCTAssertEqual(scroll.contentOffset, .zero, "Resize cannot retain an overscrolled offset")
+        assertReadable()
+    }
+
+    func testOverlayFrameBoundsTabletWidthAndLeavesShortViewportSpace() {
+        for size in [CGSize(width: 390, height: 600), CGSize(width: 500, height: 250),
+                     CGSize(width: 860, height: 630), CGSize(width: 480, height: 900)] {
+            let viewport = CGRect(origin: .zero, size: size)
+            for preferredHeight in [CGFloat(44), 270] {
+                let frame = TagDebugPanelView.overlayFrame(in: viewport, preferredHeight: preferredHeight)
+                XCTAssertTrue(viewport.insetBy(dx: 7.5, dy: 7.5).contains(frame))
+                XCTAssertLessThanOrEqual(frame.width, 480)
+                XCTAssertGreaterThanOrEqual(frame.height, 44)
+                if size.height == 250 && preferredHeight > 44 {
+                    XCTAssertGreaterThanOrEqual(frame.minY, 80, "Status and camera stay visible above expanded metrics")
+                }
+            }
+        }
     }
 }
 

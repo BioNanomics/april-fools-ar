@@ -7,6 +7,7 @@ final class TagDebugPanelView: UIView {
     var onPreferredHeightChanged: ((CGFloat) -> Void)?
     private let titleLabel = UILabel()
     private let detailsButton = UIButton(type: .system)
+    private let metricsScrollView = UIScrollView()
     private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"], valueSize: 19)
     private let rotationRow = DebugMetricRow(titles: ["Roll · °", "Pitch · °", "Yaw · °"], valueSize: 18)
     private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"], valueSize: 21)
@@ -42,7 +43,14 @@ final class TagDebugPanelView: UIView {
         rateLabel.textColor = .lightGray
         rateLabel.adjustsFontSizeToFitWidth = true
         rateLabel.minimumScaleFactor = 0.8
-        [titleLabel, translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel, rateLabel].forEach(addSubview)
+        addSubview(titleLabel)
+        addSubview(rateLabel)
+        metricsScrollView.accessibilityIdentifier = "tagDebugMetrics"
+        metricsScrollView.alwaysBounceVertical = false
+        metricsScrollView.showsHorizontalScrollIndicator = false
+        metricsScrollView.contentInsetAdjustmentBehavior = .never
+        addSubview(metricsScrollView)
+        [translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel].forEach(metricsScrollView.addSubview)
         detailsButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         detailsButton.tintColor = .white
         detailsButton.backgroundColor = UIColor.white.withAlphaComponent(0.10)
@@ -64,13 +72,26 @@ final class TagDebugPanelView: UIView {
             rateLabel.frame = CGRect(x: 12, y: 24, width: max(0, width - 96), height: 14)
             return
         }
-        let rows: [(UIView, CGFloat)] = [(titleLabel, 42), (translationRow, 36), (rotationRow, 34),
+        titleLabel.frame = CGRect(x: 12, y: 8, width: max(0, width - 96), height: 42)
+        metricsScrollView.frame = CGRect(x: 0, y: 52, width: bounds.width, height: max(0, bounds.height - 54))
+        let rows: [(UIView, CGFloat)] = [(translationRow, 36), (rotationRow, 34),
             (depthRow, 38), (geometryRow, 34), (meanLabel, 17), (qualityLabel, 17), (rateLabel, 28)]
-        var y: CGFloat = 8
+        var y: CGFloat = 0
         for (view, height) in rows {
-            view.frame = CGRect(x: 12, y: y, width: view === titleLabel ? max(0, width - 96) : width, height: height)
+            view.frame = CGRect(x: 12, y: y, width: width, height: height)
             y += height + 2
         }
+        metricsScrollView.contentSize = CGSize(width: bounds.width, height: max(0, y - 2))
+        metricsScrollView.isScrollEnabled = metricsScrollView.contentSize.height > metricsScrollView.bounds.height + 0.5
+        let maximumOffset = max(0, metricsScrollView.contentSize.height - metricsScrollView.bounds.height)
+        metricsScrollView.contentOffset.y = max(0, min(metricsScrollView.contentOffset.y, maximumOffset))
+    }
+    /// Keep the readout legible without stretching across a tablet or covering a short camera viewport.
+    static func overlayFrame(in viewport: CGRect, preferredHeight: CGFloat) -> CGRect {
+        let width = min(480, max(0, viewport.width - 16))
+        let availableHeight = max(0, viewport.height - 16)
+        let height = min(preferredHeight, min(availableHeight, max(44, viewport.height - 88)))
+        return CGRect(x: viewport.minX + 8, y: viewport.maxY - height - 8, width: width, height: height)
     }
     /// The host keeps the camera full size and lays out this overlay using preferredHeight.
     func setExpanded(_ expanded: Bool) {
@@ -82,6 +103,9 @@ final class TagDebugPanelView: UIView {
     @objc private func toggleDetails() { setExpanded(!isExpanded) }
     private func updateExpansion() {
         [translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        metricsScrollView.isHidden = !isExpanded
+        if isExpanded { metricsScrollView.addSubview(rateLabel) }
+        else { addSubview(rateLabel); metricsScrollView.contentOffset = .zero }
         titleLabel.font = .monospacedSystemFont(ofSize: isExpanded ? 15 : 12, weight: .regular)
         titleLabel.numberOfLines = isExpanded ? 2 : 1
         let title = isExpanded ? "Collapse" : "Details"
@@ -98,12 +122,20 @@ final class TagDebugPanelView: UIView {
         titleLabel.text = isExpanded ? expandedTitleText : compactTitleText
         titleLabel.accessibilityLabel = titleAccessibilityText
     }
-    /// Only the explicit control intercepts touches; readouts pass through to tag selection.
+    /// Readout taps pass through unless a constrained expanded panel needs scrolling.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
         let localPoint = detailsButton.convert(point, from: self)
-        guard detailsButton.point(inside: localPoint, with: event) else { return nil }
-        return detailsButton.hitTest(localPoint, with: event)
+        if detailsButton.point(inside: localPoint, with: event) {
+            return detailsButton.hitTest(localPoint, with: event)
+        }
+        if isExpanded && metricsScrollView.isScrollEnabled {
+            let scrollPoint = metricsScrollView.convert(point, from: self)
+            if metricsScrollView.bounds.contains(scrollPoint) {
+                return metricsScrollView.hitTest(scrollPoint, with: event)
+            }
+        }
+        return nil
     }
     static func color(_ severity: String) -> UIColor {
         switch severity {

@@ -64,3 +64,11 @@ Device Hub installed and launched **0.2.2 (11)** from `4398ff7a02526513278c582c9
 ## Compact multi-tag update — 2026-11-22
 
 Device Hub installed and launched **0.3.0 (12)** from `c24e70a64cedf6ed12eb868fa638411709e2e90c`, preserving three saved sessions. All physical actions used a fresh global device lease; full-window capture proof and final `released` status verified cleanup before repository work resumed. No mirroring, phone-coordinate input, recording or test runners were started. See [multi-tag validation](M0-multi-tag.md).
+
+## Physical iPad smoke test — 2026-11-22
+
+Version **0.3.2 (14)**, built at **18:00:13 UTC** from modified sources based on `8c0d8e6`, passed a native accessibility UI smoke test on an iPad Pro 11-inch (M5), iPadOS 27.2.1. Real RGB imagery, normal tracking and live depth were observed. Release notes, settings, zoom, the initial floor gate and session navigation passed; visual landscape verification, real-tag/floor measurements and recording/export remain pending. The owned XCTest runner exited and was removed, and both test and cleanup leases returned `released`. See [the iPad results and evidence limits](M0-ipad-smoke.md).
+
+## Landscape and tablet update — 2026-11-22
+
+Version **0.4.0 (15)** was installed on the physical iPad and its installed version/build verified after native simulator layout and keyboard checks. iPadOS blocked launch because the iPad was locked; launch and physical alignment checks remain pending. No capture or test runner was started, and the deployment guard returned `released` with no errors. See [landscape and tablet validation](M0-landscape-tablet.md).

@@ -144,7 +144,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             }
         }
         guard ARWorldTrackingConfiguration.isSupported else {
-            captureQueue.async { self.lastError = "ARKit live capture requires a supported physical iPhone."; self.emitStatus() }
+            captureQueue.async { self.lastError = "ARKit live capture requires a supported iPhone or iPad."; self.emitStatus() }
             return
         }
         let config = ARWorldTrackingConfiguration()
@@ -170,7 +170,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
 
     func updateViewport(_ size: CGSize, orientation: UIInterfaceOrientation) {
         captureQueue.async {
-            if self.viewport != size || self.orientation != orientation { self.invalidateAprilTags() }
+            if self.viewport != size || self.orientation != orientation {
+                self.invalidateAprilTags()
+                self.lastDepthPreviewTime = -.infinity
+                DispatchQueue.main.async { [weak self] in self?.host?.depthView.image = nil }
+            }
             self.viewport = size; self.orientation = orientation
         }
     }
@@ -566,7 +570,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
         if previewMode != "camera", frame.timestamp - lastDepthPreviewTime > 0.2 {
             lastDepthPreviewTime = frame.timestamp
-            let image = Self.depthImage(frame: frame, mode: previewMode)
+            let display = frame.displayTransform(for: orientation, viewportSize: viewport)
+            let image = Self.depthImage(frame: frame, mode: previewMode, displayTransform: display)
             DispatchQueue.main.async { [weak self] in self?.host?.depthView.image = image }
         }
         if frame.timestamp - lastStatusTime > 0.25 { lastStatusTime = frame.timestamp; emitStatus() }
@@ -935,8 +940,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             }
         }
     }
-    private static func depthImage(frame: ARFrame, mode: String) -> UIImage? {
-        guard let depth = frame.sceneDepth else { return nil }
+    private static func depthImage(frame: ARFrame, mode: String, displayTransform: CGAffineTransform) -> UIImage? {
+        guard let depth = frame.sceneDepth,
+              let imageOrientation = PreviewZoom.imageOrientation(for: displayTransform) else { return nil }
         let buffer = mode == "confidence" ? depth.confidenceMap : depth.depthMap
         guard let buffer else { return nil }
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
@@ -959,7 +965,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             pixels[offset+3] = 255
         } }
         guard let provider = CGDataProvider(data: Data(pixels) as CFData), let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width*4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
-        return UIImage(cgImage: image, scale: 1, orientation: .right)
+        return UIImage(cgImage: image, scale: 1, orientation: imageOrientation)
     }
 }
 
@@ -1011,7 +1017,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
-        // The camera's base viewport never changes; only its centered display scale changes.
+        // Camera and overlays share the current viewport; zoom only adds a centered display scale.
         previewContainer.frame = bounds
         for view in [arView as UIView, depthView] {
             view.bounds = CGRect(origin: .zero, size: previewContainer.bounds.size)
@@ -1021,8 +1027,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         tagOverlay.frame = bounds
         spatialOverlay.frame = bounds
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
-        let panelHeight = min(debugPanel.preferredHeight, max(0, bounds.height - 16))
-        debugPanel.frame = CGRect(x: 8, y: max(8, bounds.height - panelHeight - 8), width: max(0, bounds.width - 16), height: panelHeight)
+        debugPanel.frame = TagDebugPanelView.overlayFrame(in: bounds, preferredHeight: debugPanel.preferredHeight)
         ARCaptureCoordinator.shared.updateViewport(arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
     }
     @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
@@ -1034,10 +1039,10 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         }
     }
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        // The disclosure button owns its tap; other overlay regions pass through to tag selection.
+        // Controls and constrained metric scrolling own their gestures; other readouts pass through.
         var view = touch.view
         while let current = view, current !== self {
-            if current is UIControl { return false }
+            if current is UIControl || (current as? UIScrollView)?.isScrollEnabled == true { return false }
             view = current.superview
         }
         return true

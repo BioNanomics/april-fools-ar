@@ -10,7 +10,9 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type DebugSettings = {
   tagSizeMeters: number;
@@ -166,6 +168,13 @@ export function DebugSettingsModal({
   onSave: (settings: DebugSettings) => Promise<void>;
   onMeasure: () => void;
 }) {
+  const inset = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const horizontalPadding = 16;
+  const availableWidth =
+    width - inset.left - inset.right - horizontalPadding * 2;
+  const columns = availableWidth >= 660;
+  const compact = height < 500;
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialSettings));
   const [saving, setSaving] = useState(false);
   const [resetToDefaults, setResetToDefaults] = useState(false);
@@ -215,19 +224,48 @@ export function DebugSettingsModal({
     }
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
-      <KeyboardAvoidingView style={s.backdrop} behavior="padding">
-        <View style={s.sheet}>
-          <Text style={s.title}>Tag debug settings</Text>
-          <Text style={s.description}>
-            Applied to all tags and saved on this phone. Correct tag width is
-            required for a meaningful pose.
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      supportedOrientations={[
+        'portrait',
+        'landscape-left',
+        'landscape-right',
+        'portrait-upside-down',
+      ]}
+      onRequestClose={onCancel}
+    >
+      <KeyboardAvoidingView
+        style={[
+          s.backdrop,
+          {
+            paddingTop: inset.top + (compact ? 8 : 20),
+            paddingBottom: inset.bottom + (compact ? 8 : 20),
+            paddingLeft: inset.left + horizontalPadding,
+            paddingRight: inset.right + horizontalPadding,
+          },
+        ]}
+        behavior="padding"
+      >
+        <View
+          style={[s.sheet, compact && s.sheetCompact]}
+          accessibilityViewIsModal
+        >
+          <Text style={[s.title, compact && s.titleCompact]}>
+            Tag debug settings
           </Text>
           <ScrollView
+            testID="debug.settings.fields"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={s.fields}
             style={s.scroll}
+            keyboardDismissMode="interactive"
           >
+            <Text style={s.description}>
+              Applied to all tags and saved on this device. Correct tag width is
+              required for a meaningful pose.
+            </Text>
             <View style={s.toggleRow}>
               <View style={s.toggleText}>
                 <Text style={s.label}>Show pose axes</Text>
@@ -273,37 +311,47 @@ export function DebugSettingsModal({
                 disabled={saving}
               />
             </View>
-            {fields.map(field => (
-              <View key={field.key}>
-                <Text style={s.label}>{field.label}</Text>
-                <TextInput
-                  accessibilityLabel={field.label}
-                  value={draft[field.key]}
-                  onChangeText={value =>
-                    setDraft(previous => ({ ...previous, [field.key]: value }))
-                  }
-                  keyboardType="decimal-pad"
-                  selectTextOnFocus
-                  style={s.input}
-                />
-                <Text style={s.hint}>{field.hint}</Text>
-                {field.key === 'tagSizeMeters' && (
-                  <Pressable
-                    accessibilityLabel="Measure tag width with AR"
-                    onPress={onMeasure}
-                    disabled={saving}
-                    style={s.measure}
-                  >
-                    <Text style={s.link}>Measure tag width with AR</Text>
-                    <Text style={s.hint}>
-                      Tap two corners of one tag edge, review the estimate, then
-                      apply it.
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            ))}
+            <View style={s.fieldGrid}>
+              {fields.map(field => (
+                <View
+                  key={field.key}
+                  style={columns ? s.fieldHalf : s.fieldFull}
+                >
+                  <Text style={s.label}>{field.label}</Text>
+                  <TextInput
+                    accessibilityLabel={field.label}
+                    value={draft[field.key]}
+                    onChangeText={value =>
+                      setDraft(previous => ({
+                        ...previous,
+                        [field.key]: value,
+                      }))
+                    }
+                    keyboardType="decimal-pad"
+                    selectTextOnFocus
+                    style={s.input}
+                  />
+                  <Text style={s.hint}>{field.hint}</Text>
+                  {field.key === 'tagSizeMeters' && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Measure tag width with AR"
+                      onPress={onMeasure}
+                      disabled={saving}
+                      style={s.measure}
+                    >
+                      <Text style={s.link}>Measure tag width with AR</Text>
+                      <Text style={s.hint}>
+                        Tap two corners of one tag edge, review the estimate,
+                        then apply it.
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </View>
             <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Reset debug settings to FRC defaults"
               onPress={() => {
                 setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS));
@@ -318,13 +366,18 @@ export function DebugSettingsModal({
             </Pressable>
           </ScrollView>
           <View style={s.actions}>
-            <Pressable onPress={onCancel} disabled={saving}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onCancel}
+              disabled={saving}
+            >
               <Text style={s.cancel}>Cancel</Text>
             </Pressable>
             <Pressable
               onPress={save}
               disabled={saving}
               style={s.apply}
+              accessibilityRole="button"
               accessibilityLabel="Apply debug settings"
             >
               <Text style={s.applyText}>
@@ -343,33 +396,46 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomColor: '#24415A',
+    borderBottomWidth: 1,
   },
   toggleText: { flex: 1 },
   backdrop: {
     flex: 1,
     justifyContent: 'center',
     backgroundColor: '#000000AA',
-    paddingHorizontal: 18,
-    paddingVertical: 45,
+    alignItems: 'center',
   },
   sheet: {
     backgroundColor: '#102239',
     borderRadius: 20,
     padding: 20,
-    height: '100%',
-    maxHeight: '100%',
+    width: '100%',
+    maxWidth: 900,
+    flex: 1,
+    maxHeight: 860,
+    minHeight: 0,
   },
+  sheetCompact: { paddingVertical: 12 },
+  titleCompact: { fontSize: 19 },
   title: { color: '#F3F8FD', fontWeight: '700', fontSize: 22 },
   description: {
     color: '#A6BACD',
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: 0,
   },
-  scroll: { flexShrink: 1 },
-  fields: { gap: 15, paddingBottom: 32 },
+  scroll: { flex: 1, minHeight: 0, marginTop: 12 },
+  fields: { gap: 16, paddingBottom: 20 },
+  fieldGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 18,
+  },
+  fieldFull: { width: '100%' },
+  fieldHalf: { width: '48%' },
   label: { color: '#F3F8FD', fontWeight: '600', fontSize: 14 },
   input: {
     color: '#F3F8FD',
@@ -395,7 +461,10 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#24415A',
+    gap: 16,
   },
   cancel: { color: '#A6BACD', fontSize: 14, paddingVertical: 12 },
   apply: {

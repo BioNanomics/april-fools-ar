@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import CoreImage
 
 /// Tests production geometry/overlay with ordinary UIView coordinates; no ARSession.
 @MainActor
@@ -105,6 +106,63 @@ final class PreviewZoomUIKitTests: XCTestCase {
                 XCTAssertEqual(camera.bounds.size,viewport,"Display scale must not change the raw AR viewport")
                 XCTAssertEqual(container.bounds.size,viewport)
             }
+        }
+    }
+
+    func testDepthPreviewQuarterTurnsRenderAtTheSameProjectedPointsAsTheCamera() throws {
+        // Four colored sensor quadrants make swapped or reversed image rotations observable.
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.preferredRange = .standard
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 40), format: format).image { context in
+            for (rect, color) in [(CGRect(x: 0, y: 0, width: 40, height: 20), UIColor.red),
+                                  (CGRect(x: 40, y: 0, width: 40, height: 20), UIColor.green),
+                                  (CGRect(x: 0, y: 20, width: 40, height: 20), UIColor.blue),
+                                  (CGRect(x: 40, y: 20, width: 40, height: 20), UIColor.yellow)] {
+                color.setFill(); context.fill(rect)
+            }
+        }
+        let cgSource = try XCTUnwrap(source.cgImage)
+        // These transforms independently describe centered aspect-fill crops for an 80×40 source.
+        let cases: [(CGSize, CGAffineTransform, UIImage.Orientation)] = [
+            (CGSize(width: 120, height: 80), CGAffineTransform(a: 4/3, b: 0, c: 0, d: 1, tx: -1/6, ty: 0), .up),
+            (CGSize(width: 120, height: 80), CGAffineTransform(a: -4/3, b: 0, c: 0, d: -1, tx: 7/6, ty: 1), .down),
+            (CGSize(width: 100, height: 160), CGAffineTransform(a: 0, b: 1.25, c: -1, d: 0, tx: 1, ty: -0.125), .right),
+            (CGSize(width: 100, height: 160), CGAffineTransform(a: 0, b: -1.25, c: 1, d: 0, tx: 0, ty: 1.125), .left)
+        ]
+        let context = CIContext(options: [.useSoftwareRenderer: true])
+        let markers: [(CGPoint, [UInt8])] = [(CGPoint(x: 0.25, y: 0.25), [255, 0, 0]),
+                                           (CGPoint(x: 0.75, y: 0.25), [0, 255, 0]),
+                                           (CGPoint(x: 0.25, y: 0.75), [0, 0, 255]),
+                                           (CGPoint(x: 0.75, y: 0.75), [255, 255, 0])]
+        for (viewport, display, expectedOrientation) in cases {
+            let orientation = try XCTUnwrap(PreviewZoom.imageOrientation(for: display))
+            XCTAssertEqual(orientation, expectedOrientation)
+            let imageView = UIImageView(frame: CGRect(origin: .zero, size: viewport))
+            imageView.contentMode = .scaleAspectFill; imageView.clipsToBounds = true
+            imageView.image = UIImage(cgImage: cgSource, scale: 1, orientation: orientation)
+            imageView.layoutIfNeeded()
+            let rendered = UIGraphicsImageRenderer(size: viewport, format: format).image { imageView.layer.render(in: $0.cgContext) }
+            let image = CIImage(cgImage: try XCTUnwrap(rendered.cgImage))
+            for (sourcePoint, expectedRGB) in markers {
+                let normalized = sourcePoint.applying(display)
+                let sample = CGRect(x: floor(normalized.x * viewport.width),
+                                    y: viewport.height - floor(normalized.y * viewport.height) - 1, width: 1, height: 1)
+                var rgba = [UInt8](repeating: 0, count: 4)
+                context.render(image, toBitmap: &rgba, rowBytes: 4, bounds: sample, format: .RGBA8,
+                               colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
+                for channel in 0..<3 { XCTAssertEqual(Int(rgba[channel]), Int(expectedRGB[channel]), accuracy: 2) }
+            }
+            for zoom in [1.0, 2, 4] {
+                XCTAssertEqual(PreviewZoom.imageOrientation(for: PreviewZoom.displayTransform(base: display, zoom: zoom)), orientation)
+            }
+        }
+    }
+
+    func testDepthPreviewRejectsInvalidNonQuarterTurnTransforms() {
+        for transform in [CGAffineTransform(a: 0, b: 0, c: 0, d: 0, tx: 0, ty: 0),
+                          CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: 1),
+                          CGAffineTransform(a: 1, b: 0.2, c: 0, d: 1, tx: 0, ty: 0),
+                          CGAffineTransform(a: .nan, b: 0, c: 0, d: 1, tx: 0, ty: 0)] {
+            XCTAssertNil(PreviewZoom.imageOrientation(for: transform))
         }
     }
 }

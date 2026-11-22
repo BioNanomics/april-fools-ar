@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "0.4.0",
+      "build": "15",
+      "title": "Landscape and tablet capture workspace",
+      "changes": [
+        "Use a side-by-side camera and tool rail in iPhone landscape and on roomy iPad windows.",
+        "Keep recording controls available while floor and measurement tools scroll beside the camera.",
+        "Adapt settings, release notes, bookmarks and saved-session cards to the available screen space.",
+        "Keep the camera session and measurements through rotation, with a bounded, scrollable tag debug panel."
+      ]
+    },
+    {
       "version": "0.3.2",
       "build": "14",
       "title": "Distance comparison and floor height tools",

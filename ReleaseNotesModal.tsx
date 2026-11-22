@@ -6,8 +6,12 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 export type ReleaseNote = {
   version: string;
@@ -85,6 +89,10 @@ function ReleaseCard({
 }
 
 export function ReleaseNotesModal({ visible, info, onClose }: Props) {
+  const { width, height } = useWindowDimensions();
+  const inset = useSafeAreaInsets();
+  const compact = height < 500;
+  const wide = width - inset.left - inset.right >= 800;
   if (!visible) {
     return null;
   }
@@ -98,106 +106,129 @@ export function ReleaseNotesModal({ visible, info, onClose }: Props) {
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      transparent
+      supportedOrientations={[
+        'portrait',
+        'landscape-left',
+        'landscape-right',
+        'portrait-upside-down',
+      ]}
       onDismiss={onClose}
       onRequestClose={onClose}
     >
       <SafeAreaView
-        style={styles.sheet}
-        edges={['top', 'bottom']}
+        style={[styles.backdrop, compact && styles.backdropCompact]}
+        edges={['top', 'bottom', 'left', 'right']}
         accessibilityViewIsModal
       >
-        <View style={styles.header}>
-          <View style={styles.heading}>
-            <Text style={styles.eyebrow}>APRIL FOOLS AR</Text>
-            <Text style={styles.title} accessibilityRole="header">
-              Version & release notes
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close release notes"
-            onPress={onClose}
-            style={styles.close}
-          >
-            <Text style={styles.closeText}>Done</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator
-        >
-          {info ? (
-            <>
-              <View style={styles.buildCard} testID="installed-build-details">
-                <Text style={styles.version}>Version {info.version}</Text>
-                <Text style={styles.build}>Build {info.build}</Text>
-                <Text style={styles.label}>Source revision</Text>
-                <Text selectable style={styles.commit}>
-                  {info.buildCommit.slice(0, 12) || 'Unavailable'}
-                </Text>
-                <Text selectable style={styles.exactValue}>
-                  {info.buildCommit || 'Full source revision unavailable'}
-                </Text>
-                <Text
-                  style={[
-                    styles.sourceState,
-                    info.workingTreeDirty && styles.dirtySource,
-                  ]}
-                >
-                  {info.workingTreeDirty
-                    ? 'UNCOMMITTED SOURCE CHANGES'
-                    : 'Clean source tree'}
-                </Text>
-                <Text style={styles.label}>Built · UTC</Text>
-                <Text style={styles.value}>{humanUTC(info.buildDateUTC)}</Text>
-                <Text selectable style={styles.exactValue}>
-                  {info.buildDateUTC || 'Exact build timestamp unavailable'}
-                </Text>
-                <Text style={styles.label}>App identifier</Text>
-                <Text selectable style={styles.exactValue}>
-                  {info.bundleId}
-                </Text>
-              </View>
-
-              {current ? (
-                <ReleaseCard release={current} current />
-              ) : (
-                <View style={styles.release}>
-                  <Text style={styles.changeText}>
-                    No release notes are bundled for this installed version and
-                    build.
-                  </Text>
-                </View>
-              )}
-              {history.length > 0 && (
-                <>
-                  <Text style={styles.historyTitle} accessibilityRole="header">
-                    Release history
-                  </Text>
-                  {history.map(release => (
-                    <ReleaseCard
-                      key={`${release.version}-${release.build}`}
-                      release={release}
-                    />
-                  ))}
-                </>
-              )}
-            </>
-          ) : (
-            <View style={styles.release}>
-              <Text style={styles.releaseTitle}>
-                Build information unavailable
-              </Text>
-              <Text style={styles.changeText}>
-                Close this view and reopen it to retry loading the installed app
-                details.
+        <View style={styles.sheet}>
+          <View style={[styles.header, compact && styles.headerCompact]}>
+            <View style={styles.heading}>
+              <Text style={styles.eyebrow}>APRIL FOOLS AR</Text>
+              <Text
+                style={[styles.title, compact && styles.titleCompact]}
+                accessibilityRole="header"
+              >
+                Version & release notes
               </Text>
             </View>
-          )}
-        </ScrollView>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close release notes"
+              onPress={onClose}
+              style={styles.close}
+            >
+              <Text style={styles.closeText}>Done</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator
+          >
+            {info ? (
+              <View style={[styles.columns, wide && styles.columnsWide]}>
+                <View
+                  style={[styles.buildCard, wide && styles.buildColumn]}
+                  testID="installed-build-details"
+                >
+                  <Text style={styles.version}>Version {info.version}</Text>
+                  <Text style={styles.build}>Build {info.build}</Text>
+                  <Text style={styles.label}>Source revision</Text>
+                  <Text selectable style={styles.commit}>
+                    {info.buildCommit.slice(0, 12) || 'Unavailable'}
+                  </Text>
+                  <Text selectable style={styles.exactValue}>
+                    {info.buildCommit || 'Full source revision unavailable'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.sourceState,
+                      info.workingTreeDirty && styles.dirtySource,
+                    ]}
+                  >
+                    {info.workingTreeDirty
+                      ? 'UNCOMMITTED SOURCE CHANGES'
+                      : 'Clean source tree'}
+                  </Text>
+                  <Text style={styles.label}>Built · UTC</Text>
+                  <Text style={styles.value}>
+                    {humanUTC(info.buildDateUTC)}
+                  </Text>
+                  <Text selectable style={styles.exactValue}>
+                    {info.buildDateUTC || 'Exact build timestamp unavailable'}
+                  </Text>
+                  <Text style={styles.label}>App identifier</Text>
+                  <Text selectable style={styles.exactValue}>
+                    {info.bundleId}
+                  </Text>
+                </View>
+
+                <View
+                  style={[styles.notesColumn, wide && styles.notesColumnWide]}
+                >
+                  {current ? (
+                    <ReleaseCard release={current} current />
+                  ) : (
+                    <View style={styles.release}>
+                      <Text style={styles.changeText}>
+                        No release notes are bundled for this installed version
+                        and build.
+                      </Text>
+                    </View>
+                  )}
+                  {history.length > 0 && (
+                    <>
+                      <Text
+                        style={styles.historyTitle}
+                        accessibilityRole="header"
+                      >
+                        Release history
+                      </Text>
+                      {history.map(release => (
+                        <ReleaseCard
+                          key={`${release.version}-${release.build}`}
+                          release={release}
+                        />
+                      ))}
+                    </>
+                  )}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.release}>
+                <Text style={styles.releaseTitle}>
+                  Build information unavailable
+                </Text>
+                <Text style={styles.changeText}>
+                  Close this view and reopen it to retry loading the installed
+                  app details.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
       </SafeAreaView>
     </Modal>
   );
@@ -206,7 +237,29 @@ export function ReleaseNotesModal({ visible, info, onClose }: Props) {
 export default ReleaseNotesModal;
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1, backgroundColor: C.bg },
+  backdrop: {
+    flex: 1,
+    backgroundColor: '#000000AA',
+    padding: 20,
+    justifyContent: 'center',
+  },
+  backdropCompact: { padding: 8 },
+  sheet: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 980,
+    maxHeight: 920,
+    alignSelf: 'center',
+    minHeight: 0,
+    backgroundColor: C.bg,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  columns: { gap: 18 },
+  columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  buildColumn: { flex: 0.9, minWidth: 0 },
+  notesColumn: { minWidth: 0, gap: 16 },
+  notesColumnWide: { flex: 1.1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,6 +269,8 @@ const styles = StyleSheet.create({
     borderBottomColor: C.line,
     gap: 12,
   },
+  headerCompact: { paddingVertical: 8 },
+  titleCompact: { fontSize: 19, marginTop: 2 },
   heading: { flex: 1, minWidth: 0 },
   eyebrow: {
     color: C.cyan,
@@ -235,7 +290,7 @@ const styles = StyleSheet.create({
     borderColor: C.line,
   },
   closeText: { color: C.cyan, fontSize: 16, fontWeight: '700' },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, minHeight: 0 },
   content: { padding: 20, paddingBottom: 36, gap: 16 },
   buildCard: {
     backgroundColor: C.card,

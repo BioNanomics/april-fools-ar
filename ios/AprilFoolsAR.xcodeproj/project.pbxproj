@@ -22,6 +22,7 @@
 		291316D7E0441B79FD5C74D5 /* ArchiveModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */; };
 		2D82BE3B05D0147C467888BC /* PreviewZoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */; };
 		2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */ = {isa = PBXBuildFile; fileRef = 8B743D7F395310A75BDE0593 /* string_util.c */; };
+		326ED390E11DA8D6135C4FCC /* FloorBaseMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */; };
 		34C7BC10A1B2909961E81174 /* g2d.c in Sources */ = {isa = PBXBuildFile; fileRef = 3E65C29D4D082A77C20F9142 /* g2d.c */; };
 		3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */; };
 		3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C953581979F4BA05C64FBA /* SpatialProjection.swift */; };
@@ -97,6 +98,7 @@
 		78764DD7E780CABC9B355826 /* matd.c */ = {isa = PBXFileReference; includeInIndex = 1; name = matd.c; path = common/matd.c; sourceTree = "<group>"; };
 		788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FloorDepthSampler.swift; path = ARCapture/FloorDepthSampler.swift; sourceTree = "<group>"; };
 		78CED63F155DCD2DD5BCCAC8 /* homography.c */ = {isa = PBXFileReference; includeInIndex = 1; name = homography.c; path = common/homography.c; sourceTree = "<group>"; };
+		7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FloorBaseMarker.swift; path = ARCapture/FloorBaseMarker.swift; sourceTree = "<group>"; };
 		7F8DD804A45F21BC7D954794 /* unionfind.c */ = {isa = PBXFileReference; includeInIndex = 1; name = unionfind.c; path = common/unionfind.c; sourceTree = "<group>"; };
 		7FEE2087C434A7DAD20946AB /* image_u8x3.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8x3.c; path = common/image_u8x3.c; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = AprilFoolsAR/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -191,6 +193,7 @@
 				788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */,
 				A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */,
 				2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */,
+				7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -499,6 +502,7 @@
 				49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */,
 				685796467C7CC3EC8F0334C5 /* FloorPlaneFit.swift in Sources */,
 				6FFD3039E5A429D33A29EBAC /* TagHeightVectors.swift in Sources */,
+				326ED390E11DA8D6135C4FCC /* FloorBaseMarker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -512,7 +516,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -527,7 +531,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.4.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -551,7 +555,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = X5873NL7XM;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -565,7 +569,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.4.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

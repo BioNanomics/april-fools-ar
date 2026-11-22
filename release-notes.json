@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.4.1",
+      "build": "16",
+      "title": "Dotted floor reference squares",
+      "changes": [
+        "Add a small dotted square at the foot of each live tag-height and saved floor-height vector.",
+        "Orient the square to the measurement floor: green for level, yellow for tilted and neutral when tilt is unavailable.",
+        "Keep floor references attached to their world position through camera movement and zoom, including gravity-leveling mode."
+      ]
+    },
+    {
       "version": "0.4.0",
       "build": "15",
       "title": "Landscape and tablet capture workspace",

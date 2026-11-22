@@ -15,18 +15,23 @@ final class SpatialMeasurementOverlayView: UIView {
         func remove() { label.removeFromSuperview(); shape.removeFromSuperlayer() }
     }
     private final class VectorSlot {
-        let line = CAShapeLayer(), dots = CAShapeLayer()
+        let line = CAShapeLayer(), dots = CAShapeLayer(), basePatch = CAShapeLayer()
         let label = UILabel()
         init(in view: UIView) {
             line.lineWidth = 2.5; line.lineCap = .round; line.lineJoin = .round
             line.fillColor = UIColor.clear.cgColor
             line.shadowColor = UIColor.black.cgColor; line.shadowOpacity = 0.8; line.shadowRadius = 1; line.shadowOffset = .zero
             dots.lineWidth = 1.5; dots.strokeColor = UIColor.black.cgColor
-            view.layer.addSublayer(line); view.layer.addSublayer(dots)
+            basePatch.fillColor = UIColor.clear.cgColor
+            basePatch.lineWidth = 1.5; basePatch.lineCap = .round; basePatch.lineJoin = .round
+            basePatch.lineDashPattern = [1, 4]; basePatch.isHidden = true
+            basePatch.shadowColor = UIColor.black.cgColor; basePatch.shadowOpacity = 0.8
+            basePatch.shadowRadius = 1; basePatch.shadowOffset = .zero
+            view.layer.addSublayer(basePatch); view.layer.addSublayer(line); view.layer.addSublayer(dots)
             SpatialMeasurementOverlayView.style(label)
             view.addSubview(label)
         }
-        func remove() { label.removeFromSuperview(); line.removeFromSuperlayer(); dots.removeFromSuperlayer() }
+        func remove() { label.removeFromSuperview(); line.removeFromSuperlayer(); dots.removeFromSuperlayer(); basePatch.removeFromSuperlayer() }
     }
     private var planeSlots = [PlaneSlot]()
     private var vectorSlots = [VectorSlot]()
@@ -162,6 +167,11 @@ final class SpatialMeasurementOverlayView: UIView {
             slot.label.accessibilityIdentifier = "spatial.measurement.\(measurement.id)"
             slot.label.accessibilityLabel = isHeight ? "Height measurement" : "Distance measurement"
             slot.label.accessibilityValue = isHeight ? "ID \(measurement.id). Height \(formattedHeight ?? "unavailable")." : String(format: "ID %@. Distance %.3f meters. Vertical difference %.3f meters.", measurement.id, distance, vertical)
+            if isHeight {
+                let state = showFloorBase(slot, center: measurement.start, floor: measurement.floor,
+                    camera: camera, owner: "manual.\(measurement.id)")
+                slot.label.accessibilityValue = (slot.label.accessibilityValue ?? "") + " " + baseAccessibility(state)
+            } else { hideFloorBase(slot) }
             if isHeight { placeAtWorldMidpoint(slot.label, world: measurement.start+(measurement.end-measurement.start)/2, camera: camera) }
             else { slot.label.isHidden = false; place(slot.label, near: CGPoint(x: (segment[0].x + segment[1].x) / 2, y: (segment[0].y + segment[1].y) / 2 - 14)) }
         }
@@ -185,10 +195,14 @@ final class SpatialMeasurementOverlayView: UIView {
             slot.label.accessibilityIdentifier = "spatial.tagHeight.\(index).\(vector.tagID)"
             slot.label.accessibilityLabel = "Tag \(vector.tagID) height above floor"
             slot.label.accessibilityValue = "\(height). \(vector.source == "sceneDepth" ? "LiDAR" : "Tag pose estimate")."
+            let state = showFloorBase(slot, center: vector.start, floor: vector.floor,
+                camera: camera, owner: "tag.\(index).\(vector.tagID)")
+            slot.label.accessibilityValue = (slot.label.accessibilityValue ?? "") + " " + baseAccessibility(state)
             placeAtWorldMidpoint(slot.label, world: vector.midpoint, camera: camera)
         }
         for (slotIndex, pointData) in pending.enumerated() {
             let (pointIndex, point) = pointData, slot = pendingSlots[slotIndex]
+            hideFloorBase(slot)
             let marker = UIBezierPath(ovalIn: CGRect(x: point.x - 7, y: point.y - 7, width: 14, height: 14))
             marker.move(to: CGPoint(x: point.x - 11, y: point.y)); marker.addLine(to: CGPoint(x: point.x + 11, y: point.y))
             marker.move(to: CGPoint(x: point.x, y: point.y - 11)); marker.addLine(to: CGPoint(x: point.x, y: point.y + 11))
@@ -217,11 +231,41 @@ final class SpatialMeasurementOverlayView: UIView {
             let now = ProcessInfo.processInfo.systemUptime
             for (index, expiresAt) in self.automaticHeightDeadlines.enumerated() where expiresAt <= now && index < self.automaticHeightSlots.count {
                 let slot = self.automaticHeightSlots[index]
-                slot.line.isHidden = true; slot.dots.isHidden = true; slot.label.isHidden = true
+                slot.line.isHidden = true; slot.dots.isHidden = true; slot.basePatch.isHidden = true; slot.label.isHidden = true
             }
         }
         expiryTimer = timer
         RunLoop.main.add(timer, forMode: .common)
+    }
+    private func hideFloorBase(_ slot: VectorSlot) {
+        slot.basePatch.path = nil; slot.basePatch.isHidden = true; slot.basePatch.name = nil
+    }
+    private func showFloorBase(_ slot: VectorSlot, center: SIMD3<Float>, floor: SpatialPlane?,
+                               camera: SpatialProjection.Camera, owner: String) -> FloorBaseMarker.State {
+        guard let floor, let marker = FloorBaseMarker.make(center: center, floor: floor) else {
+            hideFloorBase(slot); return .unknown
+        }
+        let path = UIBezierPath()
+        var visibleEdges = 0
+        // Clip the original edges independently. Closing a clipped polygon would invent viewport/near-plane edges.
+        for index in 0..<4 {
+            guard let segment = camera.segment(from: marker.corners[index], to: marker.corners[(index + 1) % 4]) else { continue }
+            path.move(to: segment[0]); path.addLine(to: segment[1]); visibleEdges += 1
+        }
+        slot.basePatch.name = "spatial.floorBase.\(owner)"
+        slot.basePatch.path = visibleEdges > 0 ? path.cgPath : nil
+        slot.basePatch.isHidden = visibleEdges == 0
+        let color: UIColor
+        switch marker.state { case .level: color = .systemGreen; case .tilted: color = .systemYellow; case .unknown: color = .lightGray }
+        slot.basePatch.strokeColor = color.cgColor
+        return marker.state
+    }
+    private func baseAccessibility(_ state: FloorBaseMarker.State) -> String {
+        switch state {
+        case .level: return "Base plane level."
+        case .tilted: return "Base plane tilted."
+        case .unknown: return "Base plane tilt unavailable."
+        }
     }
     private func placeAtWorldMidpoint(_ label: UILabel, world: SIMD3<Float>, camera: SpatialProjection.Camera) {
         guard let point = camera.point(world), camera.viewport.contains(point) else { label.isHidden = true; return }

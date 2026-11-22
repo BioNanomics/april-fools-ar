@@ -13,6 +13,7 @@ struct TagHeightVector {
     let frameID: String
     let segmentID: String
     let floorID: String
+    let floor: SpatialPlane
     let timestamp: Double
     var midpoint: SIMD3<Float> { start + (end-start)/2 }
     var expiresAt: Double { timestamp + 0.4 }
@@ -46,7 +47,7 @@ enum TagHeightVectors {
                   flag(basis["levelFloorWithGravity"]) == floor.levelFloorWithGravity else { return nil }
             return TagHeightVector(tagID: Int(rawID), start: start, end: end, heightMeters: meters,
                 source: source, severity: height["severity"] as? String ?? "neutral",
-                frameID: frameID, segmentID: segmentID, floorID: floor.id, timestamp: timestamp)
+                frameID: frameID, segmentID: segmentID, floorID: floor.id, floor: floor, timestamp: timestamp)
         }
     }
     private static func number(_ raw: Any?) -> Double? {

@@ -5,11 +5,12 @@ require 'fileutils'
 require 'optparse'
 require 'shellwords'
 
-options={device:'DBE3B4F0-0581-4B4F-B693-17FEC5753C55'}
+options={}
 OptionParser.new do |parser|
   parser.on('--device-id ID') { |value| options[:device]=value }
   parser.on('--work-dir DIR') { |value| options[:work_dir]=value }
 end.parse!
+abort 'Pass --device-id for a dedicated April Fools simulator.' unless options[:device]
 root=File.expand_path('../..',__dir__)
 work=options[:work_dir] || Dir.mktmpdir('aprilfools-preview-zoom-')
 FileUtils.mkdir_p(work)

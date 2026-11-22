@@ -14,6 +14,7 @@ final class AprilTagOverlayView: UIView {
     private var axisLayers = [CAShapeLayer]()
     private var axisLabels = [UILabel]()
     private var hitPaths = [(Int, UIBezierPath)]()
+    private var cardHitPaths = [(Int, CGRect)]()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -38,9 +39,13 @@ final class AprilTagOverlayView: UIView {
         axisLayers.forEach { $0.removeFromSuperlayer() }
         axisLayers.removeAll()
         hitPaths.removeAll()
+        cardHitPaths.removeAll()
     }
 
-    func tagID(at point: CGPoint) -> Int? { hitPaths.reversed().first(where: { $0.1.contains(point) })?.0 }
+    func tagID(at point: CGPoint) -> Int? {
+        cardHitPaths.reversed().first(where: { $0.1.contains(point) })?.0 ??
+            hitPaths.reversed().first(where: { $0.1.contains(point) })?.0
+    }
 
     /// Intrinsics are [fx, fy, cx, cy] in the analyzed source image's pixels.
     /// Pose R maps tag coordinates to optical camera coordinates (+X right, +Y down, +Z forward).
@@ -48,9 +53,10 @@ final class AprilTagOverlayView: UIView {
     func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, axisLengthMeters: Double? = nil, showImperialHeight: Bool = true) {
         let remaining = expiresAt - ProcessInfo.processInfo.systemUptime
         guard remaining > 0, imageSize.width.isFinite, imageSize.height.isFinite,
-              imageSize.width > 0, imageSize.height > 0, bounds.width.isFinite, bounds.height.isFinite else { clear(); return }
+              imageSize.width > 0, imageSize.height > 0, bounds.width.isFinite, bounds.height.isFinite,
+              bounds.width > 0, bounds.height > 0 else { clear(); return }
         sourceFrameID = frameID
-        var rendered = [(Int, [CGPoint], UIColor, [String: Any]?)]()
+        var rendered = [(Int, [CGPoint], UIColor, [String: Any]?, [String: Any]?)]()
         var renderedAxes = [PoseAxisProjection]()
         func displayPoint(_ point: CGPoint) -> CGPoint? {
             let normalized = CGPoint(x: point.x / imageSize.width, y: point.y / imageSize.height).applying(displayTransform)
@@ -66,12 +72,14 @@ final class AprilTagOverlayView: UIView {
                 return displayPoint(CGPoint(x: x, y: y))
             }
             guard points.count == 4 else { continue }
+            guard Self.enclosingRect(points).intersects(bounds) else { continue }
             let severity = (detection["debug"] as? [String: Any])?["severity"] as? String ?? "neutral"
             let color: UIColor
             switch severity { case "good": color = .systemGreen; case "warning": color = .systemYellow; case "bad": color = .systemRed; default: color = .lightGray }
             // Keep metadata beside its own detection: duplicate tag IDs may be at different heights.
             let floorHeight = detection["floorHeight"].map { $0 as? [String: Any] ?? [:] }
-            rendered.append((id.intValue, points, color, floorHeight))
+            let cameraRanges = detection["cameraRanges"] as? [String: Any]
+            rendered.append((id.intValue, points, color, floorHeight, cameraRanges))
             if showPoseAxes, let intrinsics, let pose = detection["pose"] as? [String: Any],
                let projected = Self.projectPoseAxes(pose: pose, intrinsics: intrinsics, axisLengthMeters: axisLengthMeters),
                let origin = displayPoint(projected.origin) {
@@ -90,10 +98,11 @@ final class AprilTagOverlayView: UIView {
             corners.lineWidth = 1; corners.strokeColor = UIColor.black.cgColor
             layer.addSublayer(shape); layer.addSublayer(corners)
             outlineLayers.append(shape); cornerLayers.append(corners)
-            label.font = .monospacedSystemFont(ofSize: 17, weight: .bold)
-            label.textColor = .black; label.layer.cornerRadius = 4; label.clipsToBounds = true
-            label.numberOfLines = 1; label.lineBreakMode = .byTruncatingTail
-            label.adjustsFontSizeToFitWidth = true; label.minimumScaleFactor = 0.75
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            label.layer.cornerRadius = 5; label.clipsToBounds = true
+            label.backgroundColor = UIColor.black.withAlphaComponent(0.76)
+            label.numberOfLines = 3; label.lineBreakMode = .byTruncatingTail
+            label.adjustsFontSizeToFitWidth = true; label.minimumScaleFactor = 0.9
             label.isAccessibilityElement = true
             addSubview(label); tagLabels.append(label)
         }
@@ -115,9 +124,12 @@ final class AprilTagOverlayView: UIView {
             addSubview(label); axisLabels.append(label)
         }
         hitPaths.removeAll(keepingCapacity: true)
+        cardHitPaths.removeAll(keepingCapacity: true)
+        let tagRects = rendered.map { Self.enclosingRect($0.1) }
+        var placedCards = [CGRect]()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for (index, item) in rendered.enumerated() {
-            let (id, points, color, floorHeight) = item
+            let (id, points, color, floorHeight, cameraRanges) = item
             let path = UIBezierPath()
             path.move(to: points[0]); points.dropFirst().forEach { path.addLine(to: $0) }; path.close()
             let shape = outlineLayers[index]
@@ -129,12 +141,25 @@ final class AprilTagOverlayView: UIView {
             for point in points { dots.append(UIBezierPath(ovalIn: CGRect(x: point.x-4, y: point.y-4, width: 8, height: 8))) }
             cornerLayers[index].path = dots.cgPath; cornerLayers[index].fillColor = color.cgColor
             let label = tagLabels[index]
-            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, showImperialHeight: showImperialHeight)
-            label.backgroundColor = color
-            label.sizeToFit()
-            label.bounds.size = CGSize(width: min(label.bounds.width, max(0, bounds.width)), height: min(label.bounds.height, max(0, bounds.height)))
-            label.frame.origin = CGPoint(x: max(0, min(bounds.width - label.bounds.width, points.map(\.x).min() ?? 0)), y: max(0, min(bounds.height - label.bounds.height, (points.map(\.y).min() ?? 0) - label.bounds.height)))
+            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, cameraRanges: cameraRanges, showImperialHeight: showImperialHeight)
+            label.textColor = color
+            label.layer.borderColor = color.withAlphaComponent(0.85).cgColor
+            label.layer.borderWidth = id == selectedID ? 1.5 : 0.75
+            let natural = label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+            let cardSize = CGSize(width: min(max(140, natural.width + 4), 260, max(0, bounds.width - 12)),
+                                  height: min(ceil(label.font.lineHeight * 3) + 8, bounds.height))
+            label.frame = placeCard(size: cardSize, around: tagRects[index], occupied: placedCards, tags: tagRects)
+            placedCards.append(label.frame)
+            let start = Self.nearestPoint(in: tagRects[index], to: CGPoint(x: label.frame.midX, y: label.frame.midY))
+            let end = Self.nearestPoint(in: label.frame, to: CGPoint(x: tagRects[index].midX, y: tagRects[index].midY))
+            if hypot(start.x - end.x, start.y - end.y) > 7 {
+                // The leader belongs to the existing outline layer, never a UIKit label's backing layer.
+                let outlineWithLeader = UIBezierPath(cgPath: path.cgPath)
+                outlineWithLeader.move(to: start); outlineWithLeader.addLine(to: end)
+                shape.path = outlineWithLeader.cgPath
+            }
             hitPaths.append((id, path))
+            cardHitPaths.append((id, label.frame))
         }
         for (tagIndex, projection) in renderedAxes.enumerated() {
             let origin = projection.origin
@@ -171,19 +196,12 @@ final class AprilTagOverlayView: UIView {
         }
     }
 
-    private func configure(_ label: UILabel, id: Int, selected: Bool, floorHeight: [String: Any]?, showImperialHeight: Bool) {
-        let prefix = selected ? " ◆ #\(id)" : " #\(id)"
+    private func configure(_ label: UILabel, id: Int, selected: Bool, floorHeight: [String: Any]?, cameraRanges: [String: Any]?, showImperialHeight: Bool) {
+        let prefix = selected ? "◆ #\(id)" : "#\(id)"
         label.accessibilityIdentifier = "apriltag.label.\(id)"
         label.accessibilityLabel = "AprilTag \(id)"
         label.accessibilityTraits = selected ? [.staticText, .selected] : .staticText
-        guard let floorHeight else {
-            // Old detection-only inputs keep their exact display text and do not imply floor data exists.
-            label.font = .monospacedSystemFont(ofSize: 17, weight: .bold)
-            label.text = prefix + " "
-            label.accessibilityValue = "Floor-relative height not provided"
-            return
-        }
-        label.font = .monospacedSystemFont(ofSize: 17, weight: .bold)
+        let floorHeight = floorHeight ?? [:]
         let source = floorHeight["source"] as? String ?? "unavailable"
         let sourceName = source == "sceneDepth" ? "LiDAR depth" : (source == "tagPose" ? "optical tag pose" : "unavailable or unrecognized")
         let reason = floorHeight["reason"] as? String ?? "No current floor-height estimate"
@@ -192,14 +210,75 @@ final class AprilTagOverlayView: UIView {
         let meters = raw?.doubleValue ?? .nan
         let valid = suppliedAvailable && raw.map { CFGetTypeID($0) != CFBooleanGetTypeID() } == true &&
             meters.isFinite && (0...30).contains(meters) && ["sceneDepth", "tagPose"].contains(source)
+        let heightText: String, heightAccessibility: String
         if valid, let formatted = HeightDisplayFormatter.string(meters: meters, showImperial: showImperialHeight) {
-            label.text = prefix + " · ↑ \(formatted) "
-            label.accessibilityValue = "Floor-relative tag center height available: \(formatted). Source: \(sourceName). Reason: \(reason)."
+            heightText = formatted
+            heightAccessibility = "Floor-relative tag center height available: \(formatted). Source: \(sourceName). Reason: \(reason)."
         } else {
-            label.text = prefix + " · H — "
+            heightText = "—"
             let explanation = suppliedAvailable ? "Invalid floor-height estimate" : (reason == "floorNotSelected" ? "Floor not selected; set a floor" : reason)
-            label.accessibilityValue = "Floor-relative tag center height unavailable. Source: \(sourceName). Reason: \(explanation)."
+            heightAccessibility = "Floor-relative tag center height unavailable. Source: \(sourceName). Reason: \(explanation)."
         }
+        let ranges = cameraRanges ?? [:]
+        func range(_ key: String, available: String, reason: String, name: String) -> (String, String) {
+            let value = ranges[key] as? NSNumber
+            let meters = value?.doubleValue ?? .nan
+            if ranges[available] as? Bool == true, let value, CFGetTypeID(value) != CFBooleanGetTypeID(),
+               meters.isFinite, meters > 0, let formatted = HeightDisplayFormatter.string(meters: meters, showImperial: showImperialHeight) {
+                return (formatted, "\(name) camera range available: \(formatted).")
+            }
+            return ("—", "\(name) camera range unavailable. Reason: \(ranges[reason] as? String ?? "No current range estimate").")
+        }
+        let lidar = range("lidarRangeMeters", available: "lidarAvailable", reason: "lidarReason", name: "LiDAR")
+        let tag = range("tagRangeMeters", available: "tagAvailable", reason: "tagReason", name: "Tag pose")
+        label.text = " \(prefix) · H \(heightText) \n LiDAR \(lidar.0) \n Tag \(tag.0) "
+        label.accessibilityValue = heightAccessibility + " " + lidar.1 + " " + tag.1
+    }
+
+    private static func enclosingRect(_ points: [CGPoint]) -> CGRect {
+        let x = points.map(\.x), y = points.map(\.y)
+        return CGRect(x: x.min() ?? 0, y: y.min() ?? 0, width: (x.max() ?? 0) - (x.min() ?? 0), height: (y.max() ?? 0) - (y.min() ?? 0))
+    }
+
+    private static func nearestPoint(in rect: CGRect, to point: CGPoint) -> CGPoint {
+        CGPoint(x: max(rect.minX, min(rect.maxX, point.x)), y: max(rect.minY, min(rect.maxY, point.y)))
+    }
+
+    private func placeCard(size: CGSize, around tag: CGRect, occupied: [CGRect], tags: [CGRect]) -> CGRect {
+        let gap: CGFloat = 6
+        let horizontalMargin = min(gap, max(0, (bounds.width - size.width) / 2))
+        let desiredReserve: CGFloat = bounds.height >= size.height + 140 ? 64 : gap
+        let reserve = min(desiredReserve, max(0, (bounds.height - size.height) / 2))
+        let area = CGRect(x: horizontalMargin, y: reserve, width: max(0, bounds.width - horizontalMargin * 2), height: max(0, bounds.height - reserve * 2))
+        func clamped(_ point: CGPoint) -> CGRect {
+            CGRect(x: max(area.minX, min(area.maxX - size.width, point.x)),
+                   y: max(area.minY, min(area.maxY - size.height, point.y)), width: size.width, height: size.height)
+        }
+        var origins = [CGPoint(x: tag.minX, y: tag.minY - size.height - gap),
+                       CGPoint(x: tag.minX, y: tag.maxY + gap),
+                       CGPoint(x: tag.minX - size.width - gap, y: tag.midY - size.height / 2),
+                       CGPoint(x: tag.maxX + gap, y: tag.midY - size.height / 2)]
+        // Bounded vertical fallback slots make nearby tags legible when their four immediate sides collide.
+        let slots = min(24, max(1, Int(area.height / max(size.height + gap, 1))))
+        for slot in 0..<slots {
+            let y = area.minY + CGFloat(slot) * (size.height + gap)
+            origins.append(CGPoint(x: area.minX, y: y))
+            origins.append(CGPoint(x: area.maxX - size.width, y: y))
+        }
+        func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+            let intersection = a.intersection(b)
+            return intersection.isNull ? 0 : intersection.width * intersection.height
+        }
+        func score(_ rect: CGRect) -> CGFloat {
+            let cardOverlap = occupied.reduce(CGFloat.zero) { $0 + overlap(rect.insetBy(dx: -3, dy: -3), $1) }
+            let tagOverlap = tags.reduce(CGFloat.zero) { $0 + overlap(rect, $1) }
+            let distance = hypot(rect.midX - tag.midX, rect.midY - tag.midY)
+            return cardOverlap * 100 + tagOverlap * 3 + distance * 0.1
+        }
+        return origins.map(clamped).enumerated().min {
+            let a = score($0.element), b = score($1.element)
+            return abs(a - b) < 1e-6 ? $0.offset < $1.offset : a < b
+        }!.element
     }
 
     /// Pure pinhole projection in original image pixels; endpoints are ordered [+X, +Y, +Z].

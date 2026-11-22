@@ -16,7 +16,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         controller.view.backgroundColor = UIColor(red: 0.03, green: 0.08, blue: 0.13, alpha: 1)
         window.rootViewController = controller
         window.makeKeyAndVisible()
-        panel = TagDebugPanelView(frame: CGRect(x: 0, y: 100, width: 390, height: 96))
+        panel = TagDebugPanelView(frame: CGRect(x: 0, y: 100, width: 390, height: 44))
         controller.view.addSubview(panel)
         panel.onPreferredHeightChanged = { [weak self] height in self?.resizePanel(to: height) }
         panel.layoutIfNeeded()
@@ -177,6 +177,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     }
 
     func testDeltaThresholdBoundariesMatchMathTolerance() throws {
+        expandPanel()
         for (delta,color) in [(0.10,UIColor.systemGreen),(0.10+5e-10,UIColor.systemGreen),
                               (0.15,UIColor.systemYellow),(0.15+5e-10,UIColor.systemYellow),
                               (0.15+2e-9,UIColor.systemRed)] {
@@ -200,25 +201,30 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         assertReadable()
     }
 
-    func testCompactDefaultShowsDepthAndTimingIn96Points() throws {
+    func testCompactDefaultShowsIdentityAndTimingIn44Points() throws {
         XCTAssertFalse(panel.isExpanded)
-        XCTAssertEqual(panel.preferredHeight,96)
-        XCTAssertEqual(panel.bounds.height,96)
+        XCTAssertEqual(panel.preferredHeight,44)
+        XCTAssertEqual(panel.bounds.height,44)
         let backdropAlpha=try XCTUnwrap(panel.backgroundColor).cgColor.alpha
         XCTAssertGreaterThan(backdropAlpha,0)
         XCTAssertLessThan(backdropAlpha,0.9,"Default panel must be visibly translucent")
         show(validDebug())
-        for text in ["TAG #42 · VALID","1.234","1.250","0.016"] { _=try label(text) }
+        let title=try label("TAG #42 · VALID")
+        XCTAssertEqual(title.font.pointSize,12)
+        XCTAssertFalse(title.font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        for text in ["1.234","1.250","0.016"] {
+            XCTAssertFalse(labels().contains { isVisible($0) && $0.text == text },"Per-tag cards own repeated measurements; expanded Details retains raw Z values")
+        }
         XCTAssertFalse(labels().contains { isVisible($0) && $0.text == "+0.123" },"Full translation row belongs in Details")
-        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("29.7") &&
-            ($0.text ?? "").contains("12") },"Compact telemetry must include cadence and compute latency")
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("29.7 Hz") &&
+            ($0.text ?? "").contains("age") },"Compact telemetry must include cadence and frame age")
         assertReadable()
-        try savePNG("panel-compact-valid-390x96")
+        try savePNG("panel-compact-valid-390x44")
         show(nil)
         _=try label("TAG DEBUG · WAITING")
-        XCTAssertGreaterThanOrEqual(labels().filter { isVisible($0) && $0.text == "—" }.count,3)
+        XCTAssertFalse(labels().contains { isVisible($0) && $0.text == "—" },"Unavailable metric rows belong in Details")
         assertReadable()
-        try savePNG("panel-compact-no-tag-390x96")
+        try savePNG("panel-compact-no-tag-390x44")
     }
 
     func testDetailsButtonExpandsCollapsesAndReportsPreferredHeight() throws {
@@ -238,10 +244,10 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         assertReadable()
         button.sendActions(for:.touchUpInside)
         XCTAssertFalse(panel.isExpanded)
-        XCTAssertEqual(panel.preferredHeight,96)
-        XCTAssertEqual(panel.bounds.height,96)
+        XCTAssertEqual(panel.preferredHeight,44)
+        XCTAssertEqual(panel.bounds.height,44)
         XCTAssertEqual(button.title(for:.normal),"Details")
-        XCTAssertEqual(changes,[270,96])
+        XCTAssertEqual(changes,[270,44])
         XCTAssertEqual(panel.superview?.bounds,originalSuperviewBounds,"Expanding the overlay must not resize its host")
         panel.setExpanded(true); resizePanel(to:panel.preferredHeight)
         XCTAssertTrue(panel.isExpanded)
@@ -313,7 +319,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(button.titleLabel?.text,"Details")
         show(validDebug())
         assertReadable()
-        try savePNG("panel-compact-settled-Details-390x96")
+        try savePNG("panel-compact-settled-Details-390x44")
     }
 }
 

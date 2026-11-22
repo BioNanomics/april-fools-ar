@@ -707,7 +707,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     let center = TagDebugMath.numbers(detection["center"], count: 2) ?? []
                     let depth = TagDebugMath.sampleDepth(depth: depthBuffer, confidence: confidenceBuffer, center: center, imageWidth: width, imageHeight: height)
                     let enriched = TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
-                    return TagFloorHeight.enrich(enriched, context: TagFloorHeightContext(floor: sourceFloor,
+                    let ranged = TagCameraRanges.enrich(enriched, context: TagCameraRangesContext(intrinsics: k,
+                        frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp))
+                    return TagFloorHeight.enrich(ranged, context: TagFloorHeightContext(floor: sourceFloor,
                         cameraToWorld: sourceCameraToWorld, intrinsics: k, settings: settings, tracking: sourceTracking,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
                         frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))

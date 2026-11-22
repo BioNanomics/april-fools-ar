@@ -6,12 +6,13 @@ require 'open3'
 require 'optparse'
 require 'shellwords'
 
-options = { device: 'DBE3B4F0-0581-4B4F-B693-17FEC5753C55', only_testing: [] }
+options = { only_testing: [] }
 OptionParser.new do |parser|
   parser.on('--device-id ID') { |value| options[:device] = value }
   parser.on('--work-dir DIR') { |value| options[:work_dir] = value }
   parser.on('--only-testing ID') { |value| options[:only_testing] << value }
 end.parse!
+abort 'Pass --device-id for a dedicated April Fools simulator.' unless options[:device]
 root = File.expand_path('../..', __dir__)
 work = options[:work_dir] || Dir.mktmpdir('aprilfools-panel-uikit-')
 FileUtils.mkdir_p(work)

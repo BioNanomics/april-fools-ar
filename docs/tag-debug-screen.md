@@ -4,7 +4,7 @@ The debug screen compares two estimates from the same AR camera frame: the pose 
 
 ## Using it
 
-**Tag debug** is the default live view. The camera fills the available preview area; the debug readout floats over it instead of reserving a separate panel below it. The compact translucent overlay shows the selected tag's validity, pose Z, LiDAR Z, colored difference and live timing. Tap **Details** for translation, orientation, angles, range and decoder quality; tap **Collapse** to return to the compact view. Expanding does not crop, resize or change the camera's projection.
+**Tag debug** is the default live view. The camera fills the available preview area; the debug readout floats over it instead of reserving a separate panel below it. Small live cards show every detected tag's floor height, LiDAR camera range and tag-geometry camera range. The default selected-tag bar is 44 points high and shows identity, validity and timing. Tap **Details** for translation, orientation, raw pose/LiDAR Z, their difference, angles, range and decoder quality; tap **Collapse** to return to the compact view. Expanding does not crop, resize or change the camera's projection.
 
 Tag outlines, four corner points and IDs remain on the camera image. Tap a tag to inspect it; otherwise the view chooses a tag near the image center. Only the Details/Collapse button consumes overlay touches; the remaining overlay area allows tag selection beneath it. **Measure** opens floor selection and the manual distance/height tools.
 

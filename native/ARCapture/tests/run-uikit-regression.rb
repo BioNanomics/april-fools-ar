@@ -6,12 +6,13 @@ require 'open3'
 require 'optparse'
 require 'shellwords'
 
-options = { device: 'DBE3B4F0-0581-4B4F-B693-17FEC5753C55' }
+options = {}
 OptionParser.new do |parser|
   parser.on('--source-ref REF') { |value| options[:ref] = value }
   parser.on('--device-id ID') { |value| options[:device] = value }
   parser.on('--work-dir DIR') { |value| options[:work_dir] = value }
 end.parse!
+abort 'Pass --device-id for a dedicated April Fools simulator.' unless options[:device]
 
 root = File.expand_path('../../..', __dir__)
 work = options[:work_dir] || Dir.mktmpdir('apriltag-overlay-uikit-')
@@ -48,10 +49,12 @@ host.source_build_phase.add_file_reference(project.main_group.new_file(host_sour
 [source, File.join(root, 'native/ARCapture/TagDebugMath.swift'), File.join(root, 'native/ARCapture/TagDebugPanelView.swift'),
  File.join(root, 'native/ARCapture/HeightDisplayFormatter.swift'), File.join(root, 'native/ARCapture/PreviewZoom.swift'),
  File.join(root, 'native/ARCapture/SpatialMeasurements.swift'), File.join(root, 'native/ARCapture/TagFloorHeight.swift'),
+ File.join(root, 'native/ARCapture/TagCameraRanges.swift'),
  File.join(root, 'native/ARCapture/SpatialProjection.swift'), File.join(root, 'native/ARCapture/SpatialMeasurementOverlayView.swift'),
  File.join(__dir__, 'AprilTagOverlayUIKitTests.swift'), File.join(__dir__, 'TagDebugMathTests.swift'),
- File.join(__dir__, 'TagFloorHeightTests.swift'), File.join(__dir__, 'HeightDisplayFormatterTests.swift'),
- File.join(root, 'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift')].each do |path|
+ File.join(__dir__, 'TagFloorHeightTests.swift'), File.join(__dir__, 'TagCameraRangesTests.swift'), File.join(__dir__, 'HeightDisplayFormatterTests.swift'),
+ File.join(root, 'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift'),
+ File.join(root, 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift')].each do |path|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
 end
 tests.add_dependency(host)
@@ -89,5 +92,11 @@ $stdout.flush
 log = File.join(work, 'xcodebuild.log')
 success = system(*command, out: log, err: [:child, :out])
 puts File.readlines(log).select { |line| line.match?(/error:|Test Case|Executed |\*\* TEST|Testing failed|uncaught exception|NSInvalidArgumentException/) }.last(100).join
+artifacts = File.join(work, 'artifacts')
+FileUtils.mkdir_p(artifacts)
+File.readlines(log).map { |line| line[/(?:OVERLAY|PANEL)_PNG (.+\.png)/, 1] }.compact.uniq.each do |file|
+  FileUtils.cp(file, artifacts) if File.file?(file)
+end
+puts "PNG artifacts: #{artifacts}"
 puts "Full log: #{log}"
 exit(success ? 0 : 1)

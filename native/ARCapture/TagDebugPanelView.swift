@@ -3,7 +3,7 @@ import UIKit
 /// Native, reusable readouts. Frame-critical updates never cross the JS bridge.
 final class TagDebugPanelView: UIView {
     private(set) var isExpanded = false
-    var preferredHeight: CGFloat { isExpanded ? 270 : 96 }
+    var preferredHeight: CGFloat { isExpanded ? 270 : 44 }
     var onPreferredHeightChanged: ((CGFloat) -> Void)?
     private let titleLabel = UILabel()
     private let detailsButton = UIButton(type: .system)
@@ -16,15 +16,18 @@ final class TagDebugPanelView: UIView {
     private let rateLabel = UILabel()
     private var compactRateText = "No current tag measurement"
     private var expandedRateText = "No current tag measurement"
+    private var compactTitleText = "TAG DEBUG · WAITING"
+    private var expandedTitleText = "TAG DEBUG · WAITING"
+    private var titleAccessibilityText = "TAG DEBUG · WAITING"
     private var expiryToken: String?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = UIColor.black.withAlphaComponent(0.72)
         layer.cornerRadius = 12
-        layer.borderWidth = 2
+        layer.borderWidth = 1
         isUserInteractionEnabled = true
-        titleLabel.font = .monospacedSystemFont(ofSize: 17, weight: .bold)
+        titleLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         titleLabel.numberOfLines = 2
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.8
@@ -35,10 +38,12 @@ final class TagDebugPanelView: UIView {
             $0.adjustsFontSizeToFitWidth = true
             $0.minimumScaleFactor = 0.85
         }
-        rateLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        rateLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
         rateLabel.textColor = .lightGray
+        rateLabel.adjustsFontSizeToFitWidth = true
+        rateLabel.minimumScaleFactor = 0.8
         [titleLabel, translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel, rateLabel].forEach(addSubview)
-        detailsButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        detailsButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         detailsButton.tintColor = .white
         detailsButton.backgroundColor = UIColor.white.withAlphaComponent(0.10)
         detailsButton.layer.cornerRadius = 8
@@ -55,9 +60,8 @@ final class TagDebugPanelView: UIView {
         let width = max(0, bounds.width - 24)
         detailsButton.frame = CGRect(x: max(12, bounds.width - 100), y: 0, width: 88, height: 44)
         if !isExpanded {
-            titleLabel.frame = CGRect(x: 12, y: 0, width: max(0, width - 96), height: 42)
-            depthRow.frame = CGRect(x: 12, y: 42, width: width, height: 40)
-            rateLabel.frame = CGRect(x: 12, y: 82, width: width, height: 14)
+            titleLabel.frame = CGRect(x: 12, y: 3, width: max(0, width - 96), height: 21)
+            rateLabel.frame = CGRect(x: 12, y: 24, width: max(0, width - 96), height: 14)
             return
         }
         let rows: [(UIView, CGFloat)] = [(titleLabel, 42), (translationRow, 36), (rotationRow, 34),
@@ -77,16 +81,23 @@ final class TagDebugPanelView: UIView {
     }
     @objc private func toggleDetails() { setExpanded(!isExpanded) }
     private func updateExpansion() {
-        [translationRow, rotationRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        [translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        titleLabel.font = .monospacedSystemFont(ofSize: isExpanded ? 15 : 12, weight: .regular)
+        titleLabel.numberOfLines = isExpanded ? 2 : 1
         let title = isExpanded ? "Collapse" : "Details"
         detailsButton.setTitle(title, for: .normal)
         detailsButton.accessibilityLabel = title
         detailsButton.accessibilityHint = isExpanded ? "Show the compact tag readout" : "Show all tag debug metrics"
         rateLabel.numberOfLines = isExpanded ? 2 : 1
+        updateTitleText()
         updateRateText()
         setNeedsLayout()
     }
     private func updateRateText() { rateLabel.text = isExpanded ? expandedRateText : compactRateText }
+    private func updateTitleText() {
+        titleLabel.text = isExpanded ? expandedTitleText : compactTitleText
+        titleLabel.accessibilityLabel = titleAccessibilityText
+    }
     /// Only the explicit control intercepts touches; readouts pass through to tag selection.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
@@ -104,8 +115,10 @@ final class TagDebugPanelView: UIView {
     }
     func showUnavailable(_ reason: String) {
         expiryToken = nil
-        titleLabel.text = "TAG DEBUG · WAITING"
-        titleLabel.accessibilityLabel = titleLabel.text
+        compactTitleText = "TAG DEBUG · WAITING"
+        expandedTitleText = compactTitleText
+        titleAccessibilityText = compactTitleText
+        updateTitleText()
         titleLabel.textColor = .lightGray
         layer.borderColor = UIColor.darkGray.cgColor
         [translationRow, rotationRow, depthRow, geometryRow].forEach { $0.setValues(["—", "—", "—"]) }
@@ -123,8 +136,8 @@ final class TagDebugPanelView: UIView {
             showUnavailable("No tag in the current camera frame")
             expandedRateText = String(format: "Edge %.1f mm · %.1f Hz\nFrame age %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
                 analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
-            compactRateText = String(format: "%.1f Hz · age %.0f ms · compute %.0f ms", analysisHz.isFinite ? analysisHz : 0,
-                max(0, age) * 1000, latencyMilliseconds ?? 0)
+            compactRateText = String(format: "%.1f Hz · age %.0f ms", analysisHz.isFinite ? analysisHz : 0,
+                max(0, age) * 1000)
             updateRateText()
             return
         }
@@ -136,7 +149,8 @@ final class TagDebugPanelView: UIView {
             "missingDepth": "MISSING DEPTH", "ambiguous": "AMBIGUOUS", "lowConfidence": "LOW CONFIDENCE",
             "trackingLimited": "TRACKING LIMITED", "poseUnavailable": "POSE UNAVAILABLE"]
         let id = (debug["id"] as? NSNumber)?.intValue ?? -1
-        titleLabel.text = "TAG #\(id) · \(titles[status] ?? status.uppercased())"
+        compactTitleText = "TAG #\(id) · \(titles[status] ?? status.uppercased())"
+        expandedTitleText = compactTitleText
         var heightSource: String?
         if let height = debug["floorHeight"] as? [String: Any] {
             let detail: String
@@ -151,13 +165,12 @@ final class TagDebugPanelView: UIView {
             } else {
                 detail = height["reason"] as? String == "floorNotSelected" ? "Height — · set floor" : "Height — · unavailable"
             }
-            titleLabel.text = (titleLabel.text ?? "") + "\n" + detail
+            expandedTitleText += "\n" + detail
             titleLabel.isAccessibilityElement = true
-            titleLabel.accessibilityLabel = titleLabel.text
-        } else {
-            titleLabel.accessibilityLabel = titleLabel.text
         }
-        if let heightSource { titleLabel.accessibilityLabel = (titleLabel.text ?? "") + ". Height source: \(heightSource)." }
+        titleAccessibilityText = expandedTitleText
+        if let heightSource { titleAccessibilityText += ". Height source: \(heightSource)." }
+        updateTitleText()
         titleLabel.textColor = Self.color(severity)
         layer.borderColor = Self.color(severity).cgColor
         func scalar(_ key: String, _ format: String = "%.3f") -> String {
@@ -185,8 +198,8 @@ final class TagDebugPanelView: UIView {
         let source = settings.tagSizeSource == "ar-two-point-edge" ? "AR estimate" : (settings.tagSizeSource == "frc-default" ? "FRC" : "manual")
         expandedRateText = String(format: "Edge %.1f mm (%@) · %.1f Hz\nAge %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
             source, analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
-        compactRateText = String(format: "%.1f Hz · age %.0f ms · compute %.0f ms", analysisHz.isFinite ? analysisHz : 0,
-            max(0, age) * 1000, latencyMilliseconds ?? 0)
+        compactRateText = String(format: "%.1f Hz · age %.0f ms", analysisHz.isFinite ? analysisHz : 0,
+            max(0, age) * 1000)
         if let heightSource {
             compactRateText = "\(heightSource) height · " + compactRateText
             expandedRateText += " · \(heightSource) height"

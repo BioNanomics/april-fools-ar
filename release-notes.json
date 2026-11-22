@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "0.3.0",
+      "build": "12",
+      "title": "Compact multi-tag camera diagnostics",
+      "changes": [
+        "Show each tag's floor height, LiDAR camera range and tag-geometry camera range together in a small live card.",
+        "Use smaller regular-weight text and arrange nearby cards to keep multiple tags readable.",
+        "Shrink the default selected-tag panel; keep full pose and raw depth diagnostics under Details.",
+        "Retain centimeter formatting and the saved English-units preference."
+      ]
+    },
+    {
       "version": "0.2.2",
       "build": "11",
       "title": "Height units and saved display preference",

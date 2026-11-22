@@ -32,6 +32,32 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         CATransaction.flush()
     }
 
+    private func metricsRow(_ id: Int = 42, height: Double? = 1.42, lidar: Double? = 2.5,
+                            tag: Double? = 2.55, rect: CGRect = CGRect(x: 40, y: 80, width: 70, height: 70)) -> [String: Any] {
+        var row = detection(id)
+        row["corners"] = [[rect.minX, rect.minY], [rect.maxX, rect.minY], [rect.maxX, rect.maxY], [rect.minX, rect.maxY]]
+            .map { $0.map { NSNumber(value: Double($0)) } }
+        row["floorHeight"] = ["available": height != nil, "meters": height as Any? ?? NSNull(),
+            "source": height == nil ? "unavailable" : "sceneDepth", "reason": height == nil ? "floorNotSelected" : "valid"]
+        row["cameraRanges"] = ["lidarAvailable": lidar != nil, "tagAvailable": tag != nil,
+            "lidarRangeMeters": lidar as Any? ?? NSNull(), "tagRangeMeters": tag as Any? ?? NSNull(),
+            "lidarDepthZMeters": 1.5, "tagDepthZMeters": 1.6, "lidarReason": "valid", "tagReason": "valid"]
+        row["debug"] = ["severity": "good"]
+        return row
+    }
+
+    private func saveOverlayPNG(_ name: String) throws {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 2; format.opaque = true
+        let image = UIGraphicsImageRenderer(bounds: overlay.bounds, format: format).image { context in
+            UIColor(red: 0.03, green: 0.08, blue: 0.13, alpha: 1).setFill(); context.fill(overlay.bounds)
+            XCTAssertTrue(overlay.drawHierarchy(in: overlay.bounds, afterScreenUpdates: true))
+        }
+        let attachment = XCTAttachment(image: image); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".png")
+        try XCTUnwrap(image.pngData()).write(to: path)
+        print("OVERLAY_PNG \(path.path)")
+    }
+
     private func pose(translation: [Double] = [0, 0, 2], rotation: [Double] = [1, 0, 0, 0, 1, 0, 0, 0, 1]) -> [String: Any] {
         ["translation": translation.map(NSNumber.init(value:)), "rotationRowMajor": rotation.map(NSNumber.init(value:)), "tagSizeMeters": NSNumber(value: 0.2)]
     }
@@ -95,12 +121,15 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             self.show([self.detection(2)], frameID: "new", lifetime: 0.20)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            XCTAssertEqual(self.overlay.subviews.compactMap { ($0 as? UILabel)?.text }, [" #2 "])
+            let texts = self.overlay.subviews.compactMap { ($0 as? UILabel)?.text }
+            XCTAssertEqual(texts.count, 1)
+            XCTAssertTrue(texts.first?.contains("#2") == true)
             checkedNewFrame.fulfill()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
             XCTAssertTrue(self.overlay.subviews.isEmpty)
             XCTAssertTrue(self.overlay.layer.sublayers?.isEmpty ?? true)
+            XCTAssertNil(self.overlay.tagID(at: CGPoint(x: 80, y: 80)))
             self.overlay.clear()
             checkedFinalExpiry.fulfill()
         }
@@ -175,7 +204,9 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         assertPoint(vertices[0], 160, 240); assertPoint(vertices[1], 160, 277.5)
         let zBounds = try XCTUnwrap(axes[2].path?.boundingBoxOfPath)
         XCTAssertGreaterThanOrEqual(zBounds.width, 6); XCTAssertGreaterThanOrEqual(zBounds.height, 6)
-        XCTAssertEqual(Set(overlay.subviews.compactMap { ($0 as? UILabel)?.text }), Set([" #42 ", " X ", " Y ", " Z "]))
+        let texts = overlay.subviews.compactMap { ($0 as? UILabel)?.text }
+        XCTAssertTrue(texts.contains { $0.contains("#42") })
+        XCTAssertTrue(Set([" X ", " Y ", " Z "]).isSubset(of: Set(texts)))
     }
 
     func testHAxesReuseOwnedLayersAndToggleWithoutTouchingUIKitBackingLayers() {
@@ -206,18 +237,20 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
     }
 
     func testSelectedPanelHeightTitleAndAccessibilityClearWhenUnavailable() throws {
-        let panel = TagDebugPanelView(frame: CGRect(x: 0, y: 0, width: 390, height: 96))
+        let panel = TagDebugPanelView(frame: CGRect(x: 0, y: 0, width: 390, height: 44))
         panel.show(debug: ["id": 42, "status": "valid", "severity": "good",
             "floorHeight": ["available": true, "meters": 1.42, "source": "sceneDepth"]],
             frameID: "height-panel", timestamp: ProcessInfo.processInfo.systemUptime,
             analysisHz: 20, latencyMilliseconds: 5, settings: TagDebugSettings())
         panel.layoutIfNeeded()
         let title = try XCTUnwrap(panel.subviews.compactMap { $0 as? UILabel }.first { $0.text?.contains("TAG #42") == true })
-        XCTAssertTrue(title.text?.contains("142.0 cm (4 ft 7.9 in)") == true)
+        XCTAssertFalse(title.text?.contains("142.0 cm") == true,"Compact panel avoids repeating per-tag values")
         XCTAssertTrue(title.accessibilityLabel?.contains("142.0 cm (4 ft 7.9 in)") == true)
         XCTAssertTrue(panel.subviews.compactMap { ($0 as? UILabel)?.text }.contains { $0.contains("LiDAR") })
         XCTAssertTrue(title.isAccessibilityElement)
-        XCTAssertEqual(panel.preferredHeight, 96)
+        XCTAssertEqual(panel.preferredHeight, 44)
+        panel.setExpanded(true); panel.frame.size.height = panel.preferredHeight; panel.layoutIfNeeded()
+        XCTAssertTrue(title.text?.contains("142.0 cm (4 ft 7.9 in)") == true)
         var metricSettings = TagDebugSettings(); metricSettings.showImperialHeight = false
         panel.show(debug: ["id": 42, "status": "valid", "severity": "good",
             "floorHeight": ["available": true, "meters": 1.42, "source": "sceneDepth"]],
@@ -241,8 +274,10 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         show([lidar, optical])
         let labels = overlay.subviews.compactMap { $0 as? UILabel }
         XCTAssertEqual(labels.count, 2)
-        XCTAssertTrue(labels[0].text?.contains("#42 · ↑ 142.0 cm (4 ft 7.9 in)") == true)
-        XCTAssertTrue(labels[1].text?.contains("#42 · ↑ 231.0 cm (7 ft 6.9 in)") == true)
+        XCTAssertTrue(labels[0].text?.contains("#42") == true)
+        XCTAssertTrue(labels[0].text?.contains("142.0 cm (4 ft 7.9 in)") == true)
+        XCTAssertTrue(labels[1].text?.contains("#42") == true)
+        XCTAssertTrue(labels[1].text?.contains("231.0 cm (7 ft 6.9 in)") == true)
         XCTAssertTrue(labels[0].accessibilityValue?.contains("LiDAR depth") == true)
         XCTAssertTrue(labels[1].accessibilityValue?.contains("optical tag pose") == true)
         XCTAssertTrue(labels[1].accessibilityValue?.contains("poseFallbackMissingDepth") == true)
@@ -250,7 +285,7 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             XCTAssertEqual(label.accessibilityIdentifier, "apriltag.label.42")
             XCTAssertEqual(label.accessibilityLabel, "AprilTag 42")
             XCTAssertTrue(label.isAccessibilityElement)
-            XCTAssertEqual(label.font.pointSize, 17)
+            XCTAssertEqual(label.font.pointSize, 12)
         }
         let ids = labels.map(ObjectIdentifier.init)
         for _ in 0..<30 { show([lidar, optical]) }
@@ -269,7 +304,8 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             var row = detection(); row["floorHeight"] = record
             show([row])
             let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
-            XCTAssertEqual(label.text, " #42 · H — ")
+            XCTAssertTrue(label.text?.contains("#42") == true)
+            XCTAssertTrue(label.text?.contains("—") == true)
             XCTAssertFalse(label.text?.contains("0.000") == true)
             XCTAssertTrue(label.accessibilityValue?.contains("height unavailable") == true)
         }
@@ -278,7 +314,7 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         show([noFloor])
         XCTAssertTrue(overlay.subviews.compactMap { $0 as? UILabel }.first?.accessibilityValue?.contains("set a floor") == true)
         show([detection()])
-        XCTAssertEqual(overlay.subviews.compactMap { ($0 as? UILabel)?.text }, [" #42 "])
+        XCTAssertTrue(overlay.subviews.compactMap { ($0 as? UILabel)?.text }.first?.contains("#42") == true)
     }
 
     func testAutomaticHeightLabelFitsNarrowViewportAndSelectionRetainsReadableTagID() throws {
@@ -314,5 +350,103 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         XCTAssertFalse(label.accessibilityValue?.contains(" ft ") == true)
         XCTAssertEqual(try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]), original)
         XCTAssertEqual((row["floorHeight"] as? [String: Any])?["meters"] as? Double, 1.423456789)
+    }
+
+    func testCompactCardsShowBothTrueRangesWithoutAConfirmedFloorAndRespectUnits() throws {
+        let row = metricsRow(height: nil)
+        show([row])
+        let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
+        XCTAssertEqual(label.numberOfLines, 3)
+        XCTAssertEqual(label.font.pointSize, 12)
+        XCTAssertFalse(label.font.fontDescriptor.symbolicTraits.contains(.traitBold))
+        XCTAssertTrue(label.text?.contains("250.0 cm (8 ft 2.4 in)") == true)
+        XCTAssertTrue(label.text?.contains("255.0 cm (8 ft 4.4 in)") == true)
+        XCTAssertFalse(label.text?.contains("150.0 cm") == true,"Raw optical Z is not camera-to-tag range")
+        XCTAssertFalse(label.text?.contains("160.0 cm") == true)
+        XCTAssertTrue(label.accessibilityValue?.contains("set a floor") == true)
+        XCTAssertTrue(label.accessibilityValue?.contains("250.0 cm") == true)
+        XCTAssertTrue(try XCTUnwrap(label.backgroundColor).cgColor.alpha < 0.9)
+        XCTAssertLessThanOrEqual(label.layer.borderWidth, 1.5)
+        overlay.show([row], imageSize: CGSize(width: 320, height: 480), displayTransform: .identity,
+            frameID: "ranges-metric-only", expiresAt: ProcessInfo.processInfo.systemUptime + 0.5, showImperialHeight: false)
+        XCTAssertTrue(label.text?.contains("250.0 cm") == true)
+        XCTAssertTrue(label.text?.contains("255.0 cm") == true)
+        XCTAssertFalse(label.text?.contains(" ft ") == true)
+        XCTAssertFalse(label.accessibilityValue?.contains(" ft ") == true)
+    }
+
+    func testDuplicateIDsKeepTheirOwnCameraRangesAndMalformedRangesStayUnavailable() throws {
+        show([metricsRow(42, lidar: 2.5, tag: 2.55), metricsRow(42, lidar: 3.5, tag: 3.55)])
+        let labels = overlay.subviews.compactMap { $0 as? UILabel }
+        XCTAssertEqual(labels.count, 2)
+        XCTAssertTrue(labels[0].text?.contains("250.0 cm") == true)
+        XCTAssertFalse(labels[0].text?.contains("350.0 cm") == true)
+        XCTAssertTrue(labels[1].text?.contains("350.0 cm") == true)
+        var row = metricsRow()
+        for invalid in ([0, -1, Double.nan, Double.infinity, true] as [Any]) {
+            row["cameraRanges"] = ["lidarAvailable": true, "tagAvailable": true, "lidarRangeMeters": invalid, "tagRangeMeters": invalid]
+            show([row])
+            let text = try XCTUnwrap(overlay.subviews.compactMap { ($0 as? UILabel)?.text }.first)
+            XCTAssertTrue(text.components(separatedBy: "\n")[1].contains("—"))
+            XCTAssertTrue(text.components(separatedBy: "\n")[2].contains("—"))
+        }
+        row["cameraRanges"] = ["lidarAvailable": false, "tagAvailable": false, "lidarRangeMeters": 2.5, "tagRangeMeters": 2.55]
+        show([row])
+        XCTAssertFalse(overlay.subviews.compactMap { ($0 as? UILabel)?.text }.first?.contains("250.0 cm") == true)
+    }
+
+    func testFourNeighboringCardsStaySelectableAndDoNotOverlapWhenThereIsSpace() throws {
+        overlay.frame.size = CGSize(width: 390, height: 600)
+        let positions: [CGPoint] = [CGPoint(x: 50, y: 100), CGPoint(x: 250, y: 100), CGPoint(x: 50, y: 370), CGPoint(x: 250, y: 370)]
+        let rows = positions.enumerated().map { index, position in
+            metricsRow(index + 4, height: 1.42 + Double(index) * 0.1, lidar: 2.5 + Double(index) * 0.15,
+                tag: 2.55 + Double(index) * 0.15, rect: CGRect(origin: position, size: CGSize(width: 70, height: 70)))
+        }
+        overlay.show(rows, imageSize: overlay.bounds.size, displayTransform: .identity,
+            frameID: "four-neighboring-tags", expiresAt: ProcessInfo.processInfo.systemUptime + 2)
+        overlay.layoutIfNeeded(); CATransaction.flush()
+        let labels = overlay.subviews.compactMap { $0 as? UILabel }
+        XCTAssertEqual(labels.count, 4)
+        for (index, label) in labels.enumerated() {
+            XCTAssertTrue(overlay.bounds.contains(label.frame))
+            XCTAssertEqual(overlay.tagID(at: CGPoint(x: label.frame.midX, y: label.frame.midY)), index + 4)
+            for other in labels.dropFirst(index + 1) {
+                XCTAssertFalse(label.frame.insetBy(dx: 0.5, dy: 0.5).intersects(other.frame.insetBy(dx: 0.5, dy: 0.5)),
+                    "Neighboring readouts overlap despite available vertical space")
+            }
+        }
+        try saveOverlayPNG("four-tag-compact-ranges-390x600")
+    }
+
+    func testCompactCardRemainsContainedInATinyViewport() throws {
+        overlay.frame.size = CGSize(width: 80, height: 24)
+        show([metricsRow()])
+        let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
+        XCTAssertTrue(overlay.bounds.contains(label.frame))
+        XCTAssertTrue(label.accessibilityValue?.contains("142.0 cm") == true)
+    }
+
+    func testVisibleCardHitTakesPriorityOverAnotherTagsCoveringQuad() throws {
+        let first = metricsRow(42)
+        var covering = metricsRow(17)
+        covering["corners"] = [[0, 0], [320, 0], [320, 480], [0, 480]].map { $0.map(NSNumber.init(value:)) }
+        show([first, covering])
+        let labels = overlay.subviews.compactMap { $0 as? UILabel }
+        XCTAssertEqual(labels.count, 2)
+        XCTAssertFalse(labels[0].frame.intersects(labels[1].frame))
+        XCTAssertEqual(overlay.tagID(at: CGPoint(x: labels[0].frame.midX, y: labels[0].frame.midY)), 42,
+            "The second tag quad covers the viewport but must not steal a visible first-card tap")
+        XCTAssertEqual(overlay.tagID(at: CGPoint(x: labels[1].frame.midX, y: labels[1].frame.midY)), 17)
+    }
+
+    func testCompactRangeCardsExpireTogetherWithoutAnotherFrame() {
+        let expired = expectation(description: "per-tag range cards expired")
+        show([metricsRow(), metricsRow(17)], lifetime: 0.04)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            XCTAssertTrue(self.overlay.subviews.isEmpty)
+            XCTAssertNil(self.overlay.tagID(at: CGPoint(x: 80, y: 100)))
+            expired.fulfill()
+        }
+        wait(for: [expired], timeout: 2)
     }
 }

@@ -3,10 +3,10 @@
 Run the production `PreviewZoom` helper and `AprilTagOverlayView` in an isolated UIKit simulator host:
 
 ```sh
-ruby native/PreviewZoomTests/run-zoom-tests.rb
+ruby native/PreviewZoomTests/run-zoom-tests.rb --device-id YOUR_APRIL_FOOLS_SIMULATOR_UUID
 ```
 
-Optional `--device-id ID` chooses a simulator and `--work-dir DIR` retains the generated project/build/xcresult at a selected temporary location. Default device is iPhone 17 (`DBE3B4F0-0581-4B4F-B693-17FEC5753C55`). Product sources are referenced directly; no live ARSession or camera is instantiated.
+Required `--device-id ID` explicitly chooses a task-owned simulator. Optional `--work-dir DIR` retains the generated project/build/xcresult at a selected temporary location. Product sources are referenced directly; no live ARSession or camera is instantiated.
 
 The five tests cover independently calculated centered 1×/2×/4× points and inverses in portrait/landscape viewports, noncommuting base-transform composition, continuous clamping and invalid-input handling, actual tag polygon selection at zoomed screen locations, and UIKit's inverse coordinate conversion for measurement taps. They verify the unscaled overlay/raw view bounds remain unchanged. Test inputs are synthetic geometry, not physical measurement evidence.
 

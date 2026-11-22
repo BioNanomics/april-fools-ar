@@ -216,7 +216,7 @@ export function DebugSettingsModal({
               <View style={s.toggleText}>
                 <Text style={s.label}>Show English units</Text>
                 <Text style={s.hint}>
-                  Add feet and inches in parentheses after height in
+                  Add feet and inches after heights and camera ranges in
                   centimeters.
                 </Text>
               </View>

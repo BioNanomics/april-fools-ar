@@ -56,3 +56,7 @@ At source revision `2f57a662f9fd0ebc1b5a8e9a5a0764709c0cc8c1`:
 - Native Swift MP4 writer → stock FFmpeg YAML/TAR extraction → npm byte-exact restoration passed for normal and fast-start video, including empty metadata: `/tmp/afsc-native-mp4.log`.
 
 No phone or robot was installed, launched or remotely captured during this work. No hosted CI execution is claimed.
+
+## Subsequent iPhone handoff
+
+Version **0.6.1 (20)** was installed and launch-verified on Doug's iPhone, with screen sharing stopped and the device guard released afterward. See [handoff evidence](SC-iphone-061.md). Real-field measurement and MP4 replay acceptance remain with the tester.

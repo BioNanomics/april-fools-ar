@@ -18,6 +18,10 @@ jobs:
         with: {node-version: '24'}
       - if: ${{ hashFiles('recording-format/npm/package-lock.json') != '' }}
         run: npm ci --prefix recording-format/npm
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - if: runner.os == 'macOS'
+        run: command -v ffmpeg || brew install ffmpeg
       - run: scripts/test-spatial-core.sh
       - run: cmake --build build/spatial-core --target package
       - uses: actions/upload-artifact@v4

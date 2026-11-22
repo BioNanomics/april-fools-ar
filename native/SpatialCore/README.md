@@ -17,7 +17,7 @@ Inputs may omit depth. Qualified tag geometry remains usable as an explicit heig
 
 ## Numerical and observation contract
 
-- Lengths are metres; core angles are radians. Existing capture/UI degree fields are converted by the Swift adapter and remain backward compatible.
+- Lengths are metres; new AFSC math API angles are radians. The retained AprilTag C API keeps its explicitly named `*Degrees` fields. Existing capture/UI degree fields are converted by the Swift adapter and remain backward compatible.
 - Camera optical coordinates are +X right, +Y down, +Z forward. The current world convention is gravity-aligned +Y up. Robot body/field frames must be explicitly transformed; an AR world is not a surveyed field frame.
 - Matrices are column-major. `T_destination_source` maps source coordinates to destination coordinates. ARKit conversion is `T_world_optical = T_world_ARCamera * diag(1,-1,-1,1)`.
 - Euclidean range, optical-axis Z and floor height are separate quantities. A depth sample is axial Z until unprojected with the exact source camera model.

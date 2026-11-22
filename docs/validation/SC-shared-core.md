@@ -43,3 +43,16 @@ The separate container contract stays in `recording-format/FORMAT.md`. This chan
 ## Remaining physical acceptance
 
 A tester still needs to run the updated phone acquisition, export a real field recording, compare replay with live measurements, and execute the robot consumer on the matched Systemcore image. The extraction does not establish real-world accuracy, thermal behavior or sensor latency. The M0 field-data gate and SC.T remain open.
+
+## Integrated workspace verification
+
+The four implementation checkpoints were rebased on the committed MP4 exporter (`2928247`) and fast-forwarded into main. Existing branding/legal working-tree edits were retained; overlapping Xcode/configuration edits were merged while preserving their originals in a temporary integration backup.
+
+At source revision `2f57a662f9fd0ebc1b5a8e9a5a0764709c0cc8c1`:
+
+- Complete unsigned iOS Release build with the current MP4 writer and shared core passed: `/tmp/afsc-main-app.log`; app `/tmp/afsc-main-app/Build/Products/Release-iphoneos/AprilFoolsAR.app`. The bundled build identity was verified by the build script, including the dirty-tree flag for existing branding changes.
+- 38 React Native tests passed and TypeScript checking passed.
+- Fresh desktop build, 7 CTest/JNI tests, generated-header parity, installed CMake consumer and all 13 replay tests passed: `/tmp/afsc-main-core.log`. Explicit JDK path used because this Mac's default Java lookup selects a JRE: `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-11.jdk/Contents/Home`.
+- Native Swift MP4 writer → stock FFmpeg YAML/TAR extraction → npm byte-exact restoration passed for normal and fast-start video, including empty metadata: `/tmp/afsc-native-mp4.log`.
+
+No phone or robot was installed, launched or remotely captured during this work. No hosted CI execution is claimed.

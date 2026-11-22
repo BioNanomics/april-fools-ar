@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Foundation saved-recording lifecycle tests without any iOS device."""
+"""Run saved-recording lifecycle and macOS AVAssetWriter tests without an iOS device."""
 import importlib.util
 import json
 from pathlib import Path
@@ -15,6 +15,35 @@ spec.loader.exec_module(mp4)
 
 with tempfile.TemporaryDirectory(prefix="afar-saved-recording-") as temporary:
     work = Path(temporary)
+    # Exercise the real AVAssetWriter on macOS without starting a simulator or
+    # camera. A timeout bounds writer startup/finalization failures.
+    orientation_executable = work / "ValidateVideoOrientation"
+    subprocess.run(["swiftc", "-O", str(HERE.parent / "VideoOrientation.swift"),
+                    str(HERE / "ValidateVideoOrientation.swift"), "-o", str(orientation_executable)], check=True)
+    oriented_movie = work / "portrait-source.mp4"
+    orientation = json.loads(subprocess.run([str(orientation_executable), str(oriented_movie)],
+                                           capture_output=True, text=True, timeout=20, check=True).stdout)
+    assert orientation["naturalSize"] == [64, 48]
+    assert orientation["preferredTransform"] == [0, 1, -1, 0, 48, 0]
+    assert orientation["playbackBounds"] == [0, 0, 48, 64]
+    stream = json.loads(mp4.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                                "-show_entries", "stream=width,height,nb_frames:stream_side_data",
+                                "-of", "json", oriented_movie]))["streams"][0]
+    assert (stream["width"], stream["height"], stream["nb_frames"]) == (64, 48, "3")
+    display = stream["side_data_list"][0]
+    assert display["rotation"] == -90
+    matrix = [int(value) for row in display["displaymatrix"].strip().splitlines()
+              for value in row.split(":", 1)[1].split()]
+    assert matrix == [0, 65536, 0, -65536, 0, 0, 48 * 65536, 0, 1073741824]
+    raster = subprocess.run(["ffmpeg", "-v", "error", "-noautorotate", "-i", str(oriented_movie),
+                             "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"],
+                            capture_output=True, timeout=20, check=True).stdout
+    assert len(raster) == 64 * 48 * 3
+    for (x, y), expected in [((16, 12), (255, 0, 0)), ((48, 12), (0, 255, 0)),
+                              ((16, 36), (0, 0, 255)), ((48, 36), (255, 255, 0))]:
+        actual = raster[(y * 64 + x) * 3:(y * 64 + x) * 3 + 3]
+        assert all(abs(value - target) < 30 for value, target in zip(actual, expected)), (actual, expected)
+    print("VideoOrientation: AVAssetWriter keeps sensor pixels and stores canonical portrait playback")
     sessions = work / "sessions"
     sessions.mkdir()
     source, *_ = mp4.fixture(sessions, faststart=False)

@@ -1,6 +1,6 @@
 # Saved MP4 playback and orientation
 
-November 22, 2026. Candidate app: **0.7.0 (21)**.
+November 22, 2026. Installed app: **0.7.0 (21)**, source commit `2004e44bf2d5ad8993ba377a4d04c3d7eb507df9`, built at `2026-11-22T21:57:13Z`.
 
 ## Findings and fixes
 
@@ -14,8 +14,9 @@ Stop & save now automatically creates a durable MP4 under the sibling `recording
 
 ## Verified evidence
 
-- React Native: **44 tests pass**; TypeScript passes; lint has no errors (existing inline-style and test `void` warnings).
-- Native simulator: existing metadata/empty-capture, native player preparation/dismissal and four-way orientation checks pass (12 tests in initial run). Additional AVAssetWriter orientation round-trip is exercised in the final simulator run.
+- React Native: **44 tests pass** in the isolated feature checkout and **47 tests pass** with the preserved main-workspace changes; TypeScript passes; lint has no errors (existing inline-style and test `void` warnings).
+- Native simulator: **13 tests pass** in the final fresh run, including metadata/empty-capture, native player preparation/dismissal, four-way orientation and an AVAssetWriter orientation round-trip. One earlier test-host launch stalled before tests ran; only this task's test process/simulator was restarted.
+- macOS AVAssetWriter: writes three real encoded frames with portrait playback metadata, preserves the landscape sensor raster and its colored quadrants, and verifies the stored matrix and upright playback dimensions through both AVFoundation and ffprobe.
 - Native MP4 writer: normal/fast-start movies, exact scalar precision, adjacent/subnormal/extreme doubles, orientation overrides and cancellation cleanup pass.
 - Node MP4 tools: **5 tests pass**, including declared/undeclared transform tampering, exact restoration and bounded large-file streaming.
 - Saved-recording store: reuse across taps/relaunch, four concurrent processes/instances, interrupted saves, corrupt artifacts, stale-stage cleanup, source preservation and safe-path cases pass.
@@ -25,8 +26,14 @@ Original file SHA256: `794ca9e5887946c67c4094b3718d4273559526023beb5e5774ac91a42
 
 Corrected copy: `/Users/horner/Downloads/AprilFoolsAR-8EA790BC-upright.mp4`.
 
-Private reproducible proof: `/tmp/april-fools-orientation-recon-20261122/proof/proof.json`; simulator evidence under `/tmp/afsc-playback-native-1` and `/tmp/afsc-playback-native-2`; replay `/tmp/afsc-user-clip-replay.jsonl`.
+Private reproducible proof: `/tmp/april-fools-orientation-recon-20261122/proof/proof.json`; final simulator result `/tmp/afsc-playback-native-2/Fresh.xcresult`; replay `/tmp/afsc-user-clip-replay.jsonl`.
 
 ## Physical acceptance
 
-The device handoff separately verifies the installed version, in-app preview of an existing recording, return to the session list, and released Device Hub control. Real-field calibration accuracy and full historical AR-overlay playback are not established by this work.
+The signed build was installed on Doug's iPhone 17 Pro. The installed-app query reported **0.7.0 (21)**; launch succeeded and the visible app header showed `v0.7.0 (21) · 2004e44`. The app's Documents directory remained present across installation.
+
+Physical preview and return to the session list remain **unverified**. Device Hub exposed its host controls but no app accessibility elements; the coordinate attempt to open Saved sessions returned `noWindowsAvailable`. This does not establish app accessibility or physical playback success. Follow up by retesting the app's Saved sessions / Play / Done accessibility controls and completing **T0.4** on the phone. The simulator player tests passed independently.
+
+Screen sharing was explicitly stopped. The Window menu listed one Device Hub window; its fresh full accessibility tree showed enabled **View Screen**, disabled keyboard capture **off**, and no live-view controls. The global guard verified that evidence and returned **released**, and all task-owned host processes exited. No WDA/XCTest runner was started on the phone. Private handoff evidence is in `/tmp/afsc-playback-handoff` (do not commit its lease token).
+
+Real-field calibration accuracy and full historical AR-overlay playback are not established by this work.

@@ -1,0 +1,13 @@
+{
+  "name": "@refineryrobotics/ar-recording",
+  "version": "0.1.0",
+  "description": "Self-contained MP4 recording packer and extractor for April Fools AR",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "exports": "./src/index.mjs",
+  "bin": { "ar-recording": "./src/cli.mjs" },
+  "scripts": { "test": "node --test tests/*.mjs" },
+  "dependencies": { "yaml": "2.9.1" }
+}

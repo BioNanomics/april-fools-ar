@@ -20,12 +20,13 @@ final class ArchiveModule: NSObject {
                 let caches = try fileManager.url(for: .cachesDirectory, in: .userDomainMask,
                                                  appropriateFor: nil, create: true)
                 let exports = caches.appendingPathComponent("AprilFoolsAR/exports", isDirectory: true)
-                let archive = try SessionZIPWriter().archiveSession(
+                let archive = try SessionMP4Writer().archiveSession(
                     folderPath: folderPath, allowedSessionsRoot: sessions, destinationDirectory: exports)
                 resolve(["url": archive.url.absoluteString, "path": archive.url.path,
-                         "bytes": NSNumber(value: archive.bytes)])
+                         "bytes": NSNumber(value: archive.bytes),
+                         "format": "mp4", "mimeType": "video/mp4"])
             } catch {
-                reject("session_archive_failed", error.localizedDescription, error)
+                reject("session_export_failed", error.localizedDescription, error)
             }
         }
     }

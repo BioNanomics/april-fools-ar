@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.6.0",
+      "build": "19",
+      "title": "Self-contained MP4 recordings",
+      "changes": [
+        "Share saved sessions as one MP4 containing video, readable YAML metadata, original images and numeric depth.",
+        "Keep the camera video clean for later processing; live tag and measurement overlays remain separate from the video.",
+        "Extract metadata with stock FFmpeg or restore the original session with the npm recording tools."
+      ]
+    },
+    {
       "version": "0.4.1",
       "build": "16",
       "title": "Dotted floor reference squares",

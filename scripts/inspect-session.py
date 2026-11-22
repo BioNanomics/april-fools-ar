@@ -1,18 +1,38 @@
 #!/usr/bin/env python3
-"""Inspect a real April Fools AR directory or ZIP without optional dependencies."""
+"""Inspect an April Fools AR MP4, legacy ZIP, or session directory.
+
+MP4 restoration uses the local npm recording library (Node 22+); directory and
+legacy ZIP inspection require only Python's standard library.
+"""
 import argparse
 from datetime import datetime
 import hashlib
 import json
 import math
 import re
+import shutil
 from pathlib import Path, PurePosixPath
 import struct
+import subprocess
 import sys
+import tempfile
 import zipfile
 
 
 def inspect(path: Path, require_tags: bool = False, require_debug: bool = False, require_build_info: bool = False) -> dict:
+    if path.is_file() and path.suffix.lower() == '.mp4':
+        node = shutil.which('node')
+        if node is None:
+            raise ValueError('MP4 inspection requires Node 22+ and npm ci --prefix recording-format/npm')
+        extractor = Path(__file__).resolve().parents[1] / 'recording-format/npm/src/cli.mjs'
+        with tempfile.TemporaryDirectory(prefix='april-fools-ar-inspect-') as temporary:
+            restored = Path(temporary) / 'session'
+            result = subprocess.run([node, str(extractor), 'unpack', str(path.resolve()), str(restored)],
+                                    capture_output=True, text=True)
+            if result.returncode:
+                raise ValueError('MP4 extraction failed (run npm ci --prefix recording-format/npm): '
+                                 + result.stderr.strip())
+            return inspect(restored, require_tags, require_debug, require_build_info)
     archive = zipfile.ZipFile(path) if path.is_file() else None
     prefix = ""
     if archive and "manifest.json" not in archive.namelist():

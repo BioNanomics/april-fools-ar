@@ -1,6 +1,6 @@
 # Milestone 0 capture format
 
-Schema version 1 is an exploratory capture format. Preserve the complete exported ZIP so later analysis has the original inputs. It is not a calibrated field map.
+Schema version 1 describes the on-device capture data. Preserve the complete exported MP4 so later analysis has the original inputs. It is not a calibrated field map. [MP4 recording format version 1](../recording-format/FORMAT.md) packages these files with readable YAML metadata; it is separate from the capture schema version.
 
 ## Files and clocks
 
@@ -12,7 +12,7 @@ Each session has a UUID directory containing `manifest.json`, `frames.jsonl`, `e
 
 ## RGB and geometry
 
-RGB video uses H.264, targeting 30 fps. Selected frames are JPEGs at a target of 5 Hz and at positive-detection/measurement/bookmark events, subject to the bounded writer queue. A frame already saved as a JPEG is reused rather than duplicated. The preserved sensor image is not rotated to match the phone screen. `imageWidth`, `imageHeight`, `interfaceOrientation`, `viewportWidth`, `viewportHeight`, and `displayTransform` describe presentation.
+RGB video uses H.264, targeting 30 fps, with no audio or burned-in overlays. It retains the clean camera feed for later processing. New manifests declare this in `videoContent` (`source: ARFrame.capturedImage`, `overlaysBurnedIn: false`, `audioRecorded: false`). A standard player shows the clean camera video; live graphics are not part of the movie pixels. Detection, measurement, floor and display metadata can support a later overlay viewer, but the app does not yet replay those overlays offline or promise pixel-identical screen reconstruction. Selected frames are JPEGs at a target of 5 Hz and at positive-detection/measurement/bookmark events, subject to the bounded writer queue. A frame already saved as a JPEG is reused rather than duplicated. The preserved sensor image is not rotated to match the phone screen. `imageWidth`, `imageHeight`, `interfaceOrientation`, `viewportWidth`, `viewportHeight`, and `displayTransform` describe presentation.
 
 `displayTransform` stores `[a, b, c, d, tx, ty]` for ARKit's affine mapping from normalized captured-image coordinates to normalized viewport coordinates. Invert it to map a screen tap to a normalized image coordinate. `intrinsicsColumnMajor` stores the 3×3 camera intrinsics in column-major order for the captured-image dimensions. `cameraToWorldColumnMajor` stores a 4×4 column-major transform.
 
@@ -73,12 +73,13 @@ The writer retains at most three frames for disk work. Busy queues can omit fram
 
 Only a fully written manifest has `finalized: true`. Its `fileInventory` gives each payload file's relative path, byte length, and SHA-256. The manifest excludes itself from the inventory. A failed or interrupted finalization remains unavailable for normal export. Check `errors` as well as `finalized`.
 
-ZIP export uses streaming, uncompressed ZIP entries and supports bundles below 4 GiB. Start with short sessions, export them, and verify their contents before a longer field visit. The export adds temporary storage roughly equal to the session size; the original stays on the phone.
+MP4 export streams the original video and sidecar files into one self-contained movie below 4 GiB. It adds session, frame and event YAML tracks and an uncompressed TAR data track with the original sidecar files. The original movie is recoverable byte-for-byte without duplicating its video in the export. The export adds temporary storage roughly equal to the session size plus readable metadata; the original stays on the phone. Start with short sessions, export them, and verify their contents before a longer field visit. Stock FFmpeg can dump each YAML track directly; see [extraction instructions](../recording-format/README.md). Older ZIP exports are still supported by the analysis inspector.
 
 Validate an exported bundle or copied session directory with:
 
 ```sh
-python3 scripts/inspect-session.py /path/to/session.zip
+npm ci --prefix recording-format/npm
+python3 scripts/inspect-session.py /path/to/recording.mp4
 ```
 
 For the short device check with a known visible tag, add `--require-tags` to fail when the export contains no decoded tag.

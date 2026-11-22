@@ -287,6 +287,7 @@ final class CaptureRecorder {
         manifest["tagSizeEvidenceAtStart"] = initialTagSizeEvidence as Any? ?? NSNull()
         manifest["counts"] = ["metadataFrames": framesWritten, "depthFrames": depthFrames, "videoFrames": videoFrames, "writerDroppedFrames": recentDropCount, "videoDroppedFrames": droppedVideoFrames]
         manifest["files"] = ["frames": "frames.jsonl", "events": "events.jsonl", "video": "rgb.mp4", "images": "frames/", "depth": "depth/"]
+        manifest["videoContent"] = ["source": "ARFrame.capturedImage", "codec": "h264", "overlaysBurnedIn": false, "audioRecorded": false]
         manifest["evidence"] = "Live capture; measurement accuracy has not been independently validated. AR world poses are not surveyed field truth."
         manifest["errors"] = errors
         manifest["backgroundFinalizationExpired"] = wasBackgroundExpired

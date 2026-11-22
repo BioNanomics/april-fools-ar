@@ -287,9 +287,9 @@ function CaptureApp() {
       if (!data.finalized) {
         throw new Error('Stop and save the recording before exporting.');
       }
-      const zip = await Archive.archiveSession(data.folderPath);
+      const recording = await Archive.archiveSession(data.folderPath);
       await Share.share({
-        url: zip.url,
+        url: recording.url,
         title: `April Fools AR — ${session.name}`,
       });
     } catch (e) {
@@ -1120,8 +1120,8 @@ function CaptureApp() {
             </Pressable>
           </View>
           <Text style={s.description}>
-            Export RGB video, numeric depth, poses, tag detections,
-            measurements, and notes in one ZIP.
+            Share camera video, images, numeric depth, tag detections,
+            measurements, and notes in one MP4.
           </Text>
           <FlatList
             key={`sessions-${sessionColumns}`}
@@ -1160,6 +1160,8 @@ function CaptureApp() {
                     {fileSize(item.sizeBytes)}
                   </Text>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Export recording as MP4"
                     disabled={busy}
                     style={s.export}
                     onPress={() => exportSession(item)}
@@ -1167,7 +1169,7 @@ function CaptureApp() {
                     {busy ? (
                       <ActivityIndicator color={C.bg} />
                     ) : (
-                      <Text style={s.exportText}>Export ZIP ↗</Text>
+                      <Text style={s.exportText}>Export MP4 ↗</Text>
                     )}
                   </Pressable>
                 </View>

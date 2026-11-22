@@ -1,5 +1,11 @@
 import React from 'react';
-import { DeviceEventEmitter, NativeModules, TextInput } from 'react-native';
+import {
+  Alert,
+  DeviceEventEmitter,
+  NativeModules,
+  Share,
+  TextInput,
+} from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import App from '../App';
 import {
@@ -20,6 +26,7 @@ jest.mock('react-native', () => {
     startSession: jest.fn(),
     stopSession: jest.fn(),
     listSessions: jest.fn().mockResolvedValue([]),
+    exportSession: jest.fn(),
     clearMeasurements: jest.fn(),
     setSpatialMode: jest.fn(),
     completeFloorSetup: jest.fn(),
@@ -33,6 +40,7 @@ jest.mock('react-native', () => {
     setDebugSettings: jest.fn(),
     applyMeasuredTagSize: jest.fn(),
   };
+  native.NativeModules.ArchiveModule = { archiveSession: jest.fn() };
   return native;
 });
 
@@ -41,6 +49,7 @@ let tree: Renderer.ReactTestRenderer;
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  engine.listSessions.mockResolvedValue([]);
   engine.completeFloorSetup.mockReset();
   engine.getStatus.mockResolvedValue({
     recording: false,
@@ -140,6 +149,78 @@ afterEach(async () => {
     await act(async () => tree.unmount());
   }
   jest.useRealTimers();
+  jest.restoreAllMocks();
+});
+
+const savedSession = {
+  id: 'session-1',
+  name: 'North field',
+  createdAt: '2026-11-22T20:00:00Z',
+  durationSeconds: 4,
+  sizeBytes: 1024,
+  finalized: true,
+};
+
+async function openSavedSessions() {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const tab = tree.root
+    .findAllByProps({ accessibilityRole: 'tab' })
+    .find(
+      node => node.findAllByProps({ children: 'Saved sessions' }).length > 0,
+    );
+  await act(async () => tab!.props.onPress());
+}
+
+test('shares the native self-contained MP4 from a finalized saved session', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockResolvedValue({
+    finalized: true,
+    folderPath: '/sessions/session-1',
+  });
+  NativeModules.ArchiveModule.archiveSession.mockResolvedValue({
+    url: 'file:///exports/recording.mp4',
+    format: 'mp4',
+    mimeType: 'video/mp4',
+  });
+  const share = jest
+    .spyOn(Share, 'share')
+    .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
+  await openSavedSessions();
+  expect(
+    tree.root.findAllByProps({ children: 'Export MP4 ↗' }).length,
+  ).toBeGreaterThan(0);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Export recording as MP4' })
+      .props.onPress(),
+  );
+  expect(engine.exportSession).toHaveBeenCalledWith('session-1');
+  expect(NativeModules.ArchiveModule.archiveSession).toHaveBeenCalledWith(
+    '/sessions/session-1',
+  );
+  expect(share).toHaveBeenCalledWith({
+    url: 'file:///exports/recording.mp4',
+    title: 'April Fools AR — North field',
+  });
+});
+
+test('does not package an unfinished recording', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockResolvedValue({ finalized: false });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Export recording as MP4' })
+      .props.onPress(),
+  );
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledWith(
+    'Export',
+    'Stop and save the recording before exporting.',
+  );
 });
 
 test('starts a named native recording and stops it using the same control', async () => {

@@ -309,7 +309,6 @@
 				LastUpgradeCheck = 1210;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
-						DevelopmentTeam = X5873NL7XM;
 						LastSwiftMigration = 1120;
 						ProvisioningStyle = Automatic;
 					};
@@ -395,6 +394,11 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/../scripts/stamp-build-info.sh",
+				"$(SRCROOT)/../scripts/bundle-legal.rb",
+				"$(SRCROOT)/../legal-documents.json",
+				"$(SRCROOT)/../docs/PRIVACY.md",
+				"$(SRCROOT)/../LICENSE",
+				"$(SRCROOT)/../THIRD_PARTY_NOTICES.md",
 			);
 			name = "Stamp app build metadata";
 			outputFileListPaths = (
@@ -404,7 +408,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/bash \"$SRCROOT/../scripts/stamp-build-info.sh\"";
+			shellScript = "set -e\nruby \"$SRCROOT/../scripts/bundle-legal.rb\" --check\n/bin/bash \"$SRCROOT/../scripts/stamp-build-info.sh\"";
 		};
 		C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -516,8 +520,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
-				DEVELOPMENT_TEAM = X5873NL7XM;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -531,13 +534,13 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.4.1;
+				MARKETING_VERSION = 0.5.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.doughorner.aprilfoolsar;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bionanomics.aprilfoolsar;
 				PRODUCT_NAME = AprilFoolsAR;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h";
@@ -555,8 +558,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
-				DEVELOPMENT_TEAM = X5873NL7XM;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -569,13 +571,13 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.4.1;
+				MARKETING_VERSION = 0.5.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.doughorner.aprilfoolsar;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bionanomics.aprilfoolsar;
 				PRODUCT_NAME = AprilFoolsAR;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h";

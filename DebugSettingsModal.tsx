@@ -448,7 +448,7 @@ const s = StyleSheet.create({
     marginVertical: 6,
   },
   hint: { color: '#A6BACD', fontSize: 11, lineHeight: 16 },
-  link: { color: '#27E4EF', fontSize: 13, marginTop: 5 },
+  link: { color: '#A1D18B', fontSize: 13, marginTop: 5 },
   measure: {
     borderColor: '#46627B',
     borderWidth: 1,
@@ -468,7 +468,7 @@ const s = StyleSheet.create({
   },
   cancel: { color: '#A6BACD', fontSize: 14, paddingVertical: 12 },
   apply: {
-    backgroundColor: '#27E4EF',
+    backgroundColor: '#A1D18B',
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,

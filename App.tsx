@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Linking,
   KeyboardAvoidingView,
   Keyboard,
@@ -33,6 +34,7 @@ import {
 } from './DebugSettingsModal';
 import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
 import { formatHeight } from './HeightUnits';
+import { AboutModal, type AboutPage } from './AboutModal';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const Engine = NativeModules.ARCaptureEngine;
@@ -116,7 +118,7 @@ const C = {
   bg: '#071426',
   card: '#102239',
   line: '#24415A',
-  cyan: '#27E4EF',
+  cyan: '#A1D18B',
   coral: '#FF795F',
   text: '#F3F8FD',
   muted: '#A6BACD',
@@ -159,6 +161,8 @@ function CaptureApp() {
   const [preview, setPreview] = useState('camera');
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [aboutPage, setAboutPage] = useState<AboutPage>('privacy');
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [measuringTagSize, setMeasuringTagSize] = useState(false);
@@ -290,7 +294,7 @@ function CaptureApp() {
       const zip = await Archive.archiveSession(data.folderPath);
       await Share.share({
         url: zip.url,
-        title: `April Fools AR — ${session.name}`,
+        title: `April Fools AR by The REFINERY — ${session.name}`,
       });
     } catch (e) {
       Alert.alert('Export', errorText(e));
@@ -897,17 +901,40 @@ function CaptureApp() {
       >
         <View style={[s.headerMain, wide && s.headerMainWide]}>
           <View style={[s.brandRow, wide && s.brandRowWide]}>
-            <View style={[s.mark, compactLandscape && s.markCompact]}>
-              <Text style={s.markText}>⌖</Text>
-            </View>
+            <Image
+              source={require('./assets/brand/app-mark.png')}
+              style={[s.mark, compactLandscape && s.markCompact]}
+              accessibilityLabel="The REFINERY wrench and viewfinder"
+            />
             <View style={s.brandContent}>
               <Text style={[s.brand, compactLandscape && s.brandCompact]}>
                 APRIL FOOLS AR
               </Text>
               <View style={s.brandMeta}>
-                {!compactLandscape && (
-                  <Text style={s.kicker}>FIELD CAPTURE</Text>
-                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="About and privacy"
+                  onPress={() => {
+                    setAboutPage('privacy');
+                    setAboutOpen(true);
+                  }}
+                  hitSlop={8}
+                  style={s.versionButton}
+                >
+                  <Text style={s.versionLabel}>by The REFINERY · About</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Sponsors"
+                  onPress={() => {
+                    setAboutPage('sponsors');
+                    setAboutOpen(true);
+                  }}
+                  hitSlop={8}
+                  style={s.versionButton}
+                >
+                  <Text style={s.versionLabel}>Sponsors</Text>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Version and release notes"
@@ -1187,6 +1214,11 @@ function CaptureApp() {
         onCancel={() => setSettingsOpen(false)}
         onSave={saveDebugSettings}
         onMeasure={beginTagSizeMeasurement}
+      />
+      <AboutModal
+        visible={aboutOpen}
+        initialPage={aboutPage}
+        onClose={() => setAboutOpen(false)}
       />
       <Modal
         visible={noteOpen}

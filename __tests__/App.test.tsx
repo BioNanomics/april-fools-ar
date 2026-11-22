@@ -116,7 +116,7 @@ beforeEach(() => {
     return next;
   });
   engine.getAppInfo.mockResolvedValue({
-    bundleId: 'com.doughorner.aprilfoolsar',
+    bundleId: 'com.bionanomics.aprilfoolsar',
     version: '0.1.1',
     build: '6',
     buildCommit: '1234567890abcdef1234567890abcdef12345678',

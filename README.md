@@ -1,4 +1,10 @@
-# April Fools AR
+# April Fools AR by The REFINERY
+
+A project from [The REFINERY](https://refineryrobotics.org/), owned by **BioNanomics**. Original app code is © 2026 BioNanomics and available under the [MIT license](LICENSE). Third-party code retains its own [licenses and notices](THIRD_PARTY_NOTICES.md). The REFINERY and BioNanomics names and logos identify the project; the software license does not grant trademark rights.
+
+Read the [privacy policy](docs/PRIVACY.md) and [TestFlight preparation](docs/TESTFLIGHT.md). The app also includes its policy, license and notices offline under **by The REFINERY · About**. Apple account setup and TestFlight upload follow owner sign-off.
+
+The **Sponsors** link beside the app title recognizes [Don Wood Foundation](https://www.donwoodfoundation.org/) and [Medical Informatics Engineering](https://mieweb.org/), with links to their official websites. Sponsors are also available in the About screen.
 
 An AprilTag field capture app for iPhone and iPad. Milestone zero detects tags and records real ARKit/LiDAR observations for later analysis; it does not yet solve an AprilTag field calibration.
 
@@ -42,26 +48,29 @@ See [the capture format](docs/capture-format.md) for coordinate conventions, clo
 
 ## Build
 
-Requirements: Node 22.13 or newer compatible with React Native 0.88, Xcode, CocoaPods, and an Apple development team with the target phone registered.
+Requirements: Node 22.13 or newer compatible with React Native 0.88, Xcode, CocoaPods, and Ruby's `xcodeproj` gem. Installing on a device additionally requires an existing development team and a profile covering that device.
 
 ```sh
 npm ci
 cd ios
 pod install
 cd ..
-./scripts/build-ios.sh
+./scripts/build-ios.sh --unsigned --archive
 ```
 
-`scripts/configure-ios.rb` includes the native modules and configures the development team and bundle ID. The Release build embeds JavaScript and can launch without Metro. Default output: `/tmp/april-fools-ar-build/Build/Products/Release-iphoneos/AprilFoolsAR.app`.
+This prepares an unsigned Release archive at `/tmp/april-fools-ar-build/AprilFoolsAR.xcarchive` for inspection. It cannot be installed or uploaded until signed. For a local development-signed build using an existing profile, run `IOS_DEVELOPMENT_TEAM=YOUR_EXISTING_TEAM ./scripts/build-ios.sh`. The scripts do not enroll an account, register devices, or update provisioning automatically. Set `APRIL_BUILD_DIR` to change the build directory, or `APRIL_ARCHIVE_PATH` for the archive destination.
+
+`scripts/configure-ios.rb` includes native modules, bundles the legal documents, and configures `com.bionanomics.aprilfoolsar`. Team selection is explicit at build time. The Release build embeds JavaScript and can launch without Metro. The internal workspace, product and React Native module remain `AprilFoolsAR`.
 
 Add each release to the front of `release-notes.json`, with its version, increasing build number and user-facing changes. The configuration script uses that first entry for Xcode's version/build. Both command-line and direct Xcode builds run `scripts/stamp-build-info.sh` before signing to embed fresh source and UTC build metadata in `BuildInfo.json`. A modified working tree is explicitly marked; release builds should come from the committed source.
 
-Install that `.app` using Device Hub → the target iPhone → Apps → Add. The current bundle ID is `com.doughorner.aprilfoolsar`.
+Before any physical install or test, follow the shared [iOS testing skill](/Users/horner/.codex/skills/ios-testing/SKILL.md), acquire its global device lease and complete verified release afterward. The BioNanomics bundle ID creates a separate app from earlier personal-identifier builds; existing recordings stay with the old app and should be exported before removing it.
 
 ```sh
 npx tsc --noEmit
 npm run lint
 npm test -- --runInBand
+ruby scripts/bundle-legal.rb --check
 ```
 
 These development checks do not establish sensor accuracy. [PLAN.md](PLAN.md) keeps the milestone open until a real-field capture is returned and reviewed. [TESTER_CHECKLIST.md](TESTER_CHECKLIST.md) describes that capture.

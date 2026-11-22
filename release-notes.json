@@ -1,6 +1,25 @@
 {
   "releases": [
     {
+      "version": "0.5.1",
+      "build": "18",
+      "title": "Thank you to our sponsors",
+      "changes": [
+        "Add a Sponsors shortcut and an About tab recognizing Don Wood Foundation and Medical Informatics Engineering.",
+        "Link each sponsor to its official website."
+      ]
+    },
+    {
+      "version": "0.5.0",
+      "build": "17",
+      "title": "April Fools AR by The REFINERY",
+      "changes": [
+        "Introduce The REFINERY icon, colors and branding, with BioNanomics ownership and app identifiers.",
+        "Add offline privacy information, the MIT app license and third-party notices under About.",
+        "Prepare a standalone Release build for iPad review before Apple account setup and TestFlight distribution."
+      ]
+    },
+    {
       "version": "0.4.1",
       "build": "16",
       "title": "Dotted floor reference squares",

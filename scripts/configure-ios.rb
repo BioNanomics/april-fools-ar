@@ -2,6 +2,7 @@ require 'xcodeproj'
 require 'json'
 
 root = File.expand_path('..', __dir__)
+system('ruby', File.join(root, 'scripts/bundle-legal.rb'), exception: true)
 project = Xcodeproj::Project.open(File.join(root, 'ios/AprilFoolsAR.xcodeproj'))
 target = project.targets.find { |item| item.name == 'AprilFoolsAR' }
 release = JSON.parse(File.read(File.join(root, 'release-notes.json'))).fetch('releases').first
@@ -15,8 +16,10 @@ if bundle_phase
 end
 stamp_phase = target.shell_script_build_phases.find { |phase| phase.name == 'Stamp app build metadata' }
 stamp_phase ||= target.new_shell_script_build_phase('Stamp app build metadata')
-stamp_phase.shell_script = '/bin/bash "$SRCROOT/../scripts/stamp-build-info.sh"'
-stamp_phase.input_paths = ['$(SRCROOT)/../scripts/stamp-build-info.sh']
+stamp_phase.shell_script = "set -e\nruby \"$SRCROOT/../scripts/bundle-legal.rb\" --check\n/bin/bash \"$SRCROOT/../scripts/stamp-build-info.sh\""
+stamp_phase.input_paths = ['$(SRCROOT)/../scripts/stamp-build-info.sh', '$(SRCROOT)/../scripts/bundle-legal.rb',
+                           '$(SRCROOT)/../legal-documents.json', '$(SRCROOT)/../docs/PRIVACY.md',
+                           '$(SRCROOT)/../LICENSE', '$(SRCROOT)/../THIRD_PARTY_NOTICES.md']
 stamp_phase.output_paths = ['$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildInfo.json']
 stamp_phase.always_out_of_date = '1'
 notes = project.main_group.files.find { |file| file.path == '../release-notes.json' } || project.main_group.new_file('../release-notes.json')
@@ -42,8 +45,8 @@ end
   target.resources_build_phase.add_file_reference(reference, true)
 end
 target.build_configurations.each do |config|
-  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.doughorner.aprilfoolsar'
-  config.build_settings['DEVELOPMENT_TEAM'] = 'X5873NL7XM'
+  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.bionanomics.aprilfoolsar'
+  config.build_settings.delete('DEVELOPMENT_TEAM')
   config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
   config.build_settings['MARKETING_VERSION'] = release.fetch('version')
   config.build_settings['CURRENT_PROJECT_VERSION'] = release.fetch('build')
@@ -55,7 +58,7 @@ target.build_configurations.each do |config|
 end
 project.root_object.attributes['TargetAttributes'] ||= {}
 project.root_object.attributes['TargetAttributes'][target.uuid] ||= {}
-project.root_object.attributes['TargetAttributes'][target.uuid]['DevelopmentTeam'] = 'X5873NL7XM'
+project.root_object.attributes['TargetAttributes'][target.uuid].delete('DevelopmentTeam')
 project.root_object.attributes['TargetAttributes'][target.uuid]['ProvisioningStyle'] = 'Automatic'
 project.save
 puts "Configured #{target.name}; #{target.source_build_phase.files.count} sources"

@@ -8,7 +8,7 @@ Each usable tag also shows a gravity-vertical vector from its intersection with 
 - [x] Native numeric alignment, conditional delta, vector projection and lifetime tests: combined suite **105/105 passed**, zero failures. Result: `/tmp/aprilfools-distance-height-20261122/Results.xcresult`. The dedicated simulator was shut down after testing; the complete native integration typecheck passed.
 - [x] React Native settings, threshold validation, tilt display and floor-leveling preference tests: 30/30 passed. TypeScript and ESLint passed.
 - [x] Signed exact-revision Release build and embedded metadata verification: **0.3.2 (14)**, source `4155f733f1e38f0be0fa70ae3b0e324199fea1ad`, built `2026-11-22T18:04:09Z` from a clean tree. Strict/deep signature and embedded version/commit/build-date comparisons passed.
-- [ ] Guarded iPhone installation/launch and verified release.
+- [x] Guarded Device Hub in-place installation and launch on Doug's iPhone 17 Pro. Independent queries confirmed **0.3.2 (14)** and a running app process. All four preexisting finalized sessions remained, with byte-identical manifest checksums. Fresh full-window capture evidence passed; the global guard returned `released` with no errors before repository work resumed.
 - [ ] Tester checks on real tags and floor in T0.1j.
 
 Existing source measurements remain in meters. The display threshold does not change optical-Z warning/rejection limits or stored delta values. Height stays vertical with gravity on a slightly tilted floor, as requested; it is not the shorter perpendicular-to-plane distance. The physical handoff verifies installation and launch; real-field alignment and accuracy remain the tester's check.
@@ -23,6 +23,6 @@ These simulator fixtures use the production native renderers. They verify layout
 
 ![World-space vertical height vector with midpoint label](images/tag-height-vector.png)
 
-Installation is pending: the Mac-only Device Hub preflight reported that the Mac is locked and automatic unlock failed. No physical-device lease, remote capture or phone action was started for this update. The installed phone version remains **0.3.1 (13)** until the guarded handoff can run after manual unlock.
+The phone was upgraded from **0.3.1 (13)** after the Mac was unlocked. No recording, remote screen capture, phone-coordinate input, WDA, XCTest or Appium runner was started. This handoff verified installation and launch; actual floor/tag alignment remains the tester's check above.
 
-Ready package: `/tmp/april-fools-final-4155f73/AprilFoolsAR.app`. Build log: `/tmp/april-fools-distance-height-build.log`. Executable SHA-256: `2b0bf66375d447e07a8a697d752d7c30329e16542538fe64158f28c40333ad59`. Debug symbols are retained locally under ignored `crash-reports/2026-11-22/build14-4155f73/`.
+Installed package: `/tmp/april-fools-final-4155f73/AprilFoolsAR.app`. Build log: `/tmp/april-fools-distance-height-build.log`. Executable SHA-256: `2b0bf66375d447e07a8a697d752d7c30329e16542538fe64158f28c40333ad59`. Debug symbols are retained locally under ignored `crash-reports/2026-11-22/build14-4155f73/`.

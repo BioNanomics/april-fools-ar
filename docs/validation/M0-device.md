@@ -56,3 +56,7 @@ Device Hub installed and launched version **0.2.0 (9)** from `d08a7b868aad3057ca
 ## Automatic tag height update — 2026-11-22
 
 Device Hub installed and launched **0.2.1 (10)** from `cc1e3a9357128a4338ae43bfc3f781e166275f0b`. Installed version/build and running PID `9451` were verified; the original three session directories remain. Task-owned screen sharing was stopped, all deployment commands exited and no phone test runners were started. See [automatic tag-height validation](M0-tag-height.md) for geometry/UI tests, exact build details and pending real-floor checks.
+
+## Height unit preference update — 2026-11-22
+
+Device Hub installed and launched **0.2.2 (11)** from `4398ff7a02526513278c582c9efc99be310fc132`, preserving the three saved sessions. A fresh global device lease covered all physical actions. Accepted full-window evidence and the guard's final `released` status verified cleanup before documentation and push. No test runner, recording or settings changes were made. See [height unit validation](M0-height-units.md).

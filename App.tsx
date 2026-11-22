@@ -31,6 +31,14 @@ import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const Engine = NativeModules.ARCaptureEngine;
 const Archive = NativeModules.ArchiveModule;
+type Measurement = {
+  kind?: string;
+  pointCount?: number;
+  distanceMeters?: number;
+  verticalMeters?: number;
+  heightMeters?: number;
+  points?: { depthMeters?: number; confidence?: number }[];
+};
 type Status = {
   recording?: boolean;
   finalizing?: boolean;
@@ -49,6 +57,15 @@ type Status = {
   lastError?: string;
   debugMode?: boolean;
   displayZoom?: number;
+  spatial?: {
+    mode?: 'distance' | 'height' | 'selectFloor' | 'tagWidth';
+    showFloorPlanes?: boolean;
+    floorSelected?: boolean;
+    floorId?: string;
+    candidateCount?: number;
+    measurementCount?: number;
+    lastMeasurement?: Measurement | null;
+  };
   aprilTag?: {
     state?:
       | 'initializing'
@@ -67,12 +84,7 @@ type Status = {
     analysisHz?: number;
     debugSettings?: DebugSettings;
   };
-  measurement?: {
-    pointCount?: number;
-    distanceMeters?: number;
-    verticalMeters?: number;
-    points?: { depthMeters?: number; confidence?: number }[];
-  };
+  measurement?: Measurement;
 };
 type Session = {
   id: string;
@@ -256,6 +268,9 @@ function CaptureApp() {
         await Engine.setPreviewMode('camera');
         setPreview('camera');
       }
+      if (measuringTagSize) {
+        await Engine.setSpatialMode('distance');
+      }
       const next = await Engine.setDebugMode(enabled);
       setMeasuringTagSize(false);
       setDebugEnabled(enabled);
@@ -268,6 +283,9 @@ function CaptureApp() {
   };
   const openDebugSettings = async () => {
     try {
+      if (measuringTagSize) {
+        setStatus(await Engine.setSpatialMode('distance'));
+      }
       setMeasuringTagSize(false);
       setDebugSettings(await Engine.getDebugSettings());
       setSettingsOpen(true);
@@ -298,7 +316,7 @@ function CaptureApp() {
   const beginTagSizeMeasurement = async () => {
     try {
       setSettingsOpen(false);
-      await Engine.clearMeasurements();
+      await Engine.setSpatialMode('tagWidth');
       await Engine.setPreviewMode('camera');
       setPreview('camera');
       const next = await Engine.setDebugMode(false);
@@ -317,7 +335,48 @@ function CaptureApp() {
       Alert.alert('Measure tag width', errorText(error));
     }
   };
-  const m = status.measurement;
+  const setSpatialMode = async (
+    mode: 'distance' | 'height' | 'selectFloor',
+  ) => {
+    try {
+      setStatus(await Engine.setSpatialMode(mode));
+    } catch (error) {
+      Alert.alert('Measurement mode', errorText(error));
+    }
+  };
+  const toggleFloor = async () => {
+    try {
+      setStatus(
+        await Engine.setFloorVisible(
+          !(status.spatial?.showFloorPlanes ?? true),
+        ),
+      );
+    } catch (error) {
+      Alert.alert('Floor display', errorText(error));
+    }
+  };
+  const clearMeasurements = async () => {
+    try {
+      setStatus(await Engine.clearMeasurements());
+    } catch (error) {
+      Alert.alert('Measurements', errorText(error));
+    }
+  };
+  const setStatusFromTagWidthReset = async () => {
+    try {
+      setStatus(await Engine.setSpatialMode('tagWidth'));
+    } catch (error) {
+      Alert.alert('Measure tag width', errorText(error));
+    }
+  };
+  const m =
+    measuringTagSize || status.measurement?.pointCount
+      ? status.measurement
+      : status.spatial?.lastMeasurement || status.measurement;
+  const spatialMode = status.spatial?.mode || 'distance';
+  const floorSelected = status.spatial?.floorSelected ?? false;
+  const floorVisible = status.spatial?.showFloorPlanes ?? true;
+  const measurementCount = status.spatial?.measurementCount ?? 0;
   const tags = status.aprilTag;
   const tagIDs = tags?.ids || [];
   const firstDepth = m?.points?.[0]?.depthMeters;
@@ -513,10 +572,7 @@ function CaptureApp() {
               )}
               {!debugEnabled && (
                 <View style={s.tagStatus} pointerEvents="none">
-                  <Text style={s.tagHeading}>
-                    APRILTAGS · {tags?.family || 'tag36h11'}
-                  </Text>
-                  <Text style={s.tagText}>
+                  <Text style={s.tagText} numberOfLines={1}>
                     {tags?.state === 'error'
                       ? tags.error || 'Detector unavailable'
                       : tagIDs.length
@@ -525,12 +581,6 @@ function CaptureApp() {
                       ? 'Looking for tags'
                       : 'Waiting for camera frames'}
                   </Text>
-                  {tags?.latencyMilliseconds != null && (
-                    <Text style={s.tagMeta}>
-                      {tags.latencyMilliseconds.toFixed(0)} ms ·{' '}
-                      {tags.analyzedFrames || 0} analyzed
-                    </Text>
-                  )}
                 </View>
               )}
             </View>
@@ -549,10 +599,18 @@ function CaptureApp() {
                       Review this AR/LiDAR estimate before using it.
                     </Text>
                     <View style={[s.row, s.measureActions]}>
-                      <Pressable onPress={() => changeDebugMode(true)}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel tag width measurement"
+                        onPress={() => changeDebugMode(true)}
+                      >
                         <Text style={s.link}>Cancel</Text>
                       </Pressable>
-                      <Pressable onPress={() => Engine.clearMeasurements()}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Reset tag width points"
+                        onPress={setStatusFromTagWidthReset}
+                      >
                         <Text style={s.link}>Clear</Text>
                       </Pressable>
                       <Pressable
@@ -571,10 +629,92 @@ function CaptureApp() {
                 ) : (
                   <>
                     <View style={s.row}>
-                      <Text style={s.kicker}>TAP TWO SURFACES TO MEASURE</Text>
-                      <Pressable onPress={() => Engine.clearMeasurements()}>
+                      <View style={s.measureModeSwitch}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Two-point measurement mode"
+                          accessibilityState={{
+                            selected: spatialMode === 'distance',
+                          }}
+                          onPress={() => setSpatialMode('distance')}
+                          style={[
+                            s.measureChoice,
+                            spatialMode === 'distance' && s.modeActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              s.modeText,
+                              spatialMode === 'distance' && s.dark,
+                            ]}
+                          >
+                            Two points
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Floor height measurement mode"
+                          accessibilityState={{
+                            selected:
+                              spatialMode === 'height' ||
+                              spatialMode === 'selectFloor',
+                          }}
+                          onPress={() => setSpatialMode('height')}
+                          style={[
+                            s.measureChoice,
+                            (spatialMode === 'height' ||
+                              spatialMode === 'selectFloor') &&
+                              s.modeActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              s.modeText,
+                              (spatialMode === 'height' ||
+                                spatialMode === 'selectFloor') &&
+                                s.dark,
+                            ]}
+                          >
+                            Floor height
+                          </Text>
+                        </Pressable>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear all measurements"
+                        onPress={clearMeasurements}
+                        hitSlop={8}
+                      >
                         <Text style={s.link}>Clear</Text>
                       </Pressable>
+                    </View>
+                    <View style={[s.row, s.floorRow]}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Toggle floor planes"
+                        accessibilityState={{ selected: floorVisible }}
+                        onPress={toggleFloor}
+                        hitSlop={6}
+                      >
+                        <Text style={s.link}>
+                          {floorVisible ? 'Floor on' : 'Floor off'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Select floor plane"
+                        onPress={() => setSpatialMode('selectFloor')}
+                        hitSlop={6}
+                      >
+                        <Text style={s.link}>
+                          {floorSelected ? 'Change floor' : 'Set floor'}
+                        </Text>
+                      </Pressable>
+                      <Text
+                        style={s.floorState}
+                      >{`${measurementCount} measurement${
+                        measurementCount === 1 ? '' : 's'
+                      } · ${floorSelected ? 'floor set' : 'no floor'}`}</Text>
                     </View>
                     <View style={s.values}>
                       <View>
@@ -583,7 +723,11 @@ function CaptureApp() {
                             ? `${m.distanceMeters.toFixed(3)} m`
                             : '—'}
                         </Text>
-                        <Text style={s.small}>3D distance</Text>
+                        <Text style={s.small}>
+                          {m?.kind === 'height'
+                            ? 'Floor height'
+                            : '3D distance'}
+                        </Text>
                       </View>
                       <View style={s.divider} />
                       <View>
@@ -598,13 +742,17 @@ function CaptureApp() {
                       </View>
                     </View>
                     <Text style={s.hint}>
-                      {m?.pointCount === 1
+                      {spatialMode === 'selectFloor'
+                        ? 'Look down, move slowly, then tap the highlighted floor to confirm it.'
+                        : spatialMode === 'height'
+                        ? 'Tap the tag center or target surface. Height is vertical above the selected floor.'
+                        : m?.pointCount === 1
                         ? `First point${
                             firstDepth != null
                               ? ` · ${firstDepth.toFixed(3)} m depth`
                               : ''
                           }. Tap the second surface.`
-                        : 'AR/LiDAR estimates · Keep the phone steady when tapping.'}
+                        : 'Tap two surfaces. Lines stay in this AR session; record to save them.'}
                     </Text>
                   </>
                 )}
@@ -844,6 +992,19 @@ const s = StyleSheet.create({
     padding: 3,
   },
   debugChoice: { borderRadius: 12, paddingVertical: 7, paddingHorizontal: 13 },
+  measureModeSwitch: { flexDirection: 'row', gap: 2 },
+  measureChoice: {
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  floorRow: { marginTop: 8 },
+  floorState: {
+    color: C.muted,
+    fontSize: 10,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
   cyan: { color: C.cyan },
   dark: { color: C.bg },
   camera: { flex: 1, backgroundColor: C.card, overflow: 'hidden' },
@@ -925,19 +1086,12 @@ const s = StyleSheet.create({
     backgroundColor: '#071426E8',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 6,
     marginTop: 12,
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
-  tagHeading: {
-    color: C.muted,
-    fontSize: 9,
-    letterSpacing: 1,
-    fontWeight: '700',
-  },
-  tagText: { color: C.cyan, fontSize: 13, fontWeight: '600', marginTop: 4 },
-  tagMeta: { color: C.muted, fontSize: 9, marginTop: 4 },
+  tagText: { color: C.cyan, fontSize: 12, fontWeight: '600' },
   measure: {
     position: 'absolute',
     bottom: 14,

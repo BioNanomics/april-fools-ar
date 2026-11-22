@@ -67,6 +67,14 @@ final class ARCaptureEngine: RCTEventEmitter {
     func clearMeasurements(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.clearMeasurements { value in DispatchQueue.main.async { resolve(value) } }
     }
+    @objc(setSpatialMode:resolver:rejecter:)
+    func setSpatialMode(_ mode: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.setSpatialMode(mode) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(setFloorVisible:resolver:rejecter:)
+    func setFloorVisible(_ visible: Bool, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.setFloorVisible(visible) { value in DispatchQueue.main.async { resolve(value) } }
+    }
     @objc(resetTracking:rejecter:)
     func resetTracking(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.resetTracking { self.complete($0, resolve: resolve, reject: reject) }

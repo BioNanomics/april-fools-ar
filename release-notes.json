@@ -1,12 +1,23 @@
 {
   "releases": [
     {
+      "version": "0.2.0",
+      "build": "9",
+      "title": "Floor planes and persistent 3D measurements",
+      "changes": [
+        "Show detected horizontal surfaces and select a floor for vertical height measurements.",
+        "Keep completed distance and floor-height vectors anchored in the scene while moving the phone.",
+        "Save measurement geometry and floor provenance with recordings; hide overlays during limited tracking and clear live placement when the AR coordinate frame resets.",
+        "Keep AR tag-width measurement separate from completed measurement history."
+      ]
+    },
+    {
       "version": "0.1.3",
       "build": "8",
       "title": "Single-line camera controls",
       "changes": [
         "Combine tracking status, depth status and view zoom on one compact line over the camera.",
-        "Retain pinch zoom and the 1×, 2× and 4× controls while freeing vertical camera space."
+        "Retain pinch zoom and the 1\u00d7, 2\u00d7 and 4\u00d7 controls while freeing vertical camera space."
       ]
     },
     {
@@ -14,7 +25,7 @@
       "build": "7",
       "title": "Camera view zoom",
       "changes": [
-        "Pinch to magnify the live view from 1× to 4×, or use the 1×, 2× and 4× buttons.",
+        "Pinch to magnify the live view from 1\u00d7 to 4\u00d7, or use the 1\u00d7, 2\u00d7 and 4\u00d7 buttons.",
         "Keep tag outlines and pose axes aligned, with measurement taps mapped back to the original image.",
         "Keep original camera frames, LiDAR samples and pose calculations unchanged; view zoom does not switch lenses or add optical detail."
       ]

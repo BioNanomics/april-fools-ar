@@ -4,6 +4,22 @@ import RealityKit
 import UIKit
 import simd
 
+fileprivate struct SpatialRenderSnapshot {
+    let generation: Int
+    let mode: SpatialMode
+    let visible: Bool
+    let planes: [SpatialPlane]
+    let measurements: [SpatialMeasurement]
+    let pendingPoints: [SIMD3<Float>]
+    let selectedFloorID: String?
+    let isTrackingNormal: Bool
+    let cameraToWorld: simd_float4x4
+    let intrinsics: simd_float3x3
+    let imageSize: CGSize
+    let displayTransform: CGAffineTransform
+    let timestamp: Double
+}
+
 final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     static let shared = ARCaptureCoordinator()
     private let captureQueue = DispatchQueue(label: "AprilFoolsAR.capture.frames", qos: .userInitiated)
@@ -48,6 +64,13 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var displayZoom = PreviewZoom.minimum
     private var points = [[String: Any]]()
     private var worldPoints = [SIMD3<Float>]()
+    private lazy var spatialState = SpatialMeasurementState(segmentID: segment)
+    private var floorCandidates = [SpatialPlane]()
+    private var showFloorPlanes = true
+    private let spatialRenderLock = NSLock()
+    private var spatialRenderGeneration = 0
+    private var spatialRenderScheduled = false
+    private var pendingSpatialRender: SpatialRenderSnapshot?
     private var lastMeasurement: [String: Any] = ["pointCount": 0, "distanceMeters": NSNull(), "verticalMeters": NSNull()]
     private var lastError: String?
     private var counters: [String: Any] = ["framesWritten": 0, "depthFrames": 0, "videoFrames": 0, "bytesWritten": 0]
@@ -159,6 +182,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 }
                 recorder.event(["type": "segment", "segmentId": self.segment, "reason": "recording began", "timestamp": self.latestFrame?.timestamp ?? 0])
                 recorder.event(["type": "debugSettingsAtStart", "settings": self.debugSettings.dictionary, "timestamp": self.latestFrame?.timestamp ?? 0])
+                recorder.event(["type": "measurementsAtStart", "segmentId": self.segment, "timestamp": self.latestFrame?.timestamp ?? 0,
+                    "measurements": self.spatialState.completed.map(\.dictionary), "floor": self.confirmedFloorDictionary() as Any? ?? NSNull()])
                 self.emitStatus(); completion(.success(self.status()))
             } catch { self.lastError = error.localizedDescription; self.emitStatus(); completion(.failure(error)) }
         }
@@ -230,6 +255,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             self.debugMode = enabled
             if enabled { self.previewMode = "camera" }
             self.invalidateAprilTags()
+            self.renderSpatial()
             DispatchQueue.main.async {
                 self.host?.setDebugMode(enabled)
                 self.host?.depthView.isHidden = self.previewMode == "camera"
@@ -266,13 +292,48 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 DispatchQueue.main.async { [weak self] in self?.host?.setDisplayZoom(zoom) }
                 // Reuse the current source pose and geometry; zoom is not a tracking reset.
                 self.renderTagDebug()
+                self.renderSpatial()
                 self.emitStatus(); completion(.success(self.status()))
             } catch { completion(.failure(error)) }
         }
     }
 
     func clearMeasurements(completion: @escaping ([String: Any]) -> Void) {
-        captureQueue.async { self.clearPoints(); self.emitStatus(); completion(self.status()) }
+        captureQueue.async {
+            self.spatialState.clearMeasurements(); self.clearPoints(); self.lastError = nil
+            self.recorder?.event(["type": "measurementsCleared", "segmentId": self.segment, "timestamp": self.latestFrame?.timestamp ?? 0, "floorRetained": self.spatialState.floor != nil])
+            self.renderSpatial(); self.emitStatus(force: true); completion(self.status())
+        }
+    }
+
+    func setSpatialMode(_ mode: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            guard let requested = SpatialMode(rawValue: mode) else { completion(.failure(CaptureError.message("Unknown measurement mode."))); return }
+            self.spatialState.setMode(requested); self.clearPoints()
+            if self.spatialState.mode == .selectFloor { self.showFloorPlanes = true }
+            self.lastError = nil; self.renderSpatial(); self.emitStatus(force: true); completion(.success(self.status()))
+        }
+    }
+
+    func setFloorVisible(_ visible: Bool, completion: @escaping ([String: Any]) -> Void) {
+        captureQueue.async {
+            self.showFloorPlanes = visible; self.renderSpatial(); self.emitStatus(force: true); completion(self.status())
+        }
+    }
+
+    func selectFloor(_ id: String) {
+        captureQueue.async {
+            do {
+                guard self.showFloorPlanes, !self.debugMode, self.spatialState.mode == .selectFloor,
+                      let frame = self.latestFrame else { throw CaptureError.message("Choose Set floor, then tap a visible horizontal surface.") }
+                self.updateFloorCandidates(frame)
+                guard let plane = self.floorCandidates.first(where: { $0.id == id }) else { throw CaptureError.message("That surface is no longer a current floor candidate.") }
+                try self.spatialState.confirmFloor(plane, tracking: self.tracking, frameAgeSeconds: self.frameAge(frame))
+                self.clearPoints()
+                self.recorder?.event(["type": "floorConfirmed", "segmentId": self.segment, "timestamp": frame.timestamp, "frameId": self.frameID, "floor": self.confirmedFloorDictionary() as Any? ?? NSNull()])
+                self.lastError = nil; self.renderSpatial(); self.emitStatus(force: true)
+            } catch { self.failMeasurement(error.localizedDescription) }
+        }
     }
 
     func resetTracking(completion: @escaping (Result<[String: Any], Error>) -> Void) {
@@ -337,36 +398,51 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         captureQueue.async {
             guard let frame = self.latestFrame, let depth = frame.sceneDepth else { self.failMeasurement("Scene depth is not available at this point."); return }
             guard case .normal = frame.camera.trackingState else { self.failMeasurement("Wait for normal AR tracking before selecting points."); return }
+            guard self.spatialState.mode != .selectFloor else { self.failMeasurement("Tap a visible horizontal surface to confirm the floor first."); return }
+            guard self.frameAge(frame) >= 0, self.frameAge(frame) <= 0.5 else { self.failMeasurement("Wait for a fresh camera frame before measuring."); return }
             let normalizedView = CGPoint(x: point.x / max(size.width, 1), y: point.y / max(size.height, 1))
-            let normalizedImage = normalizedView.applying(frame.displayTransform(for: orientation, viewportSize: size).inverted())
+            let baseDisplay = frame.displayTransform(for: orientation, viewportSize: size)
+            let tapZoom = tapDisplayZoom ?? self.displayZoom
+            let previewDisplay = PreviewZoom.displayTransform(base: baseDisplay, zoom: tapZoom)
+            let normalizedImage = normalizedView.applying(baseDisplay.inverted())
             guard normalizedImage.x >= 0, normalizedImage.x < 1, normalizedImage.y >= 0, normalizedImage.y < 1 else { self.failMeasurement("Tap lies outside the captured image."); return }
             let pixelBuffer = depth.depthMap
             let x = min(CVPixelBufferGetWidth(pixelBuffer) - 1, Int(normalizedImage.x * Double(CVPixelBufferGetWidth(pixelBuffer))))
             let y = min(CVPixelBufferGetHeight(pixelBuffer) - 1, Int(normalizedImage.y * Double(CVPixelBufferGetHeight(pixelBuffer))))
-            CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+            guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_DepthFloat32,
+                  CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly) == kCVReturnSuccess else { self.failMeasurement("Depth buffer is unavailable."); return }
             guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly); self.failMeasurement("Depth buffer has no pixels."); return }
             let value = base.advanced(by: y * CVPixelBufferGetBytesPerRow(pixelBuffer)).assumingMemoryBound(to: Float.self)[x]
             CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
             var confidenceLevel: Int?
-            if let confidence = depth.confidenceMap {
-                CVPixelBufferLockBaseAddress(confidence, .readOnly)
+            if let confidence = depth.confidenceMap, CVPixelBufferGetWidth(confidence) == CVPixelBufferGetWidth(pixelBuffer),
+               CVPixelBufferGetHeight(confidence) == CVPixelBufferGetHeight(pixelBuffer), CVPixelBufferGetPixelFormatType(confidence) == kCVPixelFormatType_OneComponent8,
+               CVPixelBufferLockBaseAddress(confidence, .readOnly) == kCVReturnSuccess {
                 if let base = CVPixelBufferGetBaseAddress(confidence) { confidenceLevel = Int(base.advanced(by: y * CVPixelBufferGetBytesPerRow(confidence)).assumingMemoryBound(to: UInt8.self)[x]) }
                 CVPixelBufferUnlockBaseAddress(confidence, .readOnly)
             }
-            guard value.isFinite, value > 0.05, value < 20, confidenceLevel != 0 else { self.failMeasurement("Invalid or low-confidence depth. Try a nearby flat surface."); return }
+            guard value.isFinite, value > 0.05, value < 20, [1, 2].contains(confidenceLevel ?? -1) else { self.failMeasurement("Select valid depth with confidence 1 or 2. Try a nearby flat surface."); return }
             let k = frame.camera.intrinsics
             let resolution = frame.camera.imageResolution
             let u = Float(normalizedImage.x * resolution.width), v = Float(normalizedImage.y * resolution.height)
             let optical = SIMD4<Float>((u - k.columns.2.x) / k.columns.0.x * value, -(v - k.columns.2.y) / k.columns.1.y * value, -value, 1)
             let w = frame.camera.transform * optical
             let world = SIMD3<Float>(w.x, w.y, w.z)
-            if self.worldPoints.count == 2 { self.clearPoints() }
             let record: [String: Any] = ["frameId": self.frameID, "timestamp": frame.timestamp, "segmentId": self.segment,
                 "imagePixel": [Double(u), Double(v)], "viewNormalized": [normalizedView.x, normalizedView.y],
                 "depthPixel": [x, y], "depthMeters": Double(value), "confidence": confidenceLevel as Any? ?? NSNull(),
-                "worldMeters": Self.vector(world), "source": "sceneDepth", "displayZoom": tapDisplayZoom ?? self.displayZoom]
-            self.worldPoints.append(world); self.points.append(record)
-            self.lastMeasurement = ["pointCount": self.points.count, "distanceMeters": NSNull(), "verticalMeters": NSNull(), "points": self.points, "source": "sceneDepth", "recorded": self.recorder != nil]
+                "worldMeters": Self.vector(world), "source": "sceneDepth", "displayZoom": tapZoom,
+                "intrinsicsColumnMajor": Self.matrix(k), "cameraToWorldColumnMajor": Self.matrix(frame.camera.transform),
+                "imageWidth": CVPixelBufferGetWidth(frame.capturedImage), "imageHeight": CVPixelBufferGetHeight(frame.capturedImage),
+                "depthWidth": CVPixelBufferGetWidth(pixelBuffer), "depthHeight": CVPixelBufferGetHeight(pixelBuffer),
+                "displayTransform": [baseDisplay.a, baseDisplay.b, baseDisplay.c, baseDisplay.d, baseDisplay.tx, baseDisplay.ty],
+                "previewDisplayTransform": [previewDisplay.a, previewDisplay.b, previewDisplay.c, previewDisplay.d, previewDisplay.tx, previewDisplay.ty],
+                "interfaceOrientation": orientation.rawValue, "viewportWidth": size.width, "viewportHeight": size.height]
+            let completed: SpatialMeasurement?
+            do { completed = try self.spatialState.append(SpatialPoint(world: world, record: record), tracking: self.tracking, frameAgeSeconds: self.frameAge(frame)) }
+            catch { self.failMeasurement(error.localizedDescription); return }
+            self.points = self.spatialState.pending.map(\.record); self.worldPoints = self.spatialState.pending.map(\.world)
+            self.lastMeasurement = ["pointCount": self.points.count, "distanceMeters": NSNull(), "verticalMeters": NSNull(), "points": self.points, "source": "sceneDepth", "recorded": self.recorder != nil, "kind": self.spatialState.mode == .height ? "height" : "distance"]
             if self.worldPoints.count == 2 {
                 let delta = self.worldPoints[1] - self.worldPoints[0]
                 self.lastMeasurement["distanceMeters"] = Double(simd_length(delta))
@@ -374,10 +450,18 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 self.lastMeasurement["horizontalMeters"] = Double(simd_length(SIMD2<Float>(delta.x, delta.z)))
                 self.lastMeasurement["label"] = "3D endpoint distance and signed vertical difference; not validated survey height"
             }
+            if let completed {
+                self.lastMeasurement.merge(completed.dictionary) { _, new in new }
+                self.lastMeasurement["pointCount"] = 2
+                self.lastMeasurement["points"] = completed.sourcePoints
+                self.lastMeasurement["source"] = completed.kind == "height" ? "ARPlaneAnchor+sceneDepth" : "sceneDepth"
+                self.recorder?.event(["type": "measurementCompleted", "segmentId": self.segment, "frameId": self.frameID, "timestamp": frame.timestamp, "measurement": completed.dictionary])
+            }
             self.lastError = nil
             var event = self.lastMeasurement
             event["type"] = "measurementPoint"; event["timestamp"] = frame.timestamp; event["frameId"] = self.frameID; event["segmentId"] = self.segment
             self.recorder?.event(event, frame: frame, frameID: self.frameID)
+            self.renderSpatial()
             self.emitStatus()
         }
     }
@@ -393,6 +477,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             recorder?.event(["type": "trackingChanged", "tracking": tracking, "reason": trackingReason, "frameId": frameID, "timestamp": frame.timestamp, "segmentId": segment])
             lastTrackingKey = trackingKey
         }
+        updateFloorCandidates(frame)
+        renderSpatial(frame)
         analyzeAprilTags(frame)
         if let recorder {
             var metadata: [String: Any] = ["frameId": frameID, "segmentId": segment, "timestamp": frame.timestamp,
@@ -451,12 +537,92 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
     }
     private func beginSegment(reason: String) {
-        segment = UUID().uuidString; clearPoints(); invalidateAprilTags()
+        let oldSegment = segment, count = spatialState.completed.count
+        segment = UUID().uuidString; spatialState.reset(segmentID: segment); floorCandidates = []; clearPoints(); invalidateAprilTags()
+        spatialRenderLock.lock(); spatialRenderGeneration += 1; spatialRenderLock.unlock()
+        renderSpatial(clear: true)
+        recorder?.event(["type": "measurementsInvalidated", "segmentId": oldSegment, "newSegmentId": segment, "reason": reason, "measurementCount": count, "timestamp": latestFrame?.timestamp ?? 0])
         recorder?.event(["type": "segment", "segmentId": segment, "reason": reason, "timestamp": latestFrame?.timestamp ?? 0])
     }
     private func clearPoints() {
+        spatialState.clearPending()
         points = []; worldPoints = []
         lastMeasurement = ["pointCount": 0, "distanceMeters": NSNull(), "verticalMeters": NSNull()]
+    }
+    private func frameAge(_ frame: ARFrame) -> Double { ProcessInfo.processInfo.systemUptime - frame.timestamp }
+    private func confirmedFloorDictionary() -> [String: Any]? {
+        guard var value = spatialState.floor?.dictionary else { return nil }
+        value["operatorConfirmed"] = true
+        return value
+    }
+    private func updateFloorCandidates(_ frame: ARFrame) {
+        floorCandidates = frame.anchors.compactMap { anchor -> SpatialPlane? in
+            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal else { return nil }
+            let classification: String
+            switch plane.classification {
+            case .floor: classification = "floor"
+            case .none: classification = "unclassified"
+            default: return nil // Tables, seats, ceilings, and other classified surfaces are not floor choices.
+            }
+            let transform = plane.transform
+            func world(_ local: SIMD3<Float>) -> SIMD3<Float> {
+                let p = transform * SIMD4<Float>(local.x, local.y, local.z, 1)
+                return SIMD3<Float>(p.x, p.y, p.z)
+            }
+            let n = SIMD3<Float>(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z)
+            guard SpatialMeasurementMath.finite(n), simd_length(n) > 0 else { return nil }
+            let normal = simd_normalize(n), origin = world(plane.center)
+            guard abs(normal.y) >= 0.8, SpatialMeasurementMath.finite(origin) else { return nil }
+            let boundary = plane.geometry.boundaryVertices
+            var vertices: [SIMD3<Float>]
+            if boundary.count >= 3 {
+                let count = min(64, boundary.count)
+                vertices = (0..<count).map { world(boundary[$0 * boundary.count / count]) }
+            } else {
+                let c = plane.center, x = plane.extent.x / 2, z = plane.extent.z / 2
+                vertices = [SIMD3<Float>(c.x-x,c.y,c.z-z), SIMD3<Float>(c.x+x,c.y,c.z-z),
+                    SIMD3<Float>(c.x+x,c.y,c.z+z), SIMD3<Float>(c.x-x,c.y,c.z+z)].map(world)
+            }
+            guard vertices.allSatisfy(SpatialMeasurementMath.finite) else { return nil }
+            return SpatialPlane(id: plane.identifier.uuidString, classification: classification, origin: origin, normal: normal,
+                vertices: vertices, segmentID: segment, frameID: frameID, timestamp: frame.timestamp)
+        }.prefix(24).map { $0 }
+    }
+    /// One pending main-queue delivery slot: newer frames replace geometry waiting to be displayed.
+    private func renderSpatial(_ sourceFrame: ARFrame? = nil, clear: Bool = false) {
+        let frame = sourceFrame ?? latestFrame
+        var planes = !debugMode && showFloorPlanes && !clear ? floorCandidates : []
+        if !planes.isEmpty || (!debugMode && showFloorPlanes && !clear) {
+            if let confirmed = spatialState.floor {
+                // Use the frozen datum actually used by height measurements, not later plane refinement.
+                planes.removeAll { $0.id == confirmed.id }; planes.insert(confirmed, at: 0)
+                planes = Array(planes.prefix(24))
+            }
+        }
+        let base = frame?.displayTransform(for: orientation, viewportSize: viewport) ?? .identity
+        spatialRenderLock.lock()
+        let snapshot = SpatialRenderSnapshot(generation: spatialRenderGeneration, mode: spatialState.mode,
+            visible: !clear && spatialState.mode != .tagWidth, planes: planes,
+            measurements: clear ? [] : spatialState.completed,
+            pendingPoints: clear || spatialState.pending.count != 1 ? [] : spatialState.pending.map(\.world),
+            selectedFloorID: spatialState.floor?.id, isTrackingNormal: !clear && tracking == "normal",
+            cameraToWorld: frame?.camera.transform ?? matrix_identity_float4x4,
+            intrinsics: frame?.camera.intrinsics ?? matrix_identity_float3x3,
+            imageSize: frame?.camera.imageResolution ?? CGSize(width: 1, height: 1),
+            displayTransform: PreviewZoom.displayTransform(base: base, zoom: displayZoom), timestamp: frame?.timestamp ?? 0)
+        pendingSpatialRender = snapshot
+        guard !spatialRenderScheduled else { spatialRenderLock.unlock(); return }
+        spatialRenderScheduled = true
+        spatialRenderLock.unlock()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.spatialRenderLock.lock()
+            let newest = self.pendingSpatialRender, generation = self.spatialRenderGeneration
+            self.pendingSpatialRender = nil; self.spatialRenderScheduled = false
+            self.spatialRenderLock.unlock()
+            guard let newest, newest.generation == generation else { return }
+            self.host?.applySpatial(newest)
+        }
     }
     private func failMeasurement(_ error: String) { lastError = error; emitStatus() }
     private func status() -> [String: Any] {
@@ -472,6 +638,12 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         value["measurement"] = lastMeasurement; value["previewMode"] = previewMode; value["segmentId"] = segment
         value["displayZoom"] = displayZoom
         value["debugMode"] = debugMode
+        let available = tracking == "normal" && latestFrame.map({ frameAge($0) <= 0.5 && frameAge($0) >= 0 }) == true
+        value["spatial"] = ["mode": spatialState.mode.rawValue, "showFloorPlanes": showFloorPlanes,
+            "floorSelected": spatialState.floor != nil, "floorId": spatialState.floor?.id as Any? ?? NSNull(),
+            "floorClassification": spatialState.floor?.classification as Any? ?? NSNull(), "measurementCount": spatialState.completed.count,
+            "pendingCount": spatialState.pending.count, "candidateCount": floorCandidates.count, "available": available, "valid": available,
+            "lastMeasurement": spatialState.completed.last?.dictionary as Any? ?? NSNull()]
         var selectedDebug = selectedTagDebug()
         if let timestamp = lastTagResultTimestamp { selectedDebug?["ageSeconds"] = max(0, ProcessInfo.processInfo.systemUptime - timestamp) }
         value["aprilTag"] = ["state": tagState, "family": "tag36h11", "ids": tagIDs, "count": tagIDs.count,
@@ -662,12 +834,14 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     let arView = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
     let depthView = UIImageView()
     let tagOverlay = AprilTagOverlayView(frame: .zero)
+    let spatialOverlay = SpatialMeasurementOverlayView(frame: .zero)
     let debugPanel = TagDebugPanelView(frame: .zero)
     private var debugEnabled = true
     private let statusLabel = UILabel()
     private var attached = false
     private(set) var displayZoom = PreviewZoom.minimum
     private var pinchStartZoom = PreviewZoom.minimum
+    private var spatialMode = SpatialMode.distance
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
@@ -675,6 +849,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         addSubview(previewContainer); previewContainer.addSubview(arView)
         depthView.contentMode = .scaleAspectFill; depthView.clipsToBounds = true; depthView.alpha = 0.88; depthView.isHidden = true
         previewContainer.addSubview(depthView)
+        addSubview(spatialOverlay)
         addSubview(tagOverlay)
         addSubview(debugPanel)
         debugPanel.onPreferredHeightChanged = { [weak self] _ in
@@ -710,6 +885,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         }
         applyDisplayZoom()
         tagOverlay.frame = bounds
+        spatialOverlay.frame = bounds
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
         let panelHeight = min(debugPanel.preferredHeight, max(0, bounds.height - 16))
         debugPanel.frame = CGRect(x: 8, y: max(8, bounds.height - panelHeight - 8), width: max(0, bounds.width - 16), height: panelHeight)
@@ -739,6 +915,12 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
             ARCaptureCoordinator.shared.selectTag(id)
             return
         }
+        if spatialMode == .selectFloor {
+            let point = gesture.location(in: spatialOverlay)
+            guard spatialOverlay.bounds.contains(point), let id = spatialOverlay.floorID(at: point) else { return }
+            ARCaptureCoordinator.shared.selectFloor(id)
+            return
+        }
         let point = gesture.location(in: arView)
         guard arView.bounds.contains(point) else { return }
         ARCaptureCoordinator.shared.tap(point, in: arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait, displayZoom: displayZoom)
@@ -758,6 +940,16 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     private func applyDisplayZoom() {
         let transform = CGAffineTransform(scaleX: CGFloat(displayZoom), y: CGFloat(displayZoom))
         arView.transform = transform; depthView.transform = transform
+    }
+    fileprivate func applySpatial(_ snapshot: SpatialRenderSnapshot) {
+        spatialMode = snapshot.mode
+        spatialOverlay.isHidden = !snapshot.visible
+        guard snapshot.visible else { spatialOverlay.clear(); return }
+        let age = ProcessInfo.processInfo.systemUptime - snapshot.timestamp
+        spatialOverlay.show(planes: snapshot.planes, measurements: snapshot.measurements, pendingPoints: snapshot.pendingPoints,
+            selectedFloorID: snapshot.selectedFloorID, isTrackingNormal: snapshot.isTrackingNormal && age >= 0 && age <= 0.5,
+            cameraToWorld: snapshot.cameraToWorld, intrinsics: snapshot.intrinsics, imageSize: snapshot.imageSize,
+            displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5)
     }
     func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
     func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil) {

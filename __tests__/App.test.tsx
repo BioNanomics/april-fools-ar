@@ -17,6 +17,8 @@ jest.mock('react-native', () => {
     stopSession: jest.fn(),
     listSessions: jest.fn().mockResolvedValue([]),
     clearMeasurements: jest.fn(),
+    setSpatialMode: jest.fn(),
+    setFloorVisible: jest.fn(),
     addListener: jest.fn(),
     removeListeners: jest.fn(),
     setPreviewMode: jest.fn().mockResolvedValue(undefined),
@@ -40,6 +42,12 @@ beforeEach(() => {
     lidarAvailable: true,
     depthAvailable: true,
     displayZoom: 1,
+    spatial: {
+      mode: 'distance',
+      showFloorPlanes: false,
+      floorSelected: false,
+      measurementCount: 0,
+    },
   });
   engine.setDebugMode.mockImplementation(async (enabled: boolean) => ({
     ...(await engine.getStatus()),
@@ -50,6 +58,42 @@ beforeEach(() => {
     ...(await engine.getStatus()),
     displayZoom,
   }));
+  engine.setSpatialMode.mockImplementation(async (mode: string) => {
+    const status = await engine.getStatus();
+    const next = {
+      ...status,
+      spatial: {
+        ...status.spatial,
+        mode:
+          mode === 'height' && !status.spatial?.floorSelected
+            ? 'selectFloor'
+            : mode,
+      },
+    };
+    engine.getStatus.mockResolvedValue(next);
+    return next;
+  });
+  engine.setFloorVisible.mockImplementation(
+    async (showFloorPlanes: boolean) => {
+      const status = await engine.getStatus();
+      const next = {
+        ...status,
+        spatial: { ...status.spatial, showFloorPlanes },
+      };
+      engine.getStatus.mockResolvedValue(next);
+      return next;
+    },
+  );
+  engine.clearMeasurements.mockImplementation(async () => {
+    const status = await engine.getStatus();
+    const next = {
+      ...status,
+      spatial: { ...status.spatial, measurementCount: 0 },
+      measurement: { pointCount: 0 },
+    };
+    engine.getStatus.mockResolvedValue(next);
+    return next;
+  });
   engine.getAppInfo.mockResolvedValue({
     bundleId: 'com.doughorner.aprilfoolsar',
     version: '0.1.1',
@@ -216,7 +260,8 @@ test('AR width estimate requires explicit acceptance before changing tag size', 
       .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
       .props.onPress(),
   );
-  expect(engine.clearMeasurements).toHaveBeenCalledTimes(1);
+  expect(engine.setSpatialMode).toHaveBeenCalledWith('tagWidth');
+  expect(engine.clearMeasurements).not.toHaveBeenCalled();
   expect(engine.applyMeasuredTagSize).not.toHaveBeenCalled();
   engine.getStatus.mockResolvedValue({
     recording: false,
@@ -237,6 +282,7 @@ test('AR width estimate requires explicit acceptance before changing tag size', 
       .props.onPress(),
   );
   expect(engine.applyMeasuredTagSize).toHaveBeenCalledTimes(1);
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('distance');
   expect(engine.setDebugSettings).not.toHaveBeenCalled();
 });
 
@@ -416,4 +462,230 @@ test('native pinch status updates the continuous view zoom without issuing anoth
     tree.root.findByProps({ accessibilityLabel: 'View zoom 1×' }).props
       .accessibilityState.selected,
   ).toBe(true);
+});
+
+test('measurement modes request the native workflow and confirmed-floor status updates the displayed height', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Floor height measurement mode' })
+      .props.onPress(),
+  );
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('height');
+  expect(JSON.stringify(tree.toJSON())).toContain('tap the highlighted floor');
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Floor height measurement mode',
+    }).props.accessibilityState.selected,
+  ).toBe(true);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Select floor plane' })
+      .props.onPress(),
+  );
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('selectFloor');
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: false,
+      tracking: 'normal',
+      spatial: {
+        mode: 'height',
+        showFloorPlanes: true,
+        floorSelected: true,
+        floorId: 'test-floor',
+        measurementCount: 2,
+      },
+      measurement: {
+        kind: 'height',
+        pointCount: 1,
+        distanceMeters: 1.42,
+        verticalMeters: 1.42,
+      },
+    });
+  });
+  const contents = JSON.stringify(tree.toJSON());
+  expect(contents).toContain('2 measurements · floor set');
+  expect(contents).toContain('1.420 m');
+  expect(contents).toContain('Height is vertical above the selected floor');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Two-point measurement mode' })
+      .props.onPress(),
+  );
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('distance');
+});
+
+test('floor visibility follows the acknowledged native toggle state', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Toggle floor planes' }).props
+      .accessibilityState.selected,
+  ).toBe(false);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Toggle floor planes' })
+      .props.onPress(),
+  );
+  expect(engine.setFloorVisible).toHaveBeenLastCalledWith(true);
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Toggle floor planes' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Toggle floor planes' })
+      .props.onPress(),
+  );
+  expect(engine.setFloorVisible).toHaveBeenLastCalledWith(false);
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Toggle floor planes' }).props
+      .accessibilityState.selected,
+  ).toBe(false);
+});
+
+test('clear all measurements uses the explicit native action and retains the acknowledged floor reference', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    tracking: 'normal',
+    spatial: {
+      mode: 'distance',
+      showFloorPlanes: true,
+      floorSelected: true,
+      floorId: 'test-floor',
+      measurementCount: 3,
+    },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('3 measurements · floor set');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Clear all measurements' })
+      .props.onPress(),
+  );
+  expect(engine.clearMeasurements).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(tree.toJSON())).toContain('0 measurements · floor set');
+});
+
+test('tag-width entry, point reset and cancellation preserve completed measurement history', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    tracking: 'normal',
+    lidarAvailable: true,
+    depthAvailable: true,
+    spatial: {
+      mode: 'distance',
+      showFloorPlanes: true,
+      floorSelected: true,
+      floorId: 'test-floor',
+      measurementCount: 3,
+    },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
+      .props.onPress(),
+  );
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('tagWidth');
+  expect(engine.clearMeasurements).not.toHaveBeenCalled();
+  expect((await engine.getStatus()).spatial.measurementCount).toBe(3);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Reset tag width points' })
+      .props.onPress(),
+  );
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('tagWidth');
+  expect(engine.clearMeasurements).not.toHaveBeenCalled();
+  expect((await engine.getStatus()).spatial.measurementCount).toBe(3);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Cancel tag width measurement' })
+      .props.onPress(),
+  );
+  expect(engine.setSpatialMode).toHaveBeenLastCalledWith('distance');
+  expect(engine.clearMeasurements).not.toHaveBeenCalled();
+  expect((await engine.getStatus()).spatial.measurementCount).toBe(3);
+});
+
+test('saved height remains visible after pending points clear and is excluded from the tag-width prompt', async () => {
+  const status = {
+    recording: false,
+    tracking: 'normal',
+    lidarAvailable: true,
+    depthAvailable: true,
+    measurement: { pointCount: 0 },
+    spatial: {
+      mode: 'height',
+      showFloorPlanes: true,
+      floorSelected: true,
+      floorId: 'test-floor',
+      measurementCount: 1,
+      lastMeasurement: {
+        id: 'saved-height',
+        kind: 'height',
+        distanceMeters: 1.42,
+        verticalMeters: 1.42,
+      },
+    },
+  };
+  engine.getStatus.mockResolvedValue(status);
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('1.420 m');
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      ...status,
+      recording: true,
+      tracking: 'limited',
+      measurement: { pointCount: 0 },
+    });
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('1.420 m');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
+      .props.onPress(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('0 / 2 points');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('1.420 m');
+  expect(engine.clearMeasurements).not.toHaveBeenCalled();
 });

@@ -33,6 +33,7 @@ host = project.new_target(:application, 'SpatialTestHost', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'SpatialRegressionTests', :ios, '17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 ['native/ARCapture/SpatialMeasurements.swift', 'native/ARCapture/SpatialProjection.swift',
+ 'native/ARCapture/HeightDisplayFormatter.swift',
  'native/ARCapture/SpatialMeasurementOverlayView.swift', 'native/ARCapture/PreviewZoom.swift',
  'native/SpatialMeasurementTests/SpatialMeasurementTests.swift',
  'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift'].each do |relative|

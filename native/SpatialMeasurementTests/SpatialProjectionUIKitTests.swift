@@ -21,10 +21,10 @@ final class SpatialProjectionUIKitTests: XCTestCase {
     }
     private func show(_ overlay: SpatialMeasurementOverlayView, planes: [SpatialPlane] = [],
                       vectors: [SpatialMeasurement] = [], pending: [SIMD3<Float>] = [],
-                      selected: String? = nil, tracking: Bool = true) {
+                      selected: String? = nil, tracking: Bool = true, showImperial: Bool = true) {
         overlay.show(planes: planes, measurements: vectors, pendingPoints: pending,
             selectedFloorID: selected, isTrackingNormal: tracking, cameraToWorld: matrix_identity_float4x4,
-            intrinsics: k, imageSize: size, displayTransform: .identity)
+            intrinsics: k, imageSize: size, displayTransform: .identity, showImperialHeight: showImperial)
     }
     private func assertInside(_ points: [CGPoint], file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertFalse(points.isEmpty, file: file, line: line)
@@ -151,5 +151,26 @@ final class SpatialProjectionUIKitTests: XCTestCase {
         for _ in 0..<100 { show(overlay, planes: planes, vectors: vectors, pending: pending, selected: "floor-29") }
         XCTAssertEqual(overlay.subviews.map(ObjectIdentifier.init), viewIDs)
         XCTAssertEqual((overlay.layer.sublayers ?? []).map(ObjectIdentifier.init), layerIDs)
+    }
+
+    func testOnlyHeightVectorLabelsUseCentimetersAndOptionalEnglishUnits() throws {
+        let overlay = SpatialMeasurementOverlayView(frame: CGRect(origin: .zero, size: size))
+        let height = vector("height", kind: "height"), distance = vector("distance")
+        let original = try JSONSerialization.data(withJSONObject: height.dictionary, options: [.sortedKeys])
+        show(overlay, vectors: [height, distance])
+        let labels = overlay.subviews.compactMap { $0 as? UILabel }
+        let heightLabel = try XCTUnwrap(labels.first { $0.accessibilityIdentifier == "spatial.measurement.height" })
+        let distanceLabel = try XCTUnwrap(labels.first { $0.accessibilityIdentifier == "spatial.measurement.distance" })
+        XCTAssertTrue(heightLabel.text?.contains("40.0 cm (1 ft 3.7 in)") == true)
+        XCTAssertTrue(heightLabel.accessibilityValue?.contains("40.0 cm (1 ft 3.7 in)") == true)
+        XCTAssertTrue(distanceLabel.text?.contains("0.894 m") == true)
+        XCTAssertFalse(distanceLabel.text?.contains(" cm") == true)
+        show(overlay, vectors: [height, distance], showImperial: false)
+        XCTAssertTrue(overlay.subviews.compactMap { $0 as? UILabel }.contains { $0 === heightLabel })
+        XCTAssertTrue(heightLabel.text?.contains("40.0 cm") == true)
+        XCTAssertFalse(heightLabel.text?.contains(" ft ") == true)
+        XCTAssertFalse(heightLabel.accessibilityValue?.contains(" ft ") == true)
+        XCTAssertTrue(overlay.bounds.contains(heightLabel.frame))
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject: height.dictionary, options: [.sortedKeys]), original)
     }
 }

@@ -98,6 +98,27 @@ final class TagDebugMathTests: XCTestCase {
         XCTAssertThrowsError(try enabled.merging(["showPoseAxes": 1]))
         XCTAssertThrowsError(try enabled.merging(["showPoseAxes": "true"]))
     }
+    func testEnglishHeightPreferenceMigratesOnAndPersistsWithoutRoundingMeasuredWidth() throws {
+        let suite = "HeightUnitsSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var legacy = TagDebugSettings().dictionary
+        legacy.removeValue(forKey: "showImperialHeight")
+        legacy["tagSizeMeters"] = 0.1723456789
+        legacy["tagSizeSource"] = "ar-two-point-edge"
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: TagDebugSettings.defaultsKey)
+        let loaded = TagDebugSettings.load(from: defaults)
+        XCTAssertTrue(loaded.showImperialHeight)
+        let metricOnly = try loaded.merging(["showImperialHeight": false])
+        XCTAssertFalse(metricOnly.showImperialHeight)
+        XCTAssertEqual(metricOnly.tagSizeMeters, 0.1723456789)
+        XCTAssertEqual(metricOnly.tagSizeSource, "ar-two-point-edge")
+        metricOnly.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), metricOnly)
+        XCTAssertTrue(try metricOnly.merging(["showImperialHeight": true]).showImperialHeight)
+        XCTAssertThrowsError(try loaded.merging(["showImperialHeight": 1]))
+        XCTAssertThrowsError(try loaded.merging(["showImperialHeight": "false"]))
+    }
     func testMeasuredWidthUsesReviewedEndpointDistanceAndRejectsInvalidInputs() throws {
         let points: [[String: Any]] = [["source": "sceneDepth", "segmentId": "segment", "confidence": 2, "frameId": "a"], ["source": "sceneDepth", "segmentId": "segment", "confidence": 1, "frameId": "b"]]
         XCTAssertEqual(try TagDebugMath.measuredTagSize(points: points, worldDistance: 0.1651, segmentID: "segment", tracking: "normal", frameAgeSeconds: 0.01), 0.1651)

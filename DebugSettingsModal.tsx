@@ -21,6 +21,7 @@ export type DebugSettings = {
   maxReprojectionErrorPixels: number;
   tagSizeSource?: string;
   showPoseAxes?: boolean;
+  showImperialHeight?: boolean;
 };
 
 export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
@@ -31,11 +32,12 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   rejectDepthDifferenceMeters: 0.15,
   maxReprojectionErrorPixels: 3,
   showPoseAxes: false,
+  showImperialHeight: true,
 };
 
 type SettingsKey = Exclude<
   keyof DebugSettings,
-  'tagSizeSource' | 'showPoseAxes'
+  'tagSizeSource' | 'showPoseAxes' | 'showImperialHeight'
 >;
 const fields: {
   key: SettingsKey;
@@ -145,11 +147,15 @@ export function DebugSettingsModal({
   const [showPoseAxes, setShowPoseAxes] = useState(
     initialSettings.showPoseAxes ?? false,
   );
+  const [showImperialHeight, setShowImperialHeight] = useState(
+    initialSettings.showImperialHeight ?? true,
+  );
   useEffect(() => {
     if (visible) {
       setDraft(makeDraft(initialSettings));
       setResetToDefaults(false);
       setShowPoseAxes(initialSettings.showPoseAxes ?? false);
+      setShowImperialHeight(initialSettings.showImperialHeight ?? true);
     }
   }, [visible, initialSettings]);
   if (!visible) {
@@ -159,6 +165,7 @@ export function DebugSettingsModal({
     try {
       const values = parseDebugSettings(draft);
       values.showPoseAxes = showPoseAxes;
+      values.showImperialHeight = showImperialHeight;
       // Display rounding must not turn a threshold-only edit into a new tag width.
       if (
         !resetToDefaults &&
@@ -205,6 +212,21 @@ export function DebugSettingsModal({
                 disabled={saving}
               />
             </View>
+            <View style={s.toggleRow}>
+              <View style={s.toggleText}>
+                <Text style={s.label}>Show English units</Text>
+                <Text style={s.hint}>
+                  Add feet and inches in parentheses after height in
+                  centimeters.
+                </Text>
+              </View>
+              <Switch
+                accessibilityLabel="Show English units"
+                value={showImperialHeight}
+                onValueChange={setShowImperialHeight}
+                disabled={saving}
+              />
+            </View>
             {fields.map(field => (
               <View key={field.key}>
                 <Text style={s.label}>{field.label}</Text>
@@ -241,6 +263,7 @@ export function DebugSettingsModal({
                 setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS));
                 setResetToDefaults(true);
                 setShowPoseAxes(false);
+                setShowImperialHeight(true);
               }}
               disabled={saving}
             >

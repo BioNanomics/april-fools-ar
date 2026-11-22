@@ -12,6 +12,8 @@ Tag outlines, four corner points and IDs remain on the camera image. Tap a tag t
 
 Enable **Show pose axes** in Settings and apply the change to draw a tag-centered pose gizmo: red **X**, green **Y**, blue **Z**. The axes use the solved tag-to-camera pose and the same frame's camera intrinsics, then the same image-to-screen transform as the tag corners. Each axis is half a tag width long. These are tag-local axes, not gravity or field axes; a direction pointing toward/away from the camera can appear foreshortened. The option defaults off and is saved on the phone.
 
+**Height units:** tag-center and manual floor heights show centimeters, with feet/inches in parentheses by default (for example `142.0 cm (4 ft 7.9 in)`). Disable **Settings → Show English units** for centimeters only. The preference is saved on the phone; it changes presentation, not stored meter values or tag-size calibration.
+
 **View zoom:** pinch anywhere on the live image or use **1× / 2× / 4×**. Magnification is centered and limited to 1×–4×. The camera and depth previews zoom together; tag corners and axes use the matching screen transform, and measurement taps map back into the original image coordinates. The readout and controls remain their normal size. This changes the display only: it does not select another lens, add image detail, or change recorded sensor samples and solved poses.
 
 Open **Settings** to edit:

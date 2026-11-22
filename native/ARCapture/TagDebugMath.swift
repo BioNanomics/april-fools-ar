@@ -16,12 +16,13 @@ struct TagDebugSettings: Codable, Equatable {
     var maxReprojectionErrorPixels = 3.0
     var tagSizeSource = "frc-default"
     var showPoseAxes = false
+    var showImperialHeight = true
     static let defaultsKey = "AprilFoolsAR.TagDebugSettings.v1"
     static let tagSizeEvidenceKey = "AprilFoolsAR.TagSizeEvidence.v1"
 
     private enum CodingKeys: String, CodingKey {
         case tagSizeMeters, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
-        case rejectDepthDifferenceMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes
+        case rejectDepthDifferenceMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes, showImperialHeight
     }
     init() {}
     init(from decoder: Decoder) throws {
@@ -35,22 +36,24 @@ struct TagDebugSettings: Codable, Equatable {
         maxReprojectionErrorPixels = try values.decodeIfPresent(Double.self, forKey: .maxReprojectionErrorPixels) ?? maxReprojectionErrorPixels
         tagSizeSource = try values.decodeIfPresent(String.self, forKey: .tagSizeSource) ?? tagSizeSource
         showPoseAxes = try values.decodeIfPresent(Bool.self, forKey: .showPoseAxes) ?? false
+        showImperialHeight = try values.decodeIfPresent(Bool.self, forKey: .showImperialHeight) ?? true
     }
 
     var dictionary: [String: Any] {
         ["tagSizeMeters": tagSizeMeters, "maxDistanceMeters": maxDistanceMeters,
          "maxPlaneAngleDegrees": maxPlaneAngleDegrees, "warningDepthDifferenceMeters": warningDepthDifferenceMeters,
          "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
-         "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes]
+         "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes, "showImperialHeight": showImperialHeight]
     }
     func merging(_ changes: [String: Any]) throws -> TagDebugSettings {
         var result = self
         for (key, value) in changes {
-            if key == "showPoseAxes" {
+            if key == "showPoseAxes" || key == "showImperialHeight" {
                 guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
-                    throw TagDebugError.invalid("showPoseAxes must be a boolean.")
+                    throw TagDebugError.invalid("\(key) must be a boolean.")
                 }
-                result.showPoseAxes = number.boolValue
+                if key == "showPoseAxes" { result.showPoseAxes = number.boolValue }
+                else { result.showImperialHeight = number.boolValue }
                 continue
             }
             guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else {

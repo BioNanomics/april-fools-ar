@@ -45,7 +45,7 @@ final class AprilTagOverlayView: UIView {
     /// Intrinsics are [fx, fy, cx, cy] in the analyzed source image's pixels.
     /// Pose R maps tag coordinates to optical camera coordinates (+X right, +Y down, +Z forward).
     /// The default axis length is half the calibrated tag width; no 2D-only pose is synthesized.
-    func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, axisLengthMeters: Double? = nil) {
+    func show(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, axisLengthMeters: Double? = nil, showImperialHeight: Bool = true) {
         let remaining = expiresAt - ProcessInfo.processInfo.systemUptime
         guard remaining > 0, imageSize.width.isFinite, imageSize.height.isFinite,
               imageSize.width > 0, imageSize.height > 0, bounds.width.isFinite, bounds.height.isFinite else { clear(); return }
@@ -129,7 +129,7 @@ final class AprilTagOverlayView: UIView {
             for point in points { dots.append(UIBezierPath(ovalIn: CGRect(x: point.x-4, y: point.y-4, width: 8, height: 8))) }
             cornerLayers[index].path = dots.cgPath; cornerLayers[index].fillColor = color.cgColor
             let label = tagLabels[index]
-            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight)
+            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, showImperialHeight: showImperialHeight)
             label.backgroundColor = color
             label.sizeToFit()
             label.bounds.size = CGSize(width: min(label.bounds.width, max(0, bounds.width)), height: min(label.bounds.height, max(0, bounds.height)))
@@ -171,7 +171,7 @@ final class AprilTagOverlayView: UIView {
         }
     }
 
-    private func configure(_ label: UILabel, id: Int, selected: Bool, floorHeight: [String: Any]?) {
+    private func configure(_ label: UILabel, id: Int, selected: Bool, floorHeight: [String: Any]?, showImperialHeight: Bool) {
         let prefix = selected ? " ◆ #\(id)" : " #\(id)"
         label.accessibilityIdentifier = "apriltag.label.\(id)"
         label.accessibilityLabel = "AprilTag \(id)"
@@ -192,9 +192,9 @@ final class AprilTagOverlayView: UIView {
         let meters = raw?.doubleValue ?? .nan
         let valid = suppliedAvailable && raw.map { CFGetTypeID($0) != CFBooleanGetTypeID() } == true &&
             meters.isFinite && (0...30).contains(meters) && ["sceneDepth", "tagPose"].contains(source)
-        if valid {
-            label.text = prefix + String(format: " · ↑ %.3f m ", meters)
-            label.accessibilityValue = String(format: "Floor-relative tag center height available: %.3f meters. Source: %@. Reason: %@.", meters, sourceName, reason)
+        if valid, let formatted = HeightDisplayFormatter.string(meters: meters, showImperial: showImperialHeight) {
+            label.text = prefix + " · ↑ \(formatted) "
+            label.accessibilityValue = "Floor-relative tag center height available: \(formatted). Source: \(sourceName). Reason: \(reason)."
         } else {
             label.text = prefix + " · H — "
             let explanation = suppliedAvailable ? "Invalid floor-height estimate" : (reason == "floorNotSelected" ? "Floor not selected; set a floor" : reason)

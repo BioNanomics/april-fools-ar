@@ -117,4 +117,15 @@ final class TagFloorHeightTests: XCTestCase {
         XCTAssertNil(row["measurementCompleted"])
         XCTAssertTrue(JSONSerialization.isValidJSONObject(row))
     }
+
+    func testUnitDisplayLeavesRawMeterGeometryAndProvenanceUnchanged() throws {
+        let height = TagFloorHeight.evaluate(detection(), context: context(floor: floor()))
+        let before = try JSONSerialization.data(withJSONObject: height, options: [.sortedKeys])
+        let meters = try XCTUnwrap(TagDebugMath.number(height["meters"]))
+        XCTAssertEqual(HeightDisplayFormatter.string(meters: meters), "220.0 cm (7 ft 2.6 in)")
+        XCTAssertEqual(HeightDisplayFormatter.string(meters: meters, showImperial: false), "220.0 cm")
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject: height, options: [.sortedKeys]), before)
+        XCTAssertEqual(TagDebugMath.number(height["meters"]), meters)
+        XCTAssertEqual(height["worldMeters"] as? [Double], [Double(Float(1.2)), Double(Float(2.2)), 1])
+    }
 }

@@ -18,6 +18,7 @@ fileprivate struct SpatialRenderSnapshot {
     let imageSize: CGSize
     let displayTransform: CGAffineTransform
     let timestamp: Double
+    let showImperialHeight: Bool
 }
 
 final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
@@ -243,6 +244,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private func updateDebugSettings(_ settings: TagDebugSettings, source: String, evidence: [String: Any]) {
         let old = debugSettings.dictionary
         debugSettings = settings; settings.persist(); invalidateAprilTags()
+        renderSpatial()
         var event: [String: Any] = ["type": "settingsChanged", "source": source, "settings": settings.dictionary, "previousSettings": old, "timestamp": latestFrame?.timestamp ?? 0, "segmentId": segment]
         for (key, value) in evidence { event[key] = value }
         recorder?.event(event)
@@ -610,7 +612,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             cameraToWorld: frame?.camera.transform ?? matrix_identity_float4x4,
             intrinsics: frame?.camera.intrinsics ?? matrix_identity_float3x3,
             imageSize: frame?.camera.imageResolution ?? CGSize(width: 1, height: 1),
-            displayTransform: PreviewZoom.displayTransform(base: base, zoom: displayZoom), timestamp: frame?.timestamp ?? 0)
+            displayTransform: PreviewZoom.displayTransform(base: base, zoom: displayZoom), timestamp: frame?.timestamp ?? 0,
+            showImperialHeight: debugSettings.showImperialHeight)
         pendingSpatialRender = snapshot
         guard !spatialRenderScheduled else { spatialRenderLock.unlock(); return }
         spatialRenderScheduled = true
@@ -776,7 +779,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let settings = debugSettings, hz = analysisHz, latency = tagLatencyMilliseconds
         let intrinsics = latestTagIntrinsics
         DispatchQueue.main.async { [weak self] in
-            self?.host?.showAprilTagOverlay(rows, imageSize: size, displayTransform: display, frameID: frameID, expiresAt: timestamp+0.4, selectedID: selected, showPoseAxes: settings.showPoseAxes, intrinsics: intrinsics)
+            self?.host?.showAprilTagOverlay(rows, imageSize: size, displayTransform: display, frameID: frameID, expiresAt: timestamp+0.4, selectedID: selected, showPoseAxes: settings.showPoseAxes, intrinsics: intrinsics, showImperialHeight: settings.showImperialHeight)
             self?.host?.debugPanel.show(debug: debug, frameID: frameID, timestamp: timestamp, analysisHz: hz, latencyMilliseconds: latency, settings: settings)
         }
     }
@@ -955,10 +958,10 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         spatialOverlay.show(planes: snapshot.planes, measurements: snapshot.measurements, pendingPoints: snapshot.pendingPoints,
             selectedFloorID: snapshot.selectedFloorID, isTrackingNormal: snapshot.isTrackingNormal && age >= 0 && age <= 0.5,
             cameraToWorld: snapshot.cameraToWorld, intrinsics: snapshot.intrinsics, imageSize: snapshot.imageSize,
-            displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5)
+            displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5, showImperialHeight: snapshot.showImperialHeight)
     }
     func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
-    func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil) {
-        tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID, showPoseAxes: showPoseAxes, intrinsics: intrinsics)
+    func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, showImperialHeight: Bool = true) {
+        tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID, showPoseAxes: showPoseAxes, intrinsics: intrinsics, showImperialHeight: showImperialHeight)
     }
 }

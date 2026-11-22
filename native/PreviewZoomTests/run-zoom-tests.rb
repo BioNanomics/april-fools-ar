@@ -32,6 +32,7 @@ host=project.new_target(:application,'ZoomTestHost',:ios,'17.0')
 tests=project.new_target(:unit_test_bundle,'PreviewZoomRegressionTests',:ios,'17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 ['native/ARCapture/PreviewZoom.swift','native/ARCapture/AprilTagOverlayView.swift',
+ 'native/ARCapture/HeightDisplayFormatter.swift',
  'native/ARCapture/TagDebugMath.swift','native/PreviewZoomTests/PreviewZoomUIKitTests.swift'].each do |relative|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(root,relative)))
 end

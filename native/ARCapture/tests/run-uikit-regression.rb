@@ -46,9 +46,12 @@ host = project.new_target(:application, 'OverlayTestHost', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'OverlayRegressionTests', :ios, '17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 [source, File.join(root, 'native/ARCapture/TagDebugMath.swift'), File.join(root, 'native/ARCapture/TagDebugPanelView.swift'),
+ File.join(root, 'native/ARCapture/HeightDisplayFormatter.swift'), File.join(root, 'native/ARCapture/PreviewZoom.swift'),
  File.join(root, 'native/ARCapture/SpatialMeasurements.swift'), File.join(root, 'native/ARCapture/TagFloorHeight.swift'),
+ File.join(root, 'native/ARCapture/SpatialProjection.swift'), File.join(root, 'native/ARCapture/SpatialMeasurementOverlayView.swift'),
  File.join(__dir__, 'AprilTagOverlayUIKitTests.swift'), File.join(__dir__, 'TagDebugMathTests.swift'),
- File.join(__dir__, 'TagFloorHeightTests.swift')].each do |path|
+ File.join(__dir__, 'TagFloorHeightTests.swift'), File.join(__dir__, 'HeightDisplayFormatterTests.swift'),
+ File.join(root, 'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift')].each do |path|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
 end
 tests.add_dependency(host)

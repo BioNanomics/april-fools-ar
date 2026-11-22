@@ -27,6 +27,7 @@ import {
   type DebugSettings,
 } from './DebugSettingsModal';
 import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
+import { formatHeight } from './HeightUnits';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const Engine = NativeModules.ARCaptureEngine;
@@ -179,6 +180,16 @@ function CaptureApp() {
       setDebugEnabled(status.debugMode);
     }
   }, [status.debugMode]);
+  useEffect(() => {
+    const enabled = status.aprilTag?.debugSettings?.showImperialHeight;
+    if (typeof enabled === 'boolean') {
+      setDebugSettings(previous =>
+        previous.showImperialHeight === enabled
+          ? previous
+          : { ...previous, showImperialHeight: enabled },
+      );
+    }
+  }, [status.aprilTag?.debugSettings?.showImperialHeight]);
   useEffect(() => {
     const handle = async (url: string) => {
       if (url.startsWith('aprilfoolsar://capture/start')) {
@@ -717,9 +728,21 @@ function CaptureApp() {
                       } · ${floorSelected ? 'floor set' : 'no floor'}`}</Text>
                     </View>
                     <View style={s.values}>
-                      <View>
-                        <Text style={s.value}>
-                          {m?.distanceMeters != null
+                      <View style={m?.kind === 'height' && s.heightValueBlock}>
+                        <Text
+                          style={m?.kind === 'height' ? s.heightValue : s.value}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.85}
+                        >
+                          {m?.kind === 'height'
+                            ? formatHeight(
+                                m.heightMeters ??
+                                  m.verticalMeters ??
+                                  m.distanceMeters,
+                                debugSettings.showImperialHeight ?? true,
+                              )
+                            : m?.distanceMeters != null
                             ? `${m.distanceMeters.toFixed(3)} m`
                             : '—'}
                         </Text>
@@ -729,17 +752,21 @@ function CaptureApp() {
                             : '3D distance'}
                         </Text>
                       </View>
-                      <View style={s.divider} />
-                      <View>
-                        <Text style={s.value}>
-                          {m?.verticalMeters != null
-                            ? `${
-                                m.verticalMeters >= 0 ? '+' : ''
-                              }${m.verticalMeters.toFixed(3)} m`
-                            : '—'}
-                        </Text>
-                        <Text style={s.small}>Vertical difference</Text>
-                      </View>
+                      {m?.kind !== 'height' && (
+                        <>
+                          <View style={s.divider} />
+                          <View>
+                            <Text style={s.value}>
+                              {m?.verticalMeters != null
+                                ? `${
+                                    m.verticalMeters >= 0 ? '+' : ''
+                                  }${m.verticalMeters.toFixed(3)} m`
+                                : '—'}
+                            </Text>
+                            <Text style={s.small}>Vertical difference</Text>
+                          </View>
+                        </>
+                      )}
                     </View>
                     <Text style={s.hint}>
                       {spatialMode === 'selectFloor'
@@ -1113,6 +1140,13 @@ const s = StyleSheet.create({
   value: {
     color: C.text,
     fontSize: 24,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  heightValueBlock: { flex: 1 },
+  heightValue: {
+    color: C.text,
+    fontSize: 20,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },

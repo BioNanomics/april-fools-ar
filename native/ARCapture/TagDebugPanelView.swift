@@ -137,14 +137,17 @@ final class TagDebugPanelView: UIView {
             "trackingLimited": "TRACKING LIMITED", "poseUnavailable": "POSE UNAVAILABLE"]
         let id = (debug["id"] as? NSNumber)?.intValue ?? -1
         titleLabel.text = "TAG #\(id) · \(titles[status] ?? status.uppercased())"
+        var heightSource: String?
         if let height = debug["floorHeight"] as? [String: Any] {
             let detail: String
             if height["available"] as? Bool == true,
                let raw = height["meters"] as? NSNumber, CFGetTypeID(raw) != CFBooleanGetTypeID(),
                raw.doubleValue.isFinite, raw.doubleValue >= 0, raw.doubleValue <= 30,
                let sourceKey = height["source"] as? String,
-               let source = ["sceneDepth": "LiDAR", "tagPose": "Pose"][sourceKey] {
-                detail = String(format: "↑ ≈%.3f m · %@", raw.doubleValue, source)
+               let source = ["sceneDepth": "LiDAR", "tagPose": "Pose"][sourceKey],
+               let formatted = HeightDisplayFormatter.string(meters: raw.doubleValue, showImperial: settings.showImperialHeight) {
+                detail = "↑ ≈\(formatted)"
+                heightSource = source
             } else {
                 detail = height["reason"] as? String == "floorNotSelected" ? "Height — · set floor" : "Height — · unavailable"
             }
@@ -154,6 +157,7 @@ final class TagDebugPanelView: UIView {
         } else {
             titleLabel.accessibilityLabel = titleLabel.text
         }
+        if let heightSource { titleLabel.accessibilityLabel = (titleLabel.text ?? "") + ". Height source: \(heightSource)." }
         titleLabel.textColor = Self.color(severity)
         layer.borderColor = Self.color(severity).cgColor
         func scalar(_ key: String, _ format: String = "%.3f") -> String {
@@ -183,6 +187,10 @@ final class TagDebugPanelView: UIView {
             source, analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
         compactRateText = String(format: "%.1f Hz · age %.0f ms · compute %.0f ms", analysisHz.isFinite ? analysisHz : 0,
             max(0, age) * 1000, latencyMilliseconds ?? 0)
+        if let heightSource {
+            compactRateText = "\(heightSource) height · " + compactRateText
+            expandedRateText += " · \(heightSource) height"
+        }
         updateRateText()
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, 0.4 - age)) { [weak self] in
             guard let self, self.expiryToken == frameID else { return }

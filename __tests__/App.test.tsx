@@ -2,7 +2,10 @@ import React from 'react';
 import { DeviceEventEmitter, NativeModules, TextInput } from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import App from '../App';
-import { DEFAULT_DEBUG_SETTINGS } from '../DebugSettingsModal';
+import {
+  DebugSettingsModal,
+  DEFAULT_DEBUG_SETTINGS,
+} from '../DebugSettingsModal';
 
 jest.mock(
   'react-native-safe-area-context',
@@ -327,6 +330,7 @@ test('reset to FRC defaults replaces a measured width even when both display the
     tagSizeMeters: 0.16510000001,
     maxDistanceMeters: 6,
     tagSizeSource: 'ar-two-point-edge',
+    showImperialHeight: false,
   });
   await act(async () => {
     tree = Renderer.create(<App />);
@@ -512,7 +516,7 @@ test('measurement modes request the native workflow and confirmed-floor status u
   });
   const contents = JSON.stringify(tree.toJSON());
   expect(contents).toContain('2 measurements · floor set');
-  expect(contents).toContain('1.420 m');
+  expect(contents).toContain('142.0 cm (4 ft 7.9 in)');
   expect(contents).toContain('Height is vertical above the selected floor');
   await act(async () =>
     tree.root
@@ -665,7 +669,7 @@ test('saved height remains visible after pending points clear and is excluded fr
       .findByProps({ accessibilityLabel: 'Measurement mode' })
       .props.onPress(),
   );
-  expect(JSON.stringify(tree.toJSON())).toContain('1.420 m');
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
   await act(async () => {
     DeviceEventEmitter.emit('ARCaptureStatus', {
       ...status,
@@ -674,7 +678,7 @@ test('saved height remains visible after pending points clear and is excluded fr
       measurement: { pointCount: 0 },
     });
   });
-  expect(JSON.stringify(tree.toJSON())).toContain('1.420 m');
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
   await act(async () =>
     tree.root
       .findByProps({ accessibilityLabel: 'Debug settings' })
@@ -686,6 +690,105 @@ test('saved height remains visible after pending points clear and is excluded fr
       .props.onPress(),
   );
   expect(JSON.stringify(tree.toJSON())).toContain('0 / 2 points');
-  expect(JSON.stringify(tree.toJSON())).not.toContain('1.420 m');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('142.0 cm');
   expect(engine.clearMeasurements).not.toHaveBeenCalled();
+});
+
+test('English height units default on for legacy settings, cancel locally, and persist only after Apply', async () => {
+  const preciseWidth = 0.1723456789;
+  const legacy = {
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: preciseWidth,
+    tagSizeSource: 'ar-two-point-edge',
+  };
+  delete legacy.showImperialHeight;
+  engine.getDebugSettings.mockResolvedValue(legacy);
+  engine.setDebugSettings.mockImplementation(async (settings: unknown) => {
+    engine.getDebugSettings.mockResolvedValue(settings);
+    return settings;
+  });
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    tracking: 'normal',
+    measurement: { kind: 'height', heightMeters: 1.42 },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Show English units' });
+  expect(toggle().props.value).toBe(true);
+  await act(async () => toggle().props.onValueChange(false));
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+  await act(async () =>
+    tree.root.findByType(DebugSettingsModal).props.onCancel(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  expect(toggle().props.value).toBe(true);
+  await act(async () => toggle().props.onValueChange(false));
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Apply debug settings' })
+      .props.onPress(),
+  );
+  expect(engine.setDebugSettings).toHaveBeenLastCalledWith({
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: preciseWidth,
+    showImperialHeight: false,
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('4 ft 7.9 in');
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+  expect(toggle().props.value).toBe(false);
+});
+
+test('native height-unit preference is reflected at startup without converting general distances', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    aprilTag: { debugSettings: { showImperialHeight: false } },
+    measurement: { kind: 'height', heightMeters: 1.42 },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('4 ft 7.9 in');
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: false,
+      measurement: {
+        kind: 'distance',
+        pointCount: 2,
+        distanceMeters: 1.42,
+        verticalMeters: 0.5,
+      },
+    });
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('1.420 m');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('142.0 cm');
 });

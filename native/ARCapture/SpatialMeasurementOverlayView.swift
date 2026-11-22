@@ -65,7 +65,7 @@ final class SpatialMeasurementOverlayView: UIView {
     /// displayTransform already includes display magnification exactly once, like the tag renderer.
     func show(planes: [SpatialPlane], measurements: [SpatialMeasurement], pendingPoints: [SIMD3<Float>],
               selectedFloorID: String?, isTrackingNormal: Bool, cameraToWorld: simd_float4x4,
-              intrinsics: simd_float3x3, imageSize: CGSize, displayTransform: CGAffineTransform, expiresAt: Double? = nil) {
+              intrinsics: simd_float3x3, imageSize: CGSize, displayTransform: CGAffineTransform, expiresAt: Double? = nil, showImperialHeight: Bool = true) {
         let deadline = expiresAt ?? (ProcessInfo.processInfo.systemUptime + 0.5)
         guard deadline.isFinite, deadline > ProcessInfo.processInfo.systemUptime,
               isTrackingNormal, let camera = SpatialProjection.Camera(cameraToWorld: cameraToWorld,
@@ -136,11 +136,12 @@ final class SpatialMeasurementOverlayView: UIView {
             }
             slot.dots.path = dots.cgPath
             let distance = Double(measurement.distanceMeters), vertical = Double(measurement.verticalMeters)
-            slot.label.text = isHeight ? String(format: " Height %.3f m ", abs(vertical)) : String(format: " %.3f m · ΔY %.3f m ", distance, vertical)
+            let formattedHeight = isHeight ? HeightDisplayFormatter.string(meters: abs(vertical), showImperial: showImperialHeight) : nil
+            slot.label.text = isHeight ? " Height \(formattedHeight ?? "—") " : String(format: " %.3f m · ΔY %.3f m ", distance, vertical)
             slot.label.textColor = color
             slot.label.accessibilityIdentifier = "spatial.measurement.\(measurement.id)"
             slot.label.accessibilityLabel = isHeight ? "Height measurement" : "Distance measurement"
-            slot.label.accessibilityValue = String(format: "ID %@. Distance %.3f meters. Vertical difference %.3f meters.", measurement.id, distance, vertical)
+            slot.label.accessibilityValue = isHeight ? "ID \(measurement.id). Height \(formattedHeight ?? "unavailable")." : String(format: "ID %@. Distance %.3f meters. Vertical difference %.3f meters.", measurement.id, distance, vertical)
             place(slot.label, near: CGPoint(x: (segment[0].x + segment[1].x) / 2, y: (segment[0].y + segment[1].y) / 2 - 14))
         }
         for (slotIndex, pointData) in pending.enumerated() {

@@ -213,13 +213,23 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             analysisHz: 20, latencyMilliseconds: 5, settings: TagDebugSettings())
         panel.layoutIfNeeded()
         let title = try XCTUnwrap(panel.subviews.compactMap { $0 as? UILabel }.first { $0.text?.contains("TAG #42") == true })
-        XCTAssertTrue(title.text?.contains("↑ ≈1.420 m · LiDAR") == true)
-        XCTAssertEqual(title.accessibilityLabel, title.text)
+        XCTAssertTrue(title.text?.contains("142.0 cm (4 ft 7.9 in)") == true)
+        XCTAssertTrue(title.accessibilityLabel?.contains("142.0 cm (4 ft 7.9 in)") == true)
+        XCTAssertTrue(panel.subviews.compactMap { ($0 as? UILabel)?.text }.contains { $0.contains("LiDAR") })
         XCTAssertTrue(title.isAccessibilityElement)
         XCTAssertEqual(panel.preferredHeight, 96)
+        var metricSettings = TagDebugSettings(); metricSettings.showImperialHeight = false
+        panel.show(debug: ["id": 42, "status": "valid", "severity": "good",
+            "floorHeight": ["available": true, "meters": 1.42, "source": "sceneDepth"]],
+            frameID: "height-panel-metric", timestamp: ProcessInfo.processInfo.systemUptime,
+            analysisHz: 20, latencyMilliseconds: 5, settings: metricSettings)
+        XCTAssertTrue(title.text?.contains("142.0 cm") == true)
+        XCTAssertFalse(title.text?.contains(" ft ") == true)
+        XCTAssertTrue(title.accessibilityLabel?.contains("142.0 cm") == true)
+        XCTAssertFalse(title.accessibilityLabel?.contains(" ft ") == true)
         panel.showUnavailable("Stale result")
-        XCTAssertFalse(title.text?.contains("1.420") == true)
-        XCTAssertFalse(title.accessibilityLabel?.contains("1.420") == true)
+        XCTAssertFalse(title.text?.contains("142.0") == true)
+        XCTAssertFalse(title.accessibilityLabel?.contains("142.0") == true)
         XCTAssertEqual(title.accessibilityLabel, "TAG DEBUG · WAITING")
     }
 
@@ -231,8 +241,8 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         show([lidar, optical])
         let labels = overlay.subviews.compactMap { $0 as? UILabel }
         XCTAssertEqual(labels.count, 2)
-        XCTAssertTrue(labels[0].text?.contains("#42 · ↑ 1.420 m") == true)
-        XCTAssertTrue(labels[1].text?.contains("#42 · ↑ 2.310 m") == true)
+        XCTAssertTrue(labels[0].text?.contains("#42 · ↑ 142.0 cm (4 ft 7.9 in)") == true)
+        XCTAssertTrue(labels[1].text?.contains("#42 · ↑ 231.0 cm (7 ft 6.9 in)") == true)
         XCTAssertTrue(labels[0].accessibilityValue?.contains("LiDAR depth") == true)
         XCTAssertTrue(labels[1].accessibilityValue?.contains("optical tag pose") == true)
         XCTAssertTrue(labels[1].accessibilityValue?.contains("poseFallbackMissingDepth") == true)
@@ -280,10 +290,29 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         overlay.layoutIfNeeded()
         let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
         XCTAssertTrue(label.text?.contains("◆ #587") == true)
-        XCTAssertTrue(label.text?.contains("12.345 m") == true)
+        XCTAssertTrue(label.text?.contains("1234.5 cm (40 ft 6.0 in)") == true)
         XCTAssertTrue(overlay.bounds.contains(label.frame))
         XCTAssertTrue(label.adjustsFontSizeToFitWidth)
         XCTAssertTrue(label.accessibilityTraits.contains(.selected))
         XCTAssertEqual(overlay.tagID(at: CGPoint(x: 40, y: 50)), 587)
+    }
+
+    func testAutomaticTagHeightUnitsToggleReusesLabelsAndPreservesRawMeters() throws {
+        var row = detection()
+        let height: [String: Any] = ["available": true, "meters": 1.423456789, "source": "sceneDepth", "reason": "valid"]
+        row["floorHeight"] = height
+        let original = try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])
+        show([row])
+        let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
+        XCTAssertTrue(label.text?.contains("142.3 cm (4 ft 8.0 in)") == true)
+        overlay.show([row], imageSize: CGSize(width: 320, height: 480), displayTransform: .identity,
+            frameID: "height-metric-only", expiresAt: ProcessInfo.processInfo.systemUptime + 0.5,
+            showImperialHeight: false)
+        XCTAssertTrue(overlay.subviews.compactMap { $0 as? UILabel }.first === label)
+        XCTAssertTrue(label.text?.contains("142.3 cm") == true)
+        XCTAssertFalse(label.text?.contains(" ft ") == true)
+        XCTAssertFalse(label.accessibilityValue?.contains(" ft ") == true)
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]), original)
+        XCTAssertEqual((row["floorHeight"] as? [String: Any])?["meters"] as? Double, 1.423456789)
     }
 }

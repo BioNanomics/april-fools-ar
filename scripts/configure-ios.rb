@@ -23,8 +23,9 @@ notes = project.main_group.files.find { |file| file.path == '../release-notes.js
 target.resources_build_phase.add_file_reference(notes, true)
 native = project.main_group.groups.find { |group| group.name == 'Native' }
 native ||= project.main_group.new_group('Native', '../native')
-Dir.glob(File.join(root, 'native/**/*.{swift,m,mm,c}')).sort.each do |path|
+Dir.glob(File.join(root, 'native/**/*.{swift,m,mm,c,cpp}')).sort.each do |path|
   next if path.split('/').any? { |part| part.downcase.end_with?('tests') } || File.basename(path).downcase.include?('test')
+  next if path.include?('/SpatialCore/tools/') || path.include?('/SpatialCore/jni/')
   relative = path.delete_prefix(File.join(root, 'native/'))
   reference = native.files.find { |file| file.path == relative } || native.new_file(relative)
   target.source_build_phase.add_file_reference(reference, true)
@@ -49,8 +50,9 @@ target.build_configurations.each do |config|
   config.build_settings['CURRENT_PROJECT_VERSION'] = release.fetch('build')
   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
   config.build_settings['SWIFT_VERSION'] = '5.0'
+  config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
   config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = '$(SRCROOT)/../native/AprilFoolsAR-Bridging-Header.h'
-  config.build_settings['HEADER_SEARCH_PATHS'] = ['$(inherited)', '$(SRCROOT)/../native', '$(SRCROOT)/../third_party/apriltag']
+  config.build_settings['HEADER_SEARCH_PATHS'] = ['$(inherited)', '$(SRCROOT)/../native', '$(SRCROOT)/../native/SpatialCore/include', '$(SRCROOT)/../third_party/apriltag']
   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
 end
 project.root_object.attributes['TargetAttributes'] ||= {}

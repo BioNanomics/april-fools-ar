@@ -819,7 +819,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             "viewportWidth": viewport.width, "viewportHeight": viewport.height, "interfaceOrientation": orientation.rawValue,
             "tracking": tracking, "trackingReason": trackingReason,
             "analysisSkippedFramesTotal": tagSkippedFrames, "targetAnalysisHz": 30, "maxAnalysisInFlight": 1,
-            "recordingId": sourceRecorderID as Any? ?? NSNull(), "poseEstimation": true, "debugSettings": settings.dictionary]
+            "recordingId": sourceRecorderID as Any? ?? NSNull(), "poseEstimation": true, "debugSettings": settings.dictionary,
+            "calculationCore": SpatialCoreInfo.dictionary,
+            "floorSnapshot": sourceFloor.map { floor -> [String: Any] in
+                var record = floor.dictionary; record["operatorConfirmed"] = true; return record
+            } as Any? ?? NSNull()]
         tagQueue.async { [weak self] in
             guard let self else { return }
             autoreleasepool {

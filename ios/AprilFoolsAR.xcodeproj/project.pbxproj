@@ -12,6 +12,7 @@
 		0AE1D41CFDE400D554CB72B9 /* svd22.c in Sources */ = {isa = PBXBuildFile; fileRef = 322A348F58056FBE702D49EA /* svd22.c */; };
 		0C80B921A6F3F58F76C31292 /* libPods-AprilFoolsAR.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-AprilFoolsAR.a */; };
 		0D29D20B52888BC13C221C32 /* SessionZIPWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8557C9FDEF8BC3089C875676 /* SessionZIPWriter.swift */; };
+		1107A3FF49E34B79CF70399E /* projection.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1A1BF92FEA660A5B4E72A05 /* projection.cpp */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1508D443397E26804536B59C /* ARCaptureReact.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */; };
 		1DD28336743D5D3B79AEA09D /* zarray.c in Sources */ = {isa = PBXBuildFile; fileRef = CA4D9A9C2175E6193DDC55E8 /* zarray.c */; };
@@ -22,6 +23,7 @@
 		291316D7E0441B79FD5C74D5 /* ArchiveModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */; };
 		2D82BE3B05D0147C467888BC /* PreviewZoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */; };
 		2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */ = {isa = PBXBuildFile; fileRef = 8B743D7F395310A75BDE0593 /* string_util.c */; };
+		313464C10DE6FE2B48D4BE03 /* version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1AC29C7674788D7D0DE7FCF9 /* version.cpp */; };
 		326ED390E11DA8D6135C4FCC /* FloorBaseMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */; };
 		34C7BC10A1B2909961E81174 /* g2d.c in Sources */ = {isa = PBXBuildFile; fileRef = 3E65C29D4D082A77C20F9142 /* g2d.c */; };
 		3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */; };
@@ -36,6 +38,7 @@
 		623351B9B74E274B6984B4AD /* TagFloorHeight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */; };
 		629385028333213529D5993C /* image_u8x3.c in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE2087C434A7DAD20946AB /* image_u8x3.c */; };
 		665F5DA3657666D038C6E1C6 /* ARCaptureBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = FFCDC580B5E67BFA6CECFDDF /* ARCaptureBridge.m */; };
+		66F83AE959EA70D6016B1D50 /* geometry.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EEB2EF0D8CBAF081733145FB /* geometry.cpp */; };
 		68542CCFC419D2394BD96422 /* SpatialMeasurements.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6EBBD3B87383B3A1BFDE6C /* SpatialMeasurements.swift */; };
 		685796467C7CC3EC8F0334C5 /* FloorPlaneFit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */; };
 		6D19E8AB0F211742B5288C32 /* SpatialMeasurementOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9AB4B7CE616FF1D8B634D3 /* SpatialMeasurementOverlayView.swift */; };
@@ -50,6 +53,7 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		82775D5EF40CCB131F9FAC96 /* TagDebugMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */; };
 		86C00913574A035160C49D75 /* matd.c in Sources */ = {isa = PBXBuildFile; fileRef = 78764DD7E780CABC9B355826 /* matd.c */; };
+		A84767D4F2E0B14D74949C83 /* measurements.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 48700406B409929D15EF2E3F /* measurements.cpp */; };
 		AC9E75D7FF47342FF702995C /* zmaxheap.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E44803935F6579A749699F8 /* zmaxheap.c */; };
 		AFB7866EAFC1D0922D8652A6 /* getopt.c in Sources */ = {isa = PBXBuildFile; fileRef = 5DF00A1907A26462253BD5F7 /* getopt.c */; };
 		B00D8DF342D0024D8567A150 /* unionfind.c in Sources */ = {isa = PBXBuildFile; fileRef = 7F8DD804A45F21BC7D954794 /* unionfind.c */; };
@@ -75,6 +79,7 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = AprilFoolsAR/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = AprilFoolsAR/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagFloorHeight.swift; path = ARCapture/TagFloorHeight.swift; sourceTree = "<group>"; };
+		1AC29C7674788D7D0DE7FCF9 /* version.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = version.cpp; path = SpatialCore/src/version.cpp; sourceTree = "<group>"; };
 		2540CE28C05CEEFC3ABC83FF /* pnm.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pnm.c; path = common/pnm.c; sourceTree = "<group>"; };
 		2597B3319AD2D1C5517C152B /* pthreads_cross.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pthreads_cross.c; path = common/pthreads_cross.c; sourceTree = "<group>"; };
 		2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagHeightVectors.swift; path = ARCapture/TagHeightVectors.swift; sourceTree = "<group>"; };
@@ -86,6 +91,7 @@
 		3E65C29D4D082A77C20F9142 /* g2d.c */ = {isa = PBXFileReference; includeInIndex = 1; name = g2d.c; path = common/g2d.c; sourceTree = "<group>"; };
 		3FD063604D0BCFCE34FDDB80 /* release-notes.json */ = {isa = PBXFileReference; includeInIndex = 1; name = "release-notes.json"; path = "../release-notes.json"; sourceTree = "<group>"; };
 		468D4324892A66A3BF05B7B0 /* AFTagDetector.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = AFTagDetector.m; path = AprilTag/AFTagDetector.m; sourceTree = "<group>"; };
+		48700406B409929D15EF2E3F /* measurements.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = measurements.cpp; path = SpatialCore/src/measurements.cpp; sourceTree = "<group>"; };
 		48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArchiveModule.swift; path = ArchiveModule/ArchiveModule.swift; sourceTree = "<group>"; };
 		493908AED57E2288AFD6D880 /* image_u8_parallel.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8_parallel.c; path = common/image_u8_parallel.c; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-AprilFoolsAR.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AprilFoolsAR.release.xcconfig"; path = "Target Support Files/Pods-AprilFoolsAR/Pods-AprilFoolsAR.release.xcconfig"; sourceTree = "<group>"; };
@@ -119,6 +125,7 @@
 		CA4D9A9C2175E6193DDC55E8 /* zarray.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zarray.c; path = common/zarray.c; sourceTree = "<group>"; };
 		CDF97A947CC1CF95873D4345 /* tag36h11.c */ = {isa = PBXFileReference; includeInIndex = 1; path = tag36h11.c; sourceTree = "<group>"; };
 		CEC2C5BC195027DE0268E191 /* AppBuildInfo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppBuildInfo.swift; path = ARCapture/AppBuildInfo.swift; sourceTree = "<group>"; };
+		D1A1BF92FEA660A5B4E72A05 /* projection.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = projection.cpp; path = SpatialCore/src/projection.cpp; sourceTree = "<group>"; };
 		D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pjpeg.c; path = common/pjpeg.c; sourceTree = "<group>"; };
 		DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ARCaptureCoordinator.swift; path = ARCapture/ARCaptureCoordinator.swift; sourceTree = "<group>"; };
 		E58DC96727684DC98AB58CE2 /* apriltag.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag.c; sourceTree = "<group>"; };
@@ -126,6 +133,7 @@
 		E8B8A96D63698D4255EFFE75 /* AFTagCore.c */ = {isa = PBXFileReference; includeInIndex = 1; name = AFTagCore.c; path = AprilTag/AFTagCore.c; sourceTree = "<group>"; };
 		EA83DAE678B40D531BAF2FFD /* LICENSE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE.md; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EEB2EF0D8CBAF081733145FB /* geometry.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = geometry.cpp; path = SpatialCore/src/geometry.cpp; sourceTree = "<group>"; };
 		F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PreviewZoom.swift; path = ARCapture/PreviewZoom.swift; sourceTree = "<group>"; };
 		F65F24E17F0D91A4485AC78B /* image_u8.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8.c; path = common/image_u8.c; sourceTree = "<group>"; };
 		F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagDebugPanelView.swift; path = ARCapture/TagDebugPanelView.swift; sourceTree = "<group>"; };
@@ -197,6 +205,10 @@
 				2D7C65A3F5F728740A07E3C8 /* TagHeightVectors.swift */,
 				7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */,
 				7BA622697B4AA163505CE0A1 /* SessionMP4Writer.swift */,
+				EEB2EF0D8CBAF081733145FB /* geometry.cpp */,
+				48700406B409929D15EF2E3F /* measurements.cpp */,
+				D1A1BF92FEA660A5B4E72A05 /* projection.cpp */,
+				1AC29C7674788D7D0DE7FCF9 /* version.cpp */,
 			);
 			name = Native;
 			path = ../native;
@@ -507,6 +519,10 @@
 				6FFD3039E5A429D33A29EBAC /* TagHeightVectors.swift in Sources */,
 				326ED390E11DA8D6135C4FCC /* FloorBaseMarker.swift in Sources */,
 				5C2DF5D875E29B27A0A4A838 /* SessionMP4Writer.swift in Sources */,
+				66F83AE959EA70D6016B1D50 /* geometry.cpp in Sources */,
+				A84767D4F2E0B14D74949C83 /* measurements.cpp in Sources */,
+				1107A3FF49E34B79CF70399E /* projection.cpp in Sources */,
+				313464C10DE6FE2B48D4BE03 /* version.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -518,6 +534,7 @@
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-AprilFoolsAR.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
@@ -527,6 +544,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../native",
+					"$(SRCROOT)/../native/SpatialCore/include",
 					"$(SRCROOT)/../third_party/apriltag",
 				);
 				INFOPLIST_FILE = AprilFoolsAR/Info.plist;
@@ -557,6 +575,7 @@
 			baseConfigurationReference = 5709B34CF0A7D63546082F79 /* Pods-AprilFoolsAR.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
@@ -565,6 +584,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../native",
+					"$(SRCROOT)/../native/SpatialCore/include",
 					"$(SRCROOT)/../third_party/apriltag",
 				);
 				INFOPLIST_FILE = AprilFoolsAR/Info.plist;

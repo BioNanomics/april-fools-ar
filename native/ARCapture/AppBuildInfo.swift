@@ -81,3 +81,17 @@ enum AppBuildInfo {
         var errorDescription: String? { if case .invalid(let text) = self { return text }; return nil }
     }
 }
+
+/// Version the numerical contract independently from the MP4 and capture schemas.
+enum SpatialCoreInfo {
+    static var dictionary: [String: Any] { dictionary(application: AppBuildInfo.application) }
+    static func dictionary(application: [String: Any]) -> [String: Any] {
+        ["name": "april-fools-spatial-core", "version": String(cString: afsc_version()),
+         "abiVersion": afsc_abi_version(), "algorithmContractVersion": 1,
+         "lengthUnit": "meter", "angleUnit": "radian", "matrixOrder": "column-major",
+         "cameraFrame": "optical-x-right-y-down-z-forward", "worldUp": "+Y",
+         "buildCommit": application["buildCommit"] as Any? ?? NSNull(),
+         "buildDateUTC": application["buildDateUTC"] as Any? ?? NSNull(),
+         "workingTreeDirty": application["workingTreeDirty"] as Any? ?? NSNull()]
+    }
+}

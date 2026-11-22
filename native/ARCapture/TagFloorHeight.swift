@@ -29,60 +29,50 @@ enum TagFloorHeight {
         var output: [String: Any] = ["available": false, "meters": NSNull(), "source": "unavailable",
             "reason": "floorNotSelected", "floorId": context.floor?.id as Any? ?? NSNull(), "frameId": context.frameID,
             "segmentId": context.segmentID, "timestamp": context.timestamp.isFinite ? context.timestamp as Any : NSNull(),
+            "frameAgeSeconds": context.frameAgeSeconds.isFinite ? context.frameAgeSeconds as Any : NSNull(),
             "method": "gravity-vertical intersection with an operator-confirmed floor", "estimate": true]
-        func unavailable(_ reason: String) -> [String: Any] { output["reason"] = reason; return output }
-        guard let floor = context.floor else { return output }
-        guard floor.segmentID == context.segmentID else { return unavailable("segmentMismatch") }
-        guard context.tracking == "normal" else { return unavailable("trackingLimited") }
-        guard context.timestamp.isFinite, context.frameAgeSeconds.isFinite, context.frameAgeSeconds >= 0,
-              context.frameAgeSeconds <= 0.4, !context.frameID.isEmpty else { return unavailable("staleFrame") }
-        guard !floor.id.isEmpty, !floor.frameID.isEmpty, floor.timestamp.isFinite,
-              SpatialMeasurementMath.finite(floor.origin), SpatialMeasurementMath.finite(floor.normal),
-              ["floor", "unclassified"].contains(floor.classification) else { return unavailable("invalidFloor") }
-        let intrinsicValues = (0..<3).flatMap { column in (0..<3).map { row in context.intrinsics[column][row] } }
-        let fx = Double(context.intrinsics.columns.0.x), fy = Double(context.intrinsics.columns.1.y)
-        let cx = Double(context.intrinsics.columns.2.x), cy = Double(context.intrinsics.columns.2.y)
-        guard validCameraTransform(context.cameraToWorld), intrinsicValues.allSatisfy(\.isFinite), fx > 0, fy > 0,
-              let pose = detection["pose"] as? [String: Any],
-              let translation = TagDebugMath.numbers(pose["translation"], count: 3), translation[2] > 0,
-              let range = TagDebugMath.number(pose["rangeMeters"]), range > 0,
-              let angle = TagDebugMath.number(pose["planeAngleDegrees"]), angle >= 0,
-              let rms = TagDebugMath.number(pose["reprojectionRMSEPixels"]), rms >= 0 else { return unavailable("invalidPose") }
-        guard pose["ambiguous"] as? Bool == false else { return unavailable("ambiguousPose") }
-        guard range <= context.settings.maxDistanceMeters else { return unavailable("tooFar") }
-        guard angle <= context.settings.maxPlaneAngleDegrees else { return unavailable("badAngle") }
-        guard rms <= context.settings.maxReprojectionErrorPixels,
-              TagDebugMath.number(detection["hamming"]) == 0,
-              let margin = TagDebugMath.number(detection["decisionMargin"]), margin > 0 else { return unavailable("lowConfidencePose") }
+        var input = AFSCFloorHeightInput()
+        input.floor_available = context.floor == nil ? 0 : 1
+        input.same_segment = context.floor?.segmentID == context.segmentID ? 1 : 0
+        input.tracking_usable = context.tracking == "normal" ? 1 : 0
+        input.frame_id_available = context.frameID.isEmpty ? 0 : 1
+        input.timestamp_s = context.timestamp
+        input.frame_age_s = context.frameAgeSeconds
+        if let floor = context.floor {
+            input.floor_id_available = floor.id.isEmpty ? 0 : 1
+            input.floor_frame_id_available = floor.frameID.isEmpty ? 0 : 1
+            input.floor_classification_usable = ["floor", "unclassified"].contains(floor.classification) ? 1 : 0
+            input.floor_timestamp_s = floor.timestamp
+            input.floor = AFSCPlane(origin: AFSCVec3(x: Double(floor.origin.x), y: Double(floor.origin.y), z: Double(floor.origin.z)),
+                                    normal: AFSCVec3(x: Double(floor.normal.x), y: Double(floor.normal.y), z: Double(floor.normal.z)))
+        }
+        input.world_from_optical = TagDebugMath.coreWorldFromOptical(context.cameraToWorld)
+        input.intrinsics = TagDebugMath.coreIntrinsics(context.intrinsics)
+        input.pose = TagDebugMath.corePoseObservation(detection)
+        input.settings = TagDebugMath.coreMeasurementSettings(context.settings)
         let depth = detection["depth"] as? [String: Any] ?? [:]
         let confidence = (depth["centerConfidence"] as? NSNumber)?.intValue
-        let acceptedDepth = TagDebugMath.number(depth["centerDepthMeters"]).flatMap {
-            $0 > 0 && [1, 2].contains(confidence ?? -1) ? $0 : nil
-        }
-        let difference = acceptedDepth.map { abs($0-translation[2]) }
-        if let difference, difference > context.settings.rejectDepthDifferenceMeters + 1e-9 { return unavailable("depthMismatch") }
-        let optical: [Double]
-        let source: String
+        input.depth = TagDebugMath.coreDepthObservation(depth: TagDebugMath.number(depth["centerDepthMeters"]),
+                                                       confidence: confidence.map(Double.init))
         let center = TagDebugMath.numbers(detection["center"], count: 2)
-        if let acceptedDepth {
-            guard let center, center[0] >= 0, center[1] >= 0 else { return unavailable("invalidCenter") }
-            optical = [(center[0]-cx)/fx*acceptedDepth, (center[1]-cy)/fy*acceptedDepth, acceptedDepth]
-            source = "sceneDepth"
-        } else {
-            optical = translation
-            source = "tagPose"
+        input.center_available = center == nil ? 0 : 1
+        input.center_px = AFSCVec2(x: center?[0] ?? 0, y: center?[1] ?? 0)
+        let evaluation = afsc_floor_height(&input)
+        guard evaluation.available != 0, let floor = context.floor else {
+            output["reason"] = reason(evaluation.reason)
+            return output
         }
-        guard optical.allSatisfy(\.isFinite) else { return unavailable("invalidGeometry") }
-        // ARKit camera looks along -Z with +Y up; detector coordinates use +Y down, +Z forward.
-        let cameraPoint = SIMD4<Float>(Float(optical[0]), -Float(optical[1]), -Float(optical[2]), 1)
-        let transformed = context.cameraToWorld * cameraPoint
-        let world = SIMD3<Float>(transformed.x, transformed.y, transformed.z)
-        guard SpatialMeasurementMath.finite(world), transformed.w.isFinite, abs(transformed.w-1) < 1e-3 else { return unavailable("invalidGeometry") }
-        let foot: SIMD3<Float>
-        do { foot = try SpatialMeasurementMath.verticalFoot(of: world, onto: floor) }
-        catch { return unavailable("invalidFloorIntersection") }
-        let height = Double(world.y-foot.y)
-        guard height.isFinite, height >= 0 else { return unavailable("invalidFloorIntersection") }
+        let source = evaluation.source == AFSC_HEIGHT_SOURCE_DEPTH ? "sceneDepth" : "tagPose"
+        let acceptedDepth = TagDebugMath.coreValue(evaluation.accepted_depth_z_m)
+        let difference = TagDebugMath.coreValue(evaluation.depth_difference_m)
+        let optical = [evaluation.optical_m.x, evaluation.optical_m.y, evaluation.optical_m.z]
+        // Preserve the native Float world-coordinate representation in recording payloads.
+        let world = SIMD3<Float>(Float(evaluation.world_m.x), Float(evaluation.world_m.y), Float(evaluation.world_m.z))
+        let foot = SIMD3<Float>(Float(evaluation.floor_foot_world_m.x), Float(evaluation.floor_foot_world_m.y), Float(evaluation.floor_foot_world_m.z))
+        guard SpatialMeasurementMath.finite(world), SpatialMeasurementMath.finite(foot) else {
+            output["reason"] = "invalidGeometry"; return output
+        }
+        let height = evaluation.height_m
         let basis: [String: Any] = ["id": floor.id, "originWorldMeters": SpatialMeasurementMath.array(floor.origin),
             "normalWorld": SpatialMeasurementMath.array(floor.normal), "frameId": floor.frameID, "timestamp": floor.timestamp,
             "segmentId": floor.segmentID, "classification": floor.classification, "operatorConfirmed": true,
@@ -95,22 +85,27 @@ enum TagFloorHeight {
             "worldMeters": SpatialMeasurementMath.array(world), "floorFootWorldMeters": SpatialMeasurementMath.array(foot),
             "opticalMeters": optical, "centerPixel": center as Any? ?? NSNull(),
             "centerDepthMeters": acceptedDepth as Any? ?? NSNull(), "centerConfidence": confidence as Any? ?? NSNull(),
-            "poseZMeters": translation[2], "depthDifferenceMeters": difference as Any? ?? NSNull(),
-            "severity": source == "tagPose" || (difference ?? 0) > context.settings.warningDepthDifferenceMeters + 1e-9 ? "warning" : "good"]) { _, new in new }
+            "poseZMeters": input.pose.translation.z, "depthDifferenceMeters": difference as Any? ?? NSNull(),
+            "severity": TagDebugMath.coreSeverity(evaluation.severity)]) { _, new in new }
         return output
     }
-    private static func validCameraTransform(_ matrix: simd_float4x4) -> Bool {
-        guard (0..<4).allSatisfy({ column in (0..<4).allSatisfy { matrix[column][$0].isFinite } }),
-              abs(matrix.columns.0.w) < 1e-4, abs(matrix.columns.1.w) < 1e-4,
-              abs(matrix.columns.2.w) < 1e-4, abs(matrix.columns.3.w-1) < 1e-4 else { return false }
-        let rotation = simd_float3x3(columns: (
-            SIMD3<Float>(matrix.columns.0.x, matrix.columns.0.y, matrix.columns.0.z),
-            SIMD3<Float>(matrix.columns.1.x, matrix.columns.1.y, matrix.columns.1.z),
-            SIMD3<Float>(matrix.columns.2.x, matrix.columns.2.y, matrix.columns.2.z)))
-        guard abs(simd_determinant(rotation)-1) < 1e-3 else { return false }
-        for a in 0..<3 { for b in 0..<3 {
-            if abs(simd_dot(rotation[a], rotation[b]) - (a == b ? 1 : 0)) >= 1e-3 { return false }
-        } }
-        return true
+    private static func reason(_ value: AFSCHeightReason) -> String {
+        switch value {
+        case AFSC_HEIGHT_FLOOR_NOT_SELECTED: return "floorNotSelected"
+        case AFSC_HEIGHT_SEGMENT_MISMATCH: return "segmentMismatch"
+        case AFSC_HEIGHT_TRACKING_LIMITED: return "trackingLimited"
+        case AFSC_HEIGHT_STALE_FRAME: return "staleFrame"
+        case AFSC_HEIGHT_INVALID_FLOOR: return "invalidFloor"
+        case AFSC_HEIGHT_INVALID_POSE: return "invalidPose"
+        case AFSC_HEIGHT_AMBIGUOUS_POSE: return "ambiguousPose"
+        case AFSC_HEIGHT_TOO_FAR: return "tooFar"
+        case AFSC_HEIGHT_BAD_ANGLE: return "badAngle"
+        case AFSC_HEIGHT_LOW_CONFIDENCE_POSE: return "lowConfidencePose"
+        case AFSC_HEIGHT_DEPTH_MISMATCH: return "depthMismatch"
+        case AFSC_HEIGHT_INVALID_CENTER: return "invalidCenter"
+        case AFSC_HEIGHT_INVALID_GEOMETRY: return "invalidGeometry"
+        case AFSC_HEIGHT_INVALID_INTERSECTION: return "invalidFloorIntersection"
+        default: return "valid"
+        }
     }
 }

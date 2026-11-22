@@ -81,6 +81,8 @@ project.targets.each do |target|
     end
   end
 end
+load File.join(root, 'scripts/spatial-core-xcode.rb')
+add_spatial_core_to_test_target(project, tests, root)
 project.save
 scheme = Xcodeproj::XCScheme.new
 scheme.add_build_target(host)

@@ -14,6 +14,7 @@ Date: November 22, 2026. Library version 0.1.0, C ABI 1. This records code/build
 
 - Existing simulator regression suite: **119 tests, zero failures**, including floor fit/leveling, height, source expiry, range conventions, projection/clipping, multi-tag overlays and settings. Result: `/tmp/afsc-ios-regression-1/Results.xcresult`.
 - Six build-info/recorder tests passed, including saved calculation-core version/ABI and matching source build identity. Result: `/tmp/afsc-build-info-tests/Results.xcresult`.
+- The complete unsigned Release iOS app compiled successfully. Log: `/tmp/afsc-ios-app-complete.log`.
 - Simulator test bundles compile the same core source used in the app. No sensor accuracy or physical acquisition is claimed by these tests.
 - The initial isolated app build exposed local environment issues: stale Homebrew Node, missing generated React Native files and Metro visibility of symlinked dependencies. Validation uses NVM Node22 and isolated copied dependencies. These were build-environment issues, not changed measurement behavior.
 

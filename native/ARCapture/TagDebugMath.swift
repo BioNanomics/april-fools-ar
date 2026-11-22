@@ -1,6 +1,7 @@
 import Foundation
 import CoreVideo
 import CoreFoundation
+import simd
 
 enum TagDebugError: LocalizedError {
     case invalid(String)
@@ -129,9 +130,13 @@ struct TagDepthSamples {
 
 enum TagDebugMath {
     static func measuredTagSize(points: [[String: Any]], worldDistance: Double?, segmentID: String, tracking: String, frameAgeSeconds: Double) throws -> Double {
-        guard points.count == 2, tracking == "normal", frameAgeSeconds >= 0, frameAgeSeconds <= 0.5,
-              points.allSatisfy({ ($0["segmentId"] as? String) == segmentID && ($0["source"] as? String) == "sceneDepth" && [1, 2].contains(($0["confidence"] as? NSNumber)?.intValue ?? -1) }),
-              let distance = worldDistance, distance.isFinite, (0.01...2).contains(distance) else {
+        let pointsUsable = points.allSatisfy {
+            ($0["segmentId"] as? String) == segmentID && ($0["source"] as? String) == "sceneDepth"
+                && [1, 2].contains(($0["confidence"] as? NSNumber)?.intValue ?? -1)
+        }
+        guard afsc_measured_tag_size(points.count == 2 ? 2 : 0, tracking == "normal" ? 1 : 0,
+                                     pointsUsable ? 1 : 0, frameAgeSeconds, coreOptional(worldDistance)) != 0,
+              let distance = worldDistance else {
             throw TagDebugError.invalid("Measure one tag edge with two valid LiDAR points in the current segment (normal tracking, confidence 1/2, width 10 mm–2 m).")
         }
         return distance
@@ -188,23 +193,28 @@ enum TagDebugMath {
         let range = number(pose?["rangeMeters"]), plane = number(pose?["planeAngleDegrees"])
         let bearing = number(pose?["opticalAxisAngleDegrees"]), reprojection = number(pose?["reprojectionRMSEPixels"])
         let poseZ = translation?[2], margin = number(detection["decisionMargin"]), hamming = number(detection["hamming"])
-        let acceptedDepth = depth.centerDepthMeters.flatMap { $0.isFinite && $0 > 0 && [1, 2].contains(depth.centerConfidence ?? -1) ? $0 : nil }
-        let delta = poseZ.flatMap { z in acceptedDepth.map { abs($0 - z) } }
-        var status = "valid", severity = "good", reasons = [String]()
-        func set(_ code: String, _ level: String, _ reason: String) { status = code; severity = level; reasons.append(reason) }
-        if tracking != "normal" { set("trackingLimited", "neutral", "AR tracking must be normal") }
-        else if poseZ == nil || poseZ! <= 0 || range == nil || plane == nil || bearing == nil || reprojection == nil || translation == nil || euler == nil { set("poseUnavailable", "neutral", "Valid camera-relative pose/quality unavailable") }
-        else if pose?["ambiguous"] as? Bool == true { set("ambiguous", "warning", "Distinct alternative planar pose") }
-        else if range! > settings.maxDistanceMeters { set("tooFar", "bad", "Camera-to-tag range exceeds configured maximum") }
-        else if plane! > settings.maxPlaneAngleDegrees { set("badAngle", "bad", "Tag plane incidence exceeds configured maximum") }
-        else if reprojection! > settings.maxReprojectionErrorPixels || hamming == nil || hamming! > 0 || margin == nil || margin! <= 0 {
-            set("lowConfidence", "warning", "Conservative quality gate: reprojection, positive decision margin, and zero corrected bits required")
+        var corePose = corePoseObservation(detection)
+        var coreDepth = coreDepthObservation(depth: depth.centerDepthMeters, confidence: depth.centerConfidence.map(Double.init))
+        var coreSettings = coreMeasurementSettings(settings)
+        let quality = afsc_pose_quality(&corePose, &coreDepth, &coreSettings, tracking == "normal" ? 1 : 0)
+        let acceptedDepth = coreValue(quality.accepted_depth_z_m)
+        let delta = coreValue(quality.depth_difference_m)
+        let status: String, reason: String
+        switch quality.reason {
+        case AFSC_QUALITY_TRACKING_LIMITED: status = "trackingLimited"; reason = "AR tracking must be normal"
+        case AFSC_QUALITY_POSE_UNAVAILABLE: status = "poseUnavailable"; reason = "Valid camera-relative pose/quality unavailable"
+        case AFSC_QUALITY_AMBIGUOUS: status = "ambiguous"; reason = "Distinct alternative planar pose"
+        case AFSC_QUALITY_TOO_FAR: status = "tooFar"; reason = "Camera-to-tag range exceeds configured maximum"
+        case AFSC_QUALITY_BAD_ANGLE: status = "badAngle"; reason = "Tag plane incidence exceeds configured maximum"
+        case AFSC_QUALITY_LOW_CONFIDENCE_POSE: status = "lowConfidence"; reason = "Conservative quality gate: reprojection, positive decision margin, and zero corrected bits required"
+        case AFSC_QUALITY_LOW_CONFIDENCE_DEPTH: status = "lowConfidence"; reason = "LiDAR center confidence 0 rejected"
+        case AFSC_QUALITY_MISSING_DEPTH: status = "missingDepth"; reason = depth.reason
+        case AFSC_QUALITY_DEPTH_REJECTED: status = "depthMismatch"; reason = "Absolute center LiDAR − optical pose Z exceeds reject threshold"
+        case AFSC_QUALITY_DEPTH_WARNING: status = "depthMismatch"; reason = "Check depth: above warning threshold"
+        default: status = "valid"; reason = "Current camera-relative checks pass; absolute field accuracy is not certified"
         }
-        else if depth.centerConfidence == 0 { set("lowConfidence", "neutral", "LiDAR center confidence 0 rejected") }
-        else if acceptedDepth == nil { set("missingDepth", "neutral", depth.reason) }
-        else if delta! > settings.rejectDepthDifferenceMeters + 1e-9 { set("depthMismatch", "bad", "Absolute center LiDAR − optical pose Z exceeds reject threshold") }
-        else if delta! > settings.warningDepthDifferenceMeters + 1e-9 { set("depthMismatch", "warning", "Check depth: above warning threshold") }
-        else { reasons.append("Current camera-relative checks pass; absolute field accuracy is not certified") }
+        let severity = coreSeverity(quality.severity)
+        let reasons = [reason]
         let debug: [String: Any] = ["id": detection["id"] as Any? ?? NSNull(), "status": status, "severity": severity, "valid": status == "valid",
             "reasons": reasons, "translationMeters": translation as Any? ?? NSNull(), "eulerDegrees": euler as Any? ?? NSNull(),
             "opticalPoseZMeters": poseZ as Any? ?? NSNull(), "rangeMeters": range as Any? ?? NSNull(),
@@ -217,4 +227,68 @@ enum TagDebugMath {
         result["depth"] = depth.dictionary; result["debug"] = debug
         return result
     }
+
+    // C ABI adapters keep platform parsing, units, and ARKit axes at the boundary.
+    static func coreOptional(_ value: Double?) -> AFSCOptionalDouble {
+        guard let value else { return AFSCOptionalDouble() }
+        return AFSCOptionalDouble(available: 1, value: value)
+    }
+    static func coreValue(_ value: AFSCOptionalDouble) -> Double? { value.available != 0 ? value.value : nil }
+    static func coreVector(_ values: [Double]) -> AFSCVec3 {
+        AFSCVec3(x: values[0], y: values[1], z: values[2])
+    }
+    static func corePoseObservation(_ detection: [String: Any]) -> AFSCPoseObservation {
+        let pose = detection["pose"] as? [String: Any]
+        var result = AFSCPoseObservation()
+        if let translation = numbers(pose?["translation"], count: 3) {
+            result.translation_available = 1; result.translation = coreVector(translation)
+        }
+        result.orientation_available = numbers(pose?["eulerDegrees"], count: 3) == nil ? 0 : 1
+        result.range_m = coreOptional(number(pose?["rangeMeters"]))
+        result.plane_angle_rad = coreOptional(number(pose?["planeAngleDegrees"]).map { $0 * .pi / 180 })
+        result.bearing_rad = coreOptional(number(pose?["opticalAxisAngleDegrees"]).map { $0 * .pi / 180 })
+        result.reprojection_rms_px = coreOptional(number(pose?["reprojectionRMSEPixels"]))
+        result.decision_margin = coreOptional(number(detection["decisionMargin"]))
+        result.corrected_bits = coreOptional(number(detection["hamming"]))
+        result.ambiguous = (pose?["ambiguous"] as? Bool).map { $0 ? 1 : 0 } ?? -1
+        return result
+    }
+    static func coreDepthObservation(depth: Double?, confidence: Double?) -> AFSCDepthObservation {
+        AFSCDepthObservation(center_z_m: coreOptional(depth), confidence: coreOptional(confidence))
+    }
+    static func coreMeasurementSettings(_ settings: TagDebugSettings) -> AFSCMeasurementSettings {
+        AFSCMeasurementSettings(max_range_m: settings.maxDistanceMeters,
+            max_plane_angle_rad: settings.maxPlaneAngleDegrees * .pi / 180,
+            max_reprojection_rms_px: settings.maxReprojectionErrorPixels,
+            warning_depth_difference_m: settings.warningDepthDifferenceMeters,
+            reject_depth_difference_m: settings.rejectDepthDifferenceMeters)
+    }
+    static func coreIntrinsics(_ matrix: simd_float3x3) -> AFSCIntrinsics {
+        var result = AFSCIntrinsics()
+        withUnsafeMutableBytes(of: &result.values) { bytes in
+            let values = bytes.bindMemory(to: Double.self)
+            for column in 0..<3 { for row in 0..<3 { values[column*3+row] = Double(matrix[column][row]) } }
+        }
+        return result
+    }
+    static func coreWorldFromOptical(_ cameraToWorld: simd_float4x4) -> AFSCMat4 {
+        var result = AFSCMat4()
+        withUnsafeMutableBytes(of: &result.values) { bytes in
+            let values = bytes.bindMemory(to: Double.self)
+            for column in 0..<4 { for row in 0..<4 {
+                // Native ARKit is +Y up / -Z forward; the portable core is optical.
+                values[column*4+row] = Double(cameraToWorld[column][row]) * (column == 1 || column == 2 ? -1 : 1)
+            } }
+        }
+        return result
+    }
+    static func coreSeverity(_ severity: AFSCSeverity) -> String {
+        switch severity {
+        case AFSC_SEVERITY_NEUTRAL: return "neutral"
+        case AFSC_SEVERITY_WARNING: return "warning"
+        case AFSC_SEVERITY_BAD: return "bad"
+        default: return "good"
+        }
+    }
+
 }

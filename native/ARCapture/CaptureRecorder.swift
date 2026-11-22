@@ -276,6 +276,7 @@ final class CaptureRecorder {
         var manifest = sessionRecord()
         manifest["schemaVersion"] = 1
         manifest["application"] = initialApplication
+        manifest["calculationCore"] = SpatialCoreInfo.dictionary(application: initialApplication)
         manifest["device"] = ["model": UIDevice.current.model, "hardwareIdentifier": Self.hardwareIdentifier(), "systemVersion": UIDevice.current.systemVersion]
         manifest["finalized"] = finalized
         manifest["clock"] = "ARFrame.timestamp: seconds since system boot; video PTS relative to first recorded AR frame"

@@ -85,3 +85,12 @@ python3 scripts/inspect-session.py /path/to/recording.mp4
 For the short device check with a known visible tag, add `--require-tags` to fail when the export contains no decoded tag.
 
 This checks readability, numeric buffer sizes, sample decoding, and payload checksums. It does not establish measurement accuracy or replace the field review.
+
+
+## Shared calculation provenance (additive schema-1 fields)
+
+New session manifests and AprilTag events include `calculationCore`: library name/version, C ABI and algorithm-contract versions, internal units, matrix/axis convention, and the containing application commit/build date/dirty flag. This identifies the numerical implementation independently of the MP4 transport version and capture schema. Existing `application` metadata is retained.
+
+Each AprilTag event also records the exact `floorSnapshot` selected for that source frame, or explicit null if no floor was selected. Each detection's `floorHeight.frameAgeSeconds` records the age used by the live eligibility check. A reader must respect an explicit null snapshot; only old records without the key may fall back to saved height provenance. Historical records without age cannot reproduce the complete stale-frame gate and must say so.
+
+These fields travel unchanged through the existing MP4 YAML tracks and original-sidecar extraction. Replay uses original event order and capture timestamps; MP4 metadata packet timestamps are not sensor timestamps. `videoAppended:false` remains valid metadata and must not be discarded. See [shared-core replay](../native/SpatialCore/README.md).

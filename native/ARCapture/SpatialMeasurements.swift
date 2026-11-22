@@ -52,9 +52,9 @@ struct SpatialMeasurement {
     let timestamp: Double
     let sourcePoints: [[String: Any]]
     let floor: SpatialPlane?
-    var distanceMeters: Double { Double(simd_length(end-start)) }
-    var verticalMeters: Double { Double(end.y-start.y) }
-    var horizontalMeters: Double { Double(simd_length(SIMD2<Float>(end.x-start.x, end.z-start.z))) }
+    var distanceMeters: Double { SpatialMeasurementMath.distance(from: start, to: end).distance_meters }
+    var verticalMeters: Double { SpatialMeasurementMath.distance(from: start, to: end).vertical_meters }
+    var horizontalMeters: Double { SpatialMeasurementMath.distance(from: start, to: end).horizontal_meters }
     var dictionary: [String: Any] {
         var datum = floor?.dictionary
         datum?["operatorConfirmed"] = true
@@ -70,11 +70,26 @@ struct SpatialMeasurement {
 enum SpatialMeasurementMath {
     static func array(_ point: SIMD3<Float>) -> [Double] { [Double(point.x), Double(point.y), Double(point.z)] }
     static func finite(_ point: SIMD3<Float>) -> Bool { point.x.isFinite && point.y.isFinite && point.z.isFinite }
+    static func coreVector(_ point: SIMD3<Float>) -> AFSCVec3 {
+        AFSCVec3(x: Double(point.x), y: Double(point.y), z: Double(point.z))
+    }
+    static func swiftVector(_ point: AFSCVec3) -> SIMD3<Float> {
+        SIMD3<Float>(Float(point.x), Float(point.y), Float(point.z))
+    }
+    static func corePlane(_ plane: SpatialPlane) -> AFSCPlane {
+        AFSCPlane(origin: coreVector(plane.origin), normal: coreVector(plane.normal))
+    }
+    static func distance(from start: SIMD3<Float>, to end: SIMD3<Float>) -> AFSCDistance {
+        var result = AFSCDistance()
+        guard afsc_distance(coreVector(start), coreVector(end), &result) == AFSC_GEOMETRY_OK else {
+            return AFSCDistance(distance_meters: .nan, vertical_meters: .nan, horizontal_meters: .nan)
+        }
+        return result
+    }
     static func floorTiltDegrees(_ normal: SIMD3<Float>) -> Double? {
-        guard finite(normal) else { return nil }
-        let lateral = hypot(Double(normal.x), Double(normal.z)), vertical = abs(Double(normal.y))
-        guard lateral > 0 || vertical > 0 else { return nil }
-        return atan2(lateral, vertical) * 180 / .pi
+        var radians = 0.0
+        guard afsc_floor_tilt(coreVector(normal), &radians) == AFSC_GEOMETRY_OK else { return nil }
+        return radians * 180 / .pi
     }
     static func effectiveFloor(_ observed: SpatialPlane, levelWithGravity: Bool) -> SpatialPlane {
         guard levelWithGravity else { return observed }
@@ -85,20 +100,13 @@ enum SpatialMeasurementMath {
     }
     /// Horizontal coverage, with a rotation-invariant minimum width to reject long narrow strips.
     static func floorCoverage(_ plane: SpatialPlane) -> (areaSquareMeters: Double, minSpanMeters: Double) {
-        guard plane.vertices.count >= 3, plane.vertices.allSatisfy(finite), let origin = plane.vertices.first else { return (0, 0) }
-        let vertices = plane.vertices.map { SIMD2<Double>(Double($0.x)-Double(origin.x), Double($0.z)-Double(origin.z)) }
-        var twiceArea = 0.0, width = Double.infinity
-        for index in vertices.indices {
-            let a = vertices[index], b = vertices[(index+1) % vertices.count]
-            twiceArea += a.x*b.y-b.x*a.y
-            let edge = b-a, length = simd_length(edge)
-            guard length.isFinite, length > 1e-8 else { continue }
-            let normal = SIMD2<Double>(-edge.y/length, edge.x/length)
-            let projections = vertices.map { simd_dot($0, normal) }
-            if let low = projections.min(), let high = projections.max() { width = min(width, high-low) }
+        let vertices = plane.vertices.map(coreVector)
+        var coverage = AFSCFloorCoverage()
+        let status = vertices.withUnsafeBufferPointer {
+            afsc_floor_coverage($0.baseAddress, $0.count, &coverage)
         }
-        let area = abs(twiceArea)/2
-        return area.isFinite && width.isFinite ? (area, max(0, width)) : (0, 0)
+        guard status == AFSC_GEOMETRY_OK else { return (0, 0) }
+        return (coverage.area_square_meters, coverage.min_span_meters)
     }
     static func validate(tracking: String, frameAgeSeconds: Double) throws {
         guard tracking == "normal", frameAgeSeconds.isFinite, frameAgeSeconds >= 0, frameAgeSeconds <= 0.5 else {
@@ -106,13 +114,13 @@ enum SpatialMeasurementMath {
         }
     }
     static func verticalFoot(of target: SIMD3<Float>, onto floor: SpatialPlane) throws -> SIMD3<Float> {
-        guard finite(target), finite(floor.origin), finite(floor.normal), simd_length(floor.normal) > 0,
-              abs(floor.normal.y) / simd_length(floor.normal) >= 0.8 else {
+        var result = AFSCVec3()
+        let status = afsc_vertical_foot(coreVector(target), corePlane(floor), &result)
+        if status == AFSC_GEOMETRY_INVALID_PLANE || status == AFSC_GEOMETRY_INVALID_ARGUMENT {
             throw SpatialError.invalid("The confirmed floor must be a finite, approximately horizontal plane.")
         }
-        let height = simd_dot(floor.normal, target-floor.origin) / floor.normal.y
-        let foot = target - SIMD3<Float>(0, height, 0)
-        guard height.isFinite, height >= 0, height <= 30, finite(foot) else {
+        let foot = swiftVector(result)
+        guard status == AFSC_GEOMETRY_OK, finite(foot) else {
             throw SpatialError.invalid("The target must be above the confirmed floor.")
         }
         return foot

@@ -28,35 +28,27 @@ enum TagCameraRanges {
             "segmentId": context.segmentID, "timestamp": context.timestamp.isFinite ? context.timestamp as Any : NSNull(),
             "coordinateFrame": "camera-optical-x-right-y-down-z-forward",
             "rangeConvention": "Euclidean camera-to-center distance; optical-axis Z is reported separately"]
-        if let pose = detection["pose"] as? [String: Any], let translation = vector(pose["translation"], count: 3), translation[2] > 0 {
-            result["tagDepthZMeters"] = translation[2]
-            if let range = length(translation) {
-                result["tagRangeMeters"] = range; result["tagAvailable"] = true; result["tagReason"] = "valid"
-            } else { result["tagReason"] = "invalidRange" }
+        var pose = AFSCPoseObservation()
+        if let dictionary = detection["pose"] as? [String: Any], let translation = vector(dictionary["translation"], count: 3) {
+            pose.translation_available = 1
+            pose.translation = TagDebugMath.coreVector(translation)
         }
         let depth = detection["depth"] as? [String: Any] ?? [:]
-        guard let z = scalar(depth["centerDepthMeters"]), z > 0 else { return result }
-        guard let confidence = scalar(depth["centerConfidence"]), [1.0, 2.0].contains(confidence) else {
-            result["lidarReason"] = "invalidConfidence"; return result
-        }
-        // A valid sample's axial depth remains available even if camera-ray geometry is malformed.
-        result["lidarDepthZMeters"] = z
-        let k = context.intrinsics
-        let fx = Double(k.columns.0.x), fy = Double(k.columns.1.y)
-        let cx = Double(k.columns.2.x), cy = Double(k.columns.2.y)
-        guard (0..<3).allSatisfy({ column in (0..<3).allSatisfy { k[column][$0].isFinite } }), fx > 0, fy > 0 else {
-            result["lidarReason"] = "invalidIntrinsics"; return result
-        }
-        guard let center = vector(detection["center"], count: 2), center[0] >= 0, center[1] >= 0 else {
-            result["lidarReason"] = "invalidCenter"; return result
-        }
-        let optical = [(center[0]-cx)/fx*z, (center[1]-cy)/fy*z, z]
-        guard let range = length(optical) else { result["lidarReason"] = "invalidRange"; return result }
-        result["lidarRangeMeters"] = range; result["lidarAvailable"] = true; result["lidarReason"] = "valid"
-        if result["tagAvailable"] as? Bool == true, let tagRange = scalar(result["tagRangeMeters"]), tagRange > 0 {
-            let delta = abs(range-tagRange)
-            if delta.isFinite { result["distanceDeltaMeters"] = delta }
-        }
+        var depthObservation = TagDebugMath.coreDepthObservation(depth: scalar(depth["centerDepthMeters"]),
+                                                                 confidence: scalar(depth["centerConfidence"]))
+        let center = vector(detection["center"], count: 2)
+        var intrinsics = TagDebugMath.coreIntrinsics(context.intrinsics)
+        let ranges = afsc_camera_ranges(&pose, &depthObservation, &intrinsics, center == nil ? 0 : 1,
+                                       AFSCVec2(x: center?[0] ?? 0, y: center?[1] ?? 0))
+        result["tagDepthZMeters"] = TagDebugMath.coreValue(ranges.pose_z_m) as Any? ?? NSNull()
+        result["tagRangeMeters"] = TagDebugMath.coreValue(ranges.pose_range_m) as Any? ?? NSNull()
+        result["tagAvailable"] = ranges.pose_range_m.available != 0
+        result["tagReason"] = reason(ranges.pose_reason)
+        result["lidarDepthZMeters"] = TagDebugMath.coreValue(ranges.depth_z_m) as Any? ?? NSNull()
+        result["lidarRangeMeters"] = TagDebugMath.coreValue(ranges.depth_range_m) as Any? ?? NSNull()
+        result["lidarAvailable"] = ranges.depth_range_m.available != 0
+        result["lidarReason"] = reason(ranges.depth_reason)
+        result["distanceDeltaMeters"] = TagDebugMath.coreValue(ranges.range_difference_m) as Any? ?? NSNull()
         return result
     }
 
@@ -69,9 +61,15 @@ enum TagCameraRanges {
         let numbers = values.compactMap(scalar)
         return numbers.count == count ? numbers : nil
     }
-    private static func length(_ values: [Double]) -> Double? {
-        guard values.count == 3, values.allSatisfy(\.isFinite) else { return nil }
-        let range = hypot(hypot(values[0], values[1]), values[2])
-        return range.isFinite && range > 0 ? range : nil
+    private static func reason(_ value: AFSCRangeReason) -> String {
+        switch value {
+        case AFSC_RANGE_VALID: return "valid"
+        case AFSC_RANGE_MISSING_DEPTH: return "missingDepth"
+        case AFSC_RANGE_POSE_UNAVAILABLE: return "poseUnavailable"
+        case AFSC_RANGE_INVALID_CONFIDENCE: return "invalidConfidence"
+        case AFSC_RANGE_INVALID_INTRINSICS: return "invalidIntrinsics"
+        case AFSC_RANGE_INVALID_CENTER: return "invalidCenter"
+        default: return "invalidRange"
+        }
     }
 }

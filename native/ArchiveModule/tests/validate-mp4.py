@@ -7,6 +7,7 @@ recording-format/npm`. All movie/sensor fixtures are synthetic; no device access
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -19,6 +20,11 @@ import uuid
 REPOSITORY = Path(__file__).resolve().parents[3]
 TRACKS = ("afar.session", "afar.frames", "afar.events", "afar.files")
 MAX_BINARY_PACKET_BYTES = 1024 * 1024
+# Real AR-frame values require all 17 significant digits. Include adjacent
+# binary64 values and exponent extremes to catch NSNumber.stringValue rounding.
+PRECISE_NUMBERS = [0.38682788610458374, -0.11663296073675156,
+                   1.1928783112731773, math.nextafter(1.0, 2.0), math.pi,
+                   1.2345678901234568e-20, 5e-324, 1.7976931348623157e308]
 
 
 def run(arguments, *, cwd=None, accepted=(0,)):
@@ -60,7 +66,8 @@ def fixture(sessions, *, faststart):
     (source / "large-binary.bin").write_bytes((pattern * ((large_bytes + len(pattern) - 1) // len(pattern)))[:large_bytes])
     frames = [
         {"frameId": "frame-1", "segmentId": "segment-1", "timestamp": 12000.125,
-         "videoPTSSeconds": 0, "videoAppended": True, "tracking": "normal"},
+         "videoPTSSeconds": 0, "videoAppended": True, "tracking": "normal",
+         "precisionCases": PRECISE_NUMBERS},
         {"frameId": "frame-2", "segmentId": "segment-1", "timestamp": 12000.225,
          "videoPTSSeconds": 0.1, "videoAppended": False, "rgbImagePath": "frames/frame-2.jpg",
          "depthPath": "depth/frame-2.f32", "confidencePath": "depth/frame-2.confidence.u8",
@@ -72,7 +79,7 @@ def fixture(sessions, *, faststart):
         {"type": "bookmark", "frameId": "frame-2", "timestamp": 12000.225,
          "note": "Tag 4 — café 🦀\nyes: on\n---\ntrue", "rgbImagePath": "frames/frame-2.jpg"},
         {"type": "aprilTagDetections", "frameId": "frame-1", "timestamp": 12000.125,
-         "detections": [], "analysisSucceeded": True},
+         "detections": [], "analysisSucceeded": True, "precisionCases": PRECISE_NUMBERS},
     ]
     for name, records in (("frames.jsonl", frames), ("events.jsonl", events)):
         (source / name).write_text("".join(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n" for record in records), encoding="utf-8")
@@ -87,7 +94,7 @@ def fixture(sessions, *, faststart):
         "debugSettings": {"showPoseAxes": True, "showImperialHeight": False},
         "yamlScalarCases": {
             "strings": ["on", "true", "null", "3.14", "2026-11-22", "", "\\escape", '"quotes"'],
-            "numbers": [0, 1, -1, 1.25, 1e-7, 1e23],
+            "numbers": [0, 1, -1, 1.25, 1e-7, 1e23, *PRECISE_NUMBERS],
             "emptyObject": {}, "emptyArray": [],
             "a: b": "value", "? key": "value", "line\nbreak": "value",
         },
@@ -180,6 +187,23 @@ process.stdout.write(JSON.stringify(info));""", npm_module, movie, restored)
         return run(["ffmpeg", "-v", "error", "-i", location, "-map", "0:v:0", "-c", "copy", "-f", "hash", "-hash", "sha256", "-"])
     assert video_hash(movie) == video_hash(source / "rgb.mp4")
     compare_inspection(source, movie)
+
+    # Legacy capture correction belongs only in the active track header. The
+    # source prefix and every original file must still restore byte-for-byte.
+    rotated_result = json.loads(run([executable, "export", sessions, source, exports,
+                                     "[0,1,-1,0,48,0]"]))
+    rotated = Path(rotated_result["path"])
+    rotation = json.loads(run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                              "-show_entries", "stream_side_data=rotation,displaymatrix",
+                              "-of", "json", rotated]))["streams"][0]["side_data_list"][0]
+    assert rotation["rotation"] == -90, "Playback transform did not rotate sensor pixels clockwise"
+    assert rotated.read_bytes()[:len(originals["rgb.mp4"])] == movie.read_bytes()[:len(originals["rgb.mp4"])]
+    rotated_restored = case / "rotated-restored"
+    node_json(node, """const api = await import(process.argv[1]);
+const result = await api.unpackRecording(process.argv[2], process.argv[3]);
+process.stdout.write(JSON.stringify(result));""", npm_module, rotated, rotated_restored)
+    assert file_payloads(rotated_restored) == originals, "Playback rotation changed original source bytes"
+    assert video_hash(rotated) == video_hash(source / "rgb.mp4")
     if not faststart:
         print(run([executable, "check", sessions, source, exports]).strip())
         empty_source = sessions / str(uuid.uuid4()).upper()

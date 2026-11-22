@@ -2,7 +2,7 @@
 
 This folder defines the single-file export for April Fools AR. The MP4 keeps its clean camera video and carries readable **YAML** metadata plus the original images and numeric sensor files. A recipient can inspect the metadata with stock FFmpeg, without an npm package, Rust library, or app installation.
 
-**Status: version 1, adopted for app exports.** The iOS app records durable session folders and exports them with the native streaming MP4 writer. The video stays free of burned-in tag outlines, measurements and other screen graphics; their recorded geometry stays available for later processing. A normal player shows the camera video. Offline overlay playback is not yet implemented. Real-device playback and metadata retention through particular sharing destinations remain acceptance checks.
+**Status: version 1, adopted for app exports.** The iOS app records durable session folders and automatically saves a complete MP4 with the native streaming writer when recording stops. Play previews that saved file; Share sends the same file. The video stays free of burned-in tag outlines, measurements and other screen graphics; their recorded geometry stays available for later processing. A normal player shows the camera video. Offline overlay playback is not yet implemented. Device playback and metadata retention through particular sharing destinations require acceptance checks.
 
 ## Files in this folder
 

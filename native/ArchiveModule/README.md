@@ -1,32 +1,35 @@
-# Native self-contained MP4 export
+# Saved MP4 recordings and native playback
 
-`ArchiveModule.swift`, `SessionMP4Writer.swift` and `ArchiveModuleBridge.m` belong to the iOS app target. `scripts/configure-ios.rb` includes them automatically. Do not add `tests/` to the app. The module uses Foundation and CryptoKit without an additional runtime package or server.
+Stopping a recording finalizes the source capture and automatically creates a durable, self-contained MP4 under `Documents/AprilFoolsAR/recordings/<session UUID>.mp4`. Saved sessions offers **Play** and **Share**. Both use that same file; sharing does not make another temporary export on every tap. Play uses native AVKit controls and releases its player on dismissal. The capture view is detached while Saved sessions is open.
 
-The existing bridge method name is retained:
+`SavedRecordingStore` publishes the MP4 atomically, followed by a small receipt containing the original manifest SHA, artifact SHA and file identity. Interrupted/failed packaging preserves the raw session folder and can be retried with Play or Share. Legacy sessions are prepared on first use, with orientation inferred from the first frame. A cross-process file lock serializes publication and permits cleanup of abandoned private staging directories. Listing sessions does not read entire movies or wait on packaging.
+
+Source folders under `Documents/AprilFoolsAR/sessions/` remain immutable recovery/analysis copies. This currently uses extra disk space. They are not discarded automatically. A capture with no completed video remains unfinalized; it cannot be misreported as ready to play.
+
+The bridge keeps `archiveSession(folderPath)` for compatibility but now returns the persistent file. `previewSession(folderPath)` prepares that file if necessary, verifies playability and presents it. Its promise settles when playback is dismissed; concurrent presentation attempts are rejected.
 
 ```ts
-const {url, path, bytes, format, mimeType} =
-  await NativeModules.ArchiveModule.archiveSession(folderPath);
-// url: local file:// URL for the share sheet
-// format: "mp4"; mimeType: "video/mp4"
+const recording = await NativeModules.ArchiveModule.archiveSession(folderPath);
+// recording: {url, path, bytes, format: "mp4", mimeType: "video/mp4"}
+await NativeModules.ArchiveModule.previewSession(folderPath);
 ```
 
-Call the capture module's `exportSession(id)` first and pass its finalized `folderPath`. The writer accepts only one direct UUID directory inside `Documents/AprilFoolsAR/sessions/`. It requires a finalized manifest and verifies the original file inventory; it does not rewrite or finalize source recordings.
+Call `ARCaptureEngine.exportSession(id)` first to validate the finalized folder. Only direct UUID session directories are accepted. No library package or backend is needed for playback.
 
-Exports run on a background serial queue and appear under `Caches/AprilFoolsAR/exports/` with a unique `.mp4` filename. Failed partial outputs are removed. Completed exports remain available until iOS evicts caches. Original session folders remain untouched, including recordings created before this export format was added.
+The video retains original H.264 image samples. New captures set the track's display transform from the first frame and lock that display orientation for the movie. Screen crop/zoom is not burned into the video. Legacy source orientation can be corrected in the final MP4's active video track while its original movie still restores byte-for-byte. The optional declared transform permits only exact quarter-turn matrices; the reader continues checking every other box and every payload hash.
 
-The MP4 carries the original clean H.264 video, three readable YAML tracks and a TAR track with the original sidecar files. Live overlays stay separate from the video pixels. The exporter preserves the original movie's sample bytes and allows the npm extractor to restore the complete original movie file byte-for-byte. See [the format contract](../../recording-format/FORMAT.md) and [FFmpeg extraction commands](../../recording-format/README.md).
+Metadata numbers are emitted with JSON scalar serialization (valid YAML 1.2), preserving binary64 round trips. The old NSNumber display-string conversion lost precision in real AR camera matrices and has been removed.
 
-Binary files are streamed in 64 KiB chunks. Metadata has explicit parsing/serialization bounds. Source/export sizes must stay below 4 GiB, with at most 65,534 entries, source JSON/JSONL files limited to 16 MiB and generated YAML/moov payloads limited to 64 MiB. Unsupported movie layouts, unsafe paths, symbolic links and changed source files reject rather than producing a partial recording. An export needs additional cache storage roughly equal to its complete size. Bridge failures reject as `session_export_failed`.
-
-## Validation without a device
+Validation:
 
 ```sh
 npm ci --prefix recording-format/npm
-python3 native/ArchiveModule/tests/validate-mp4.py
 npm --prefix recording-format/npm test
+python3 native/ArchiveModule/tests/validate-mp4.py
+python3 native/ArchiveModule/tests/validate-saved-recording.py
+ruby native/ARCapture/tests/run-build-info-tests.rb --device-id <dedicated-simulator-id>
 ```
 
-The native suite compiles the Foundation/CryptoKit writer with a standalone Swift harness, generates synthetic H.264/JPEG/depth recordings, checks normal and fast-start source movies, extracts YAML/TAR through stock FFmpeg, and restores every original byte with the npm reader. It also checks unchanged video sample hashes and rejection/cleanup paths. Swift, FFmpeg/FFprobe, Node 22+ and standard `tar` are required. No simulator or physical device is used by this suite. Production bridge registration is checked by the app build; real-device playback and sharing remain separate acceptance checks.
+The first two native scripts run on macOS without a device. They cover numeric precision, orientation, exact restoration, interrupted publication, concurrent reuse, path checks and retry. Simulator tests cover the player lifecycle, orientation calculation, and empty-capture handling. Physical playback, new recording and sharing remain separate checks.
 
-`SessionZIPWriter.swift` and its original standalone validation harness remain as legacy implementation code. App export calls the MP4 writer; existing ZIP recordings remain readable by `scripts/inspect-session.py`.
+See [container format](../../recording-format/FORMAT.md). `SessionZIPWriter` remains legacy code; the current app shares MP4 files.

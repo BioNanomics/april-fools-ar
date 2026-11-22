@@ -12,6 +12,7 @@ fileprivate struct SpatialRenderSnapshot {
     let measurements: [SpatialMeasurement]
     let pendingPoints: [SIMD3<Float>]
     let selectedFloorID: String?
+    let pendingSelectedFloorID: String?
     let isTrackingNormal: Bool
     let cameraToWorld: simd_float4x4
     let intrinsics: simd_float3x3
@@ -124,10 +125,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         captureQueue.async {
             self.session = arSession; self.invalidateAprilTags()
             let enabled = self.debugMode, zoom = self.displayZoom, mode = self.previewMode
+            let hideTags = mode != "camera" || (!enabled && self.spatialState.mode == .selectFloor)
             DispatchQueue.main.async {
                 view.setDebugMode(enabled); view.setDisplayZoom(zoom)
                 view.depthView.isHidden = mode == "camera"
-                view.tagOverlay.isHidden = mode != "camera"
+                view.tagOverlay.isHidden = hideTags
             }
         }
         guard ARWorldTrackingConfiguration.isSupported else {
@@ -230,6 +232,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     func applyMeasuredTagSize(completion: @escaping (Result<[String: Any], Error>) -> Void) {
         captureQueue.async {
             do {
+                guard self.spatialState.mode != .selectFloor, self.spatialState.floor != nil else { throw CaptureError.message("Finish floor setup with Done before measuring tag width.") }
                 let distance = self.worldPoints.count == 2 ? Double(simd_length(self.worldPoints[1] - self.worldPoints[0])) : nil
                 let age = self.latestFrame.map { ProcessInfo.processInfo.systemUptime - $0.timestamp } ?? .infinity
                 let width = try TagDebugMath.measuredTagSize(points: self.points, worldDistance: distance, segmentID: self.segment, tracking: self.tracking, frameAgeSeconds: age)
@@ -255,13 +258,18 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     func setDebugMode(_ enabled: Bool, completion: @escaping ([String: Any]) -> Void) {
         captureQueue.async {
             self.debugMode = enabled
+            if !enabled, self.spatialState.floor == nil, self.spatialState.mode != .selectFloor {
+                self.spatialState.setMode(self.spatialState.requestedMode); self.clearPoints()
+            }
             if enabled { self.previewMode = "camera" }
+            self.prepareFloorSetupPresentation()
             self.invalidateAprilTags()
             self.renderSpatial()
+            let preview = self.previewMode, hideTags = !enabled && self.spatialState.mode == .selectFloor
             DispatchQueue.main.async {
                 self.host?.setDebugMode(enabled)
-                self.host?.depthView.isHidden = self.previewMode == "camera"
-                self.host?.tagOverlay.isHidden = self.previewMode != "camera"
+                self.host?.depthView.isHidden = preview == "camera"
+                self.host?.tagOverlay.isHidden = preview != "camera" || hideTags
             }
             self.emitStatus(force: true); completion(self.status())
         }
@@ -277,10 +285,12 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     func setPreviewMode(_ mode: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         captureQueue.async {
             guard ["camera", "depth", "confidence"].contains(mode) else { completion(.failure(CaptureError.message("Preview must be camera, depth, or confidence."))); return }
-            self.previewMode = mode; self.lastDepthPreviewTime = 0
+            let actual = self.spatialState.mode == .selectFloor ? "camera" : mode
+            self.previewMode = actual; self.lastDepthPreviewTime = 0
+            let hideTags = !self.debugMode && self.spatialState.mode == .selectFloor
             DispatchQueue.main.async {
-                self.host?.depthView.isHidden = mode == "camera"
-                self.host?.tagOverlay.isHidden = mode != "camera"
+                self.host?.depthView.isHidden = actual == "camera"
+                self.host?.tagOverlay.isHidden = actual != "camera" || hideTags
             }
             self.emitStatus(); completion(.success(self.status()))
         }
@@ -312,14 +322,16 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         captureQueue.async {
             guard let requested = SpatialMode(rawValue: mode) else { completion(.failure(CaptureError.message("Unknown measurement mode."))); return }
             self.spatialState.setMode(requested); self.clearPoints()
-            if self.spatialState.mode == .selectFloor { self.showFloorPlanes = true }
+            self.prepareFloorSetupPresentation()
+            if self.spatialState.mode == .selectFloor { self.invalidateAprilTags() }
             self.lastError = nil; self.renderSpatial(); self.emitStatus(force: true); completion(.success(self.status()))
         }
     }
 
     func setFloorVisible(_ visible: Bool, completion: @escaping ([String: Any]) -> Void) {
         captureQueue.async {
-            self.showFloorPlanes = visible; self.renderSpatial(); self.emitStatus(force: true); completion(self.status())
+            self.showFloorPlanes = self.spatialState.mode == .selectFloor ? true : visible
+            self.renderSpatial(); self.emitStatus(force: true); completion(self.status())
         }
     }
 
@@ -330,12 +342,30 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                       let frame = self.latestFrame else { throw CaptureError.message("Choose Set floor, then tap a visible horizontal surface.") }
                 self.updateFloorCandidates(frame)
                 guard let plane = self.floorCandidates.first(where: { $0.id == id }) else { throw CaptureError.message("That surface is no longer a current floor candidate.") }
-                try self.spatialState.confirmFloor(plane, tracking: self.tracking, frameAgeSeconds: self.frameAge(frame))
+                try self.spatialState.selectFloorCandidate(plane, tracking: self.tracking, frameAgeSeconds: self.frameAge(frame))
                 self.clearPoints()
-                self.invalidateAprilTags() // Clear heights and reject in-flight results using the previous floor datum.
-                self.recorder?.event(["type": "floorConfirmed", "segmentId": self.segment, "timestamp": frame.timestamp, "frameId": self.frameID, "floor": self.confirmedFloorDictionary() as Any? ?? NSNull()])
+                self.recorder?.event(["type": "floorCandidateSelected", "segmentId": self.segment, "timestamp": frame.timestamp,
+                    "frameId": self.frameID, "candidate": plane.dictionary, "floorSetup": self.floorSetupStatus()])
                 self.lastError = nil; self.renderSpatial(); self.emitStatus(force: true)
             } catch { self.failMeasurement(error.localizedDescription) }
+        }
+    }
+
+    func completeFloorSetup(_ expectedCandidateID: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do {
+                guard let frame = self.latestFrame else { throw CaptureError.message("Wait for live camera frames before finishing floor setup.") }
+                self.updateFloorCandidates(frame)
+                let setup = self.floorSetupStatus()
+                let age = self.spatialState.candidate.map { ProcessInfo.processInfo.systemUptime-$0.timestamp } ?? .infinity
+                try self.spatialState.completeFloorSetup(expectedCandidateID: expectedCandidateID, tracking: self.tracking, frameAgeSeconds: age)
+                self.clearPoints(); self.invalidateAprilTags()
+                self.recorder?.event(["type": "floorConfirmed", "segmentId": self.segment, "timestamp": frame.timestamp,
+                    "frameId": self.frameID, "floor": self.confirmedFloorDictionary() as Any? ?? NSNull(), "floorSetup": setup])
+                let hideTags = self.previewMode != "camera"
+                DispatchQueue.main.async { self.host?.tagOverlay.isHidden = hideTags }
+                self.lastError = nil; self.renderSpatial(); self.emitStatus(force: true); completion(.success(self.status()))
+            } catch { self.lastError = error.localizedDescription; self.emitStatus(force: true); completion(.failure(error)) }
         }
     }
 
@@ -401,7 +431,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         captureQueue.async {
             guard let frame = self.latestFrame, let depth = frame.sceneDepth else { self.failMeasurement("Scene depth is not available at this point."); return }
             guard case .normal = frame.camera.trackingState else { self.failMeasurement("Wait for normal AR tracking before selecting points."); return }
-            guard self.spatialState.mode != .selectFloor else { self.failMeasurement("Tap a visible horizontal surface to confirm the floor first."); return }
+            guard self.spatialState.mode != .selectFloor, self.spatialState.floor != nil else { self.failMeasurement("Scan the floor and tap Done before measuring."); return }
             guard self.frameAge(frame) >= 0, self.frameAge(frame) <= 0.5 else { self.failMeasurement("Wait for a fresh camera frame before measuring."); return }
             let normalizedView = CGPoint(x: point.x / max(size.width, 1), y: point.y / max(size.height, 1))
             let baseDisplay = frame.displayTransform(for: orientation, viewportSize: size)
@@ -540,12 +570,15 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
     }
     private func beginSegment(reason: String) {
-        let oldSegment = segment, count = spatialState.completed.count
+        let oldSegment = segment, count = spatialState.completed.count, oldTimestamp = latestFrame?.timestamp ?? 0
         segment = UUID().uuidString; spatialState.reset(segmentID: segment); floorCandidates = []; clearPoints(); invalidateAprilTags()
+        minimumFrameTimestamp = max(minimumFrameTimestamp, ProcessInfo.processInfo.systemUptime)
+        latestFrame = nil; depthAvailable = false; tracking = "unavailable"; trackingReason = reason; lastTrackingKey = ""
+        prepareFloorSetupPresentation(refreshCandidates: false)
         spatialRenderLock.lock(); spatialRenderGeneration += 1; spatialRenderLock.unlock()
         renderSpatial(clear: true)
-        recorder?.event(["type": "measurementsInvalidated", "segmentId": oldSegment, "newSegmentId": segment, "reason": reason, "measurementCount": count, "timestamp": latestFrame?.timestamp ?? 0])
-        recorder?.event(["type": "segment", "segmentId": segment, "reason": reason, "timestamp": latestFrame?.timestamp ?? 0])
+        recorder?.event(["type": "measurementsInvalidated", "segmentId": oldSegment, "newSegmentId": segment, "reason": reason, "measurementCount": count, "timestamp": oldTimestamp])
+        recorder?.event(["type": "segment", "segmentId": segment, "reason": reason, "timestamp": oldTimestamp])
     }
     private func clearPoints() {
         spatialState.clearPending()
@@ -554,12 +587,29 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
     private func frameAge(_ frame: ARFrame) -> Double { ProcessInfo.processInfo.systemUptime - frame.timestamp }
     private func confirmedFloorDictionary() -> [String: Any]? {
+        guard spatialState.mode != .selectFloor else { return nil }
         guard var value = spatialState.floor?.dictionary else { return nil }
         value["operatorConfirmed"] = true
         return value
     }
+    private func floorSetupStatus() -> [String: Any] {
+        let age = spatialState.candidate.map { ProcessInfo.processInfo.systemUptime-$0.timestamp } ?? .infinity
+        return spatialState.floorSetupStatus(tracking: tracking, frameAgeSeconds: age)
+    }
+    private func prepareFloorSetupPresentation(refreshCandidates: Bool = true) {
+        guard spatialState.mode == .selectFloor else { return }
+        showFloorPlanes = true; previewMode = "camera"
+        if refreshCandidates, let frame = latestFrame { updateFloorCandidates(frame) }
+        let hideTags = !debugMode
+        DispatchQueue.main.async {
+            self.host?.depthView.isHidden = true
+            self.host?.tagOverlay.isHidden = hideTags
+            if hideTags { self.host?.clearAprilTagOverlay() }
+        }
+    }
     private func updateFloorCandidates(_ frame: ARFrame) {
-        floorCandidates = frame.anchors.compactMap { anchor -> SpatialPlane? in
+        let pendingID = spatialState.candidate?.id
+        var candidates = frame.anchors.compactMap { anchor -> SpatialPlane? in
             guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal else { return nil }
             let classification: String
             switch plane.classification {
@@ -589,13 +639,19 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             guard vertices.allSatisfy(SpatialMeasurementMath.finite) else { return nil }
             return SpatialPlane(id: plane.identifier.uuidString, classification: classification, origin: origin, normal: normal,
                 vertices: vertices, segmentID: segment, frameID: frameID, timestamp: frame.timestamp)
-        }.prefix(24).map { $0 }
+        }
+        if let pendingID, let index = candidates.firstIndex(where: { $0.id == pendingID }) {
+            candidates.insert(candidates.remove(at: index), at: 0)
+        }
+        floorCandidates = Array(candidates.prefix(24))
+        spatialState.updateCandidates(floorCandidates)
     }
     /// One pending main-queue delivery slot: newer frames replace geometry waiting to be displayed.
     private func renderSpatial(_ sourceFrame: ARFrame? = nil, clear: Bool = false) {
         let frame = sourceFrame ?? latestFrame
+        let setupActive = spatialState.mode == .selectFloor
         var planes = !debugMode && showFloorPlanes && !clear ? floorCandidates : []
-        if !planes.isEmpty || (!debugMode && showFloorPlanes && !clear) {
+        if !setupActive && (!planes.isEmpty || (!debugMode && showFloorPlanes && !clear)) {
             if let confirmed = spatialState.floor {
                 // Use the frozen datum actually used by height measurements, not later plane refinement.
                 planes.removeAll { $0.id == confirmed.id }; planes.insert(confirmed, at: 0)
@@ -606,9 +662,10 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         spatialRenderLock.lock()
         let snapshot = SpatialRenderSnapshot(generation: spatialRenderGeneration, mode: spatialState.mode,
             visible: !clear && spatialState.mode != .tagWidth, planes: planes,
-            measurements: clear ? [] : spatialState.completed,
-            pendingPoints: clear || spatialState.pending.count != 1 ? [] : spatialState.pending.map(\.world),
-            selectedFloorID: spatialState.floor?.id, isTrackingNormal: !clear && tracking == "normal",
+            measurements: clear || setupActive ? [] : spatialState.completed,
+            pendingPoints: clear || setupActive || spatialState.pending.count != 1 ? [] : spatialState.pending.map(\.world),
+            selectedFloorID: setupActive ? nil : spatialState.floor?.id,
+            pendingSelectedFloorID: setupActive ? spatialState.candidate?.id : nil, isTrackingNormal: !clear && tracking == "normal",
             cameraToWorld: frame?.camera.transform ?? matrix_identity_float4x4,
             intrinsics: frame?.camera.intrinsics ?? matrix_identity_float3x3,
             imageSize: frame?.camera.imageResolution ?? CGSize(width: 1, height: 1),
@@ -643,10 +700,12 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         value["displayZoom"] = displayZoom
         value["debugMode"] = debugMode
         let available = tracking == "normal" && latestFrame.map({ frameAge($0) <= 0.5 && frameAge($0) >= 0 }) == true
+        let floorUsable = spatialState.mode != .selectFloor && spatialState.floor != nil
         value["spatial"] = ["mode": spatialState.mode.rawValue, "showFloorPlanes": showFloorPlanes,
-            "floorSelected": spatialState.floor != nil, "floorId": spatialState.floor?.id as Any? ?? NSNull(),
-            "floorClassification": spatialState.floor?.classification as Any? ?? NSNull(), "measurementCount": spatialState.completed.count,
-            "pendingCount": spatialState.pending.count, "candidateCount": floorCandidates.count, "available": available, "valid": available,
+            "floorSelected": floorUsable, "floorId": floorUsable ? spatialState.floor!.id as Any : NSNull(),
+            "floorClassification": floorUsable ? spatialState.floor!.classification as Any : NSNull(), "measurementCount": spatialState.completed.count,
+            "pendingCount": spatialState.pending.count, "candidateCount": floorCandidates.count, "available": available && floorUsable, "valid": available && floorUsable,
+            "floorSetup": floorSetupStatus(),
             "lastMeasurement": spatialState.completed.last?.dictionary as Any? ?? NSNull()]
         var selectedDebug = selectedTagDebug()
         if let timestamp = lastTagResultTimestamp { selectedDebug?["ageSeconds"] = max(0, ProcessInfo.processInfo.systemUptime - timestamp) }
@@ -681,7 +740,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let settings = debugSettings, sourceTracking = tracking
         let k = frame.camera.intrinsics
-        let sourceFloor = spatialState.floor, sourceCameraToWorld = frame.camera.transform
+        let sourceFloor = spatialState.mode == .selectFloor ? nil : spatialState.floor
+        let sourceCameraToWorld = frame.camera.transform
         let poseIntrinsics = [Double(k.columns.0.x), Double(k.columns.1.y), Double(k.columns.2.x), Double(k.columns.2.y)]
         let depthBuffer = frame.sceneDepth?.depthMap, confidenceBuffer = frame.sceneDepth?.confidenceMap
         let display = frame.displayTransform(for: orientation, viewportSize: viewport)
@@ -773,6 +833,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         latestTagDetections.first(where: { ($0["id"] as? NSNumber)?.intValue == selectedTagID })?["debug"] as? [String: Any]
     }
     private func renderTagDebug() {
+        guard debugMode || spatialState.mode != .selectFloor else {
+            DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }; return
+        }
         guard let frameID = tagResultFrameID, let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp <= 0.4 else {
             DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }; return
         }
@@ -960,7 +1023,8 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         spatialOverlay.show(planes: snapshot.planes, measurements: snapshot.measurements, pendingPoints: snapshot.pendingPoints,
             selectedFloorID: snapshot.selectedFloorID, isTrackingNormal: snapshot.isTrackingNormal && age >= 0 && age <= 0.5,
             cameraToWorld: snapshot.cameraToWorld, intrinsics: snapshot.intrinsics, imageSize: snapshot.imageSize,
-            displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5, showImperialHeight: snapshot.showImperialHeight)
+            displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5, showImperialHeight: snapshot.showImperialHeight,
+            pendingSelectedFloorID: snapshot.pendingSelectedFloorID)
     }
     func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
     func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, showImperialHeight: Bool = true) {

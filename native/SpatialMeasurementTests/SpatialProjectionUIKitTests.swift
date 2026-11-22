@@ -21,10 +21,11 @@ final class SpatialProjectionUIKitTests: XCTestCase {
     }
     private func show(_ overlay: SpatialMeasurementOverlayView, planes: [SpatialPlane] = [],
                       vectors: [SpatialMeasurement] = [], pending: [SIMD3<Float>] = [],
-                      selected: String? = nil, tracking: Bool = true, showImperial: Bool = true) {
+                      selected: String? = nil, tracking: Bool = true, showImperial: Bool = true, pendingFloor: String? = nil) {
         overlay.show(planes: planes, measurements: vectors, pendingPoints: pending,
             selectedFloorID: selected, isTrackingNormal: tracking, cameraToWorld: matrix_identity_float4x4,
-            intrinsics: k, imageSize: size, displayTransform: .identity, showImperialHeight: showImperial)
+            intrinsics: k, imageSize: size, displayTransform: .identity, showImperialHeight: showImperial,
+            pendingSelectedFloorID: pendingFloor)
     }
     private func assertInside(_ points: [CGPoint], file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertFalse(points.isEmpty, file: file, line: line)
@@ -97,7 +98,7 @@ final class SpatialProjectionUIKitTests: XCTestCase {
         XCTAssertNil(overlay.hitTest(CGPoint(x: 100, y: 100), with: nil))
         let labels = overlay.subviews.compactMap { $0 as? UILabel }
         XCTAssertEqual(labels.count, 3)
-        XCTAssertEqual(labels.first { $0.accessibilityIdentifier == "spatial.plane.floor-A" }?.accessibilityLabel, "Selected floor plane")
+        XCTAssertEqual(labels.first { $0.accessibilityIdentifier == "spatial.plane.floor-A" }?.accessibilityLabel, "Floor selected")
         XCTAssertTrue(labels.contains { $0.text?.contains("ΔY 0.400 m") == true })
         XCTAssertTrue(labels.contains { $0.accessibilityIdentifier == "spatial.pending.1" })
         for label in labels {
@@ -172,5 +173,21 @@ final class SpatialProjectionUIKitTests: XCTestCase {
         XCTAssertFalse(heightLabel.accessibilityValue?.contains(" ft ") == true)
         XCTAssertTrue(overlay.bounds.contains(heightLabel.frame))
         XCTAssertEqual(try JSONSerialization.data(withJSONObject: height.dictionary, options: [.sortedKeys]), original)
+    }
+
+    func testPendingCandidateRemainsProvisionalUntilConfirmedAndReusesItsRenderSlot() throws {
+        let overlay = SpatialMeasurementOverlayView(frame: CGRect(origin: .zero, size: size))
+        show(overlay, planes: [plane()], pendingFloor: "floor-A")
+        let label = try XCTUnwrap(overlay.subviews.compactMap { $0 as? UILabel }.first)
+        let shape = try XCTUnwrap(overlay.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
+        XCTAssertEqual(label.accessibilityLabel, "Selected floor candidate")
+        XCTAssertTrue(label.accessibilityValue?.lowercased().contains("provisional") == true)
+        XCTAssertTrue(label.accessibilityValue?.contains("Done") == true)
+        XCTAssertNotNil(shape.lineDashPattern)
+        XCTAssertEqual(overlay.floorPlaneID(at: CGPoint(x: 100, y: 100)), "floor-A")
+        show(overlay, planes: [plane()], selected: "floor-A")
+        XCTAssertTrue(overlay.subviews.compactMap { $0 as? UILabel }.first === label)
+        XCTAssertEqual(label.accessibilityLabel, "Floor selected")
+        XCTAssertNil(shape.lineDashPattern)
     }
 }

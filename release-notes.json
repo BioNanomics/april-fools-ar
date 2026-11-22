@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.3.1",
+      "build": "13",
+      "title": "Guided floor setup before measuring",
+      "changes": [
+        "Enter Measure through a guided floor scan, with live coverage feedback and an explicit Done confirmation.",
+        "Keep refining the selected floor candidate while scanning; freeze the latest plane only after Done.",
+        "Require a confirmed floor for manual distance, height and tag-width measurements, and repeat setup after tracking resets."
+      ]
+    },
+    {
       "version": "0.3.0",
       "build": "12",
       "title": "Compact multi-tag camera diagnostics",

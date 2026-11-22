@@ -19,7 +19,23 @@ final class SpatialMeasurementTests: XCTestCase {
         XCTAssertEqual(actual.y, expected.y, accuracy: 1e-5, file: file, line: line)
         XCTAssertEqual(actual.z, expected.z, accuracy: 1e-5, file: file, line: line)
     }
+    private func finishFloor(_ state: inout SpatialMeasurementState, plane supplied: SpatialPlane? = nil,
+                             requested: SpatialMode = .distance) throws {
+        let selected = supplied ?? plane()
+        state.setMode(requested)
+        state.updateCandidates([selected])
+        try state.selectFloorCandidate(selected, tracking: "normal", frameAgeSeconds: 0)
+        try state.completeFloorSetup(expectedCandidateID: selected.id, tracking: "normal", frameAgeSeconds: 0)
+    }
+    private func rectangle(_ width: Float, _ depth: Float, rotation: Float = 0, id: String = "floor-A",
+                           classification: String = "floor", segment: String = "segment-A", y: Float = 0) -> SpatialPlane {
+        let vertices: [SIMD3<Float>] = [[-width/2, y, -depth/2], [width/2, y, -depth/2], [width/2, y, depth/2], [-width/2, y, depth/2]]
+        return SpatialPlane(id: id, classification: classification, origin: [0, y, 0], normal: [0, 1, 0],
+            vertices: vertices.map { [cos(rotation)*$0.x-sin(rotation)*$0.z, y, sin(rotation)*$0.x+cos(rotation)*$0.z] },
+            segmentID: segment, frameID: "floor-frame", timestamp: 10)
+    }
     private func completeDistance(_ state: inout SpatialMeasurementState, offset: Float = 0) throws -> SpatialMeasurement {
+        if state.floor == nil { try finishFloor(&state) }
         state.setMode(.distance)
         XCTAssertNil(try state.append(point([offset, 0, -2]), tracking: "normal", frameAgeSeconds: 0.1))
         return try XCTUnwrap(state.append(point([offset + 3, 4, -2], frame: "frame-B"), tracking: "normal", frameAgeSeconds: 0.1))
@@ -45,23 +61,31 @@ final class SpatialMeasurementTests: XCTestCase {
         var state = SpatialMeasurementState(segmentID: "segment-A")
         state.setMode(.height)
         XCTAssertEqual(state.mode, .selectFloor)
+        state.updateCandidates([plane()])
         for tracking in ["limited", "unavailable"] {
-            XCTAssertThrowsError(try state.confirmFloor(plane(), tracking: tracking, frameAgeSeconds: 0))
+            XCTAssertThrowsError(try state.selectFloorCandidate(plane(), tracking: tracking, frameAgeSeconds: 0))
         }
         for age in [-0.01, 0.501, Double.nan, Double.infinity] {
-            XCTAssertThrowsError(try state.confirmFloor(plane(), tracking: "normal", frameAgeSeconds: age))
+            XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: "floor-A", tracking: "normal", frameAgeSeconds: age))
         }
         for rejected in [plane(segment: "old-segment"), plane(classification: "wall"), plane(classification: "table")] {
-            XCTAssertThrowsError(try state.confirmFloor(rejected, tracking: "normal", frameAgeSeconds: 0))
+            state.updateCandidates([rejected])
+            XCTAssertThrowsError(try state.selectFloorCandidate(rejected, tracking: "normal", frameAgeSeconds: 0))
+            XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: rejected.id, tracking: "normal", frameAgeSeconds: 0))
         }
         XCTAssertNil(state.floor)
-        try state.confirmFloor(plane(classification: "unclassified"), tracking: "normal", frameAgeSeconds: 0.5)
+        let selected = plane(classification: "unclassified")
+        state.updateCandidates([selected])
+        try state.selectFloorCandidate(selected, tracking: "normal", frameAgeSeconds: 0.5)
+        XCTAssertNil(state.floor,"A candidate tap cannot confirm the floor")
+        try state.completeFloorSetup(expectedCandidateID: selected.id, tracking: "normal", frameAgeSeconds: 0.5)
         XCTAssertEqual(state.mode, .height)
         XCTAssertEqual(state.floor?.id, "floor-A")
     }
 
     func testDepthPointsRejectUnknownConfidenceStaleFramesAndForeignSegmentsWithoutMutation() throws {
         var state = SpatialMeasurementState(segmentID: "segment-A")
+        try finishFloor(&state)
         let badPoints = [point([0, 1, -2], confidence: 0), point([0, 1, -2], confidence: 3),
             point([0, 1, -2], depth: 0), point([0, 1, -2], depth: .nan),
             point([0, 1, -2], segment: "old-segment"), point([.nan, 1, -2]),
@@ -97,7 +121,7 @@ final class SpatialMeasurementTests: XCTestCase {
 
     func testTransientTrackingClearAndExplicitClearHaveDifferentFloorLifetimeThanSegmentReset() throws {
         var state = SpatialMeasurementState(segmentID: "segment-A")
-        try state.confirmFloor(plane(), tracking: "normal", frameAgeSeconds: 0)
+        try finishFloor(&state, requested: .height)
         let saved = try completeDistance(&state)
         _ = try state.append(point([1, 1, -1]), tracking: "normal", frameAgeSeconds: 0)
         // Coordinator clears only pending points when tracking becomes limited.
@@ -132,7 +156,7 @@ final class SpatialMeasurementTests: XCTestCase {
 
     func testHeightSnapshotSerializesFrozenFloorAndSourceProvenance() throws {
         var state = SpatialMeasurementState(segmentID: "segment-A")
-        try state.confirmFloor(plane(normal: [-0.1, 1, -0.2]), tracking: "normal", frameAgeSeconds: 0)
+        try finishFloor(&state, plane: plane(normal: [-0.1, 1, -0.2]), requested: .height)
         let measurement = try XCTUnwrap(state.append(point([2, 3, 4], frame: "target-frame"), tracking: "normal", frameAgeSeconds: 0))
         XCTAssertEqual(measurement.kind, "height")
         XCTAssertEqual(measurement.verticalMeters, 2, accuracy: 1e-5)
@@ -155,5 +179,105 @@ final class SpatialMeasurementTests: XCTestCase {
         state.clearMeasurements()
         state.reset(segmentID: "segment-B")
         XCTAssertEqual(try JSONSerialization.data(withJSONObject: measurement.dictionary, options: [.sortedKeys]), encoded)
+    }
+
+    func testEveryManualModeRequiresDoneEvenAfterAValidCandidateTap() throws {
+        for requested in [SpatialMode.distance, .height, .tagWidth] {
+            var state = SpatialMeasurementState(segmentID: "segment-A")
+            state.setMode(requested)
+            XCTAssertEqual(state.mode, .selectFloor)
+            XCTAssertEqual(state.requestedMode, requested)
+            XCTAssertThrowsError(try state.append(point([0, 1, -2]), tracking: "normal", frameAgeSeconds: 0))
+            state.updateCandidates([plane()])
+            try state.selectFloorCandidate(plane(), tracking: "normal", frameAgeSeconds: 0)
+            XCTAssertNil(state.floor)
+            XCTAssertTrue(state.pending.isEmpty)
+            XCTAssertThrowsError(try state.append(point([0, 1, -2]), tracking: "normal", frameAgeSeconds: 0))
+            try state.completeFloorSetup(expectedCandidateID: "floor-A", tracking: "normal", frameAgeSeconds: 0)
+            XCTAssertEqual(state.mode, requested)
+            XCTAssertNotNil(state.floor)
+            XCTAssertNoThrow(try state.append(point([0, 1, -2]), tracking: "normal", frameAgeSeconds: 0))
+        }
+    }
+
+    func testCoverageRejectsSmallAreaAndRotatedNarrowStripsButAcceptsExactBoundary() throws {
+        for (candidate, reason) in [(rectangle(0.9, 0.9), "insufficientArea"),
+            (rectangle(0.4, 3), "insufficientSpan"), (rectangle(0.1, 10, rotation: .pi/4), "insufficientSpan")] {
+            var state = SpatialMeasurementState(segmentID: "segment-A")
+            state.updateCandidates([candidate])
+            XCTAssertEqual(state.floorSetupStatus(tracking: "normal", frameAgeSeconds: 0)["reason"] as? String, reason)
+            XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: candidate.id, tracking: "normal", frameAgeSeconds: 0))
+            XCTAssertNil(state.floor)
+        }
+        let rotated = SpatialMeasurementMath.floorCoverage(rectangle(0.1, 10, rotation: .pi/4))
+        XCTAssertEqual(rotated.areaSquareMeters, 1, accuracy: 1e-5)
+        XCTAssertEqual(rotated.minSpanMeters, 0.1, accuracy: 1e-5)
+        var state = SpatialMeasurementState(segmentID: "segment-A")
+        let exact = rectangle(0.5, 2)
+        state.updateCandidates([exact])
+        XCTAssertEqual(state.floorSetupStatus(tracking: "normal", frameAgeSeconds: 0)["ready"] as? Bool, true)
+        try state.completeFloorSetup(expectedCandidateID: exact.id, tracking: "normal", frameAgeSeconds: 0)
+        XCTAssertNotNil(state.floor)
+    }
+
+    func testCandidateGeometryRefinesUntilDoneThenTheConfirmedSnapshotIsImmutable() throws {
+        var state = SpatialMeasurementState(segmentID: "segment-A")
+        state.setMode(.height)
+        state.updateCandidates([rectangle(0.5, 0.5)])
+        XCTAssertNil(state.floor)
+        XCTAssertEqual(state.floorSetupStatus(tracking: "normal", frameAgeSeconds: 0)["ready"] as? Bool, false)
+        let refined = rectangle(2, 2)
+        state.updateCandidates([refined])
+        XCTAssertEqual(state.candidate?.vertices.count, 4)
+        XCTAssertEqual(state.floorSetupStatus(tracking: "normal", frameAgeSeconds: 0)["areaSquareMeters"] as? Double, 4)
+        try state.completeFloorSetup(expectedCandidateID: refined.id, tracking: "normal", frameAgeSeconds: 0)
+        let frozen = try JSONSerialization.data(withJSONObject: XCTUnwrap(state.floor).dictionary, options: [.sortedKeys])
+        state.updateCandidates([rectangle(4, 4, y: 0.3)])
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject: XCTUnwrap(state.floor).dictionary, options: [.sortedKeys]), frozen)
+        XCTAssertEqual(state.mode, .height)
+        state.setMode(.distance)
+        XCTAssertEqual(state.mode, .distance,"A completed floor is reused without scanning again")
+        state.setMode(.selectFloor)
+        XCTAssertThrowsError(try state.append(point([0, 1, -2]), tracking: "normal", frameAgeSeconds: 0),
+            "Rescanning cannot create endpoints even while an older confirmed floor exists")
+    }
+
+    func testAutomaticSelectionIsStableAndManualUnclassifiedSelectionNeverSilentlySwitches() throws {
+        var state = SpatialMeasurementState(segmentID: "segment-A")
+        let small = rectangle(1, 1, id: "small"), large = rectangle(2, 2, id: "large")
+        let unclassified = rectangle(3, 3, id: "manual", classification: "unclassified")
+        state.updateCandidates([small, large, unclassified])
+        XCTAssertEqual(state.candidate?.id, "large")
+        XCTAssertEqual(state.candidateSelectionSource, "automatic")
+        state.updateCandidates([rectangle(4, 4, id: "small"), large, unclassified])
+        XCTAssertEqual(state.candidate?.id, "large","An automatically selected current ID must not bounce as other planes grow")
+        try state.selectFloorCandidate(unclassified, tracking: "normal", frameAgeSeconds: 0)
+        XCTAssertEqual(state.candidate?.id, "manual")
+        XCTAssertEqual(state.candidateSelectionSource, "manual")
+        state.updateCandidates([small, large])
+        XCTAssertNil(state.candidate,"A lost manual choice cannot silently become a different floor")
+        XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: "manual", tracking: "normal", frameAgeSeconds: 0))
+        var fallback = SpatialMeasurementState(segmentID: "segment-A")
+        fallback.updateCandidates([unclassified])
+        XCTAssertNil(fallback.candidate,"Unclassified surfaces need an explicit tap")
+    }
+
+    func testDoneRejectsChangedCandidateIDLostCandidateAndLimitedTracking() throws {
+        var state = SpatialMeasurementState(segmentID: "segment-A")
+        let first = rectangle(2, 2, id: "first"), next = rectangle(3, 3, id: "next")
+        state.updateCandidates([first])
+        state.updateCandidates([next])
+        XCTAssertEqual(state.candidate?.id, "next")
+        XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: "first", tracking: "normal", frameAgeSeconds: 0))
+        XCTAssertEqual(state.floorSetupStatus(tracking: "limited", frameAgeSeconds: 0)["ready"] as? Bool, false)
+        XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: "next", tracking: "limited", frameAgeSeconds: 0))
+        XCTAssertNil(state.floor)
+        state.updateCandidates([])
+        XCTAssertThrowsError(try state.completeFloorSetup(expectedCandidateID: "next", tracking: "normal", frameAgeSeconds: 0))
+        state.reset(segmentID: "segment-B")
+        state.updateCandidates([next])
+        XCTAssertNil(state.candidate)
+        XCTAssertNil(state.floor)
+        XCTAssertEqual(state.mode, .selectFloor)
     }
 }

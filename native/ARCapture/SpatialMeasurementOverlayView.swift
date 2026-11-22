@@ -65,15 +65,19 @@ final class SpatialMeasurementOverlayView: UIView {
     /// displayTransform already includes display magnification exactly once, like the tag renderer.
     func show(planes: [SpatialPlane], measurements: [SpatialMeasurement], pendingPoints: [SIMD3<Float>],
               selectedFloorID: String?, isTrackingNormal: Bool, cameraToWorld: simd_float4x4,
-              intrinsics: simd_float3x3, imageSize: CGSize, displayTransform: CGAffineTransform, expiresAt: Double? = nil, showImperialHeight: Bool = true) {
+              intrinsics: simd_float3x3, imageSize: CGSize, displayTransform: CGAffineTransform, expiresAt: Double? = nil, showImperialHeight: Bool = true,
+              pendingSelectedFloorID: String? = nil) {
         let deadline = expiresAt ?? (ProcessInfo.processInfo.systemUptime + 0.5)
         guard deadline.isFinite, deadline > ProcessInfo.processInfo.systemUptime,
               isTrackingNormal, let camera = SpatialProjection.Camera(cameraToWorld: cameraToWorld,
               intrinsics: intrinsics, imageSize: imageSize, displayTransform: displayTransform, viewportSize: bounds.size) else { clear(); return }
         armExpiry(at: deadline)
         var planeGeometry = [(SpatialPlane, [CGPoint])]()
-        // Prioritize the operator-confirmed plane when the candidate budget is full.
-        let candidates = planes.sorted { ($0.id == selectedFloorID ? 0 : 1) < ($1.id == selectedFloorID ? 0 : 1) }.prefix(24)
+        // Preserve both confirmed and selected provisional planes when the candidate budget is full.
+        func priority(_ plane: SpatialPlane) -> Int {
+            plane.id == selectedFloorID ? 0 : (plane.id == pendingSelectedFloorID ? 1 : 2)
+        }
+        let candidates = planes.sorted { priority($0) < priority($1) }.prefix(24)
         for plane in candidates {
             let polygon = camera.polygon(plane.vertices)
             guard polygon.count >= 3 else { continue }
@@ -106,19 +110,21 @@ final class SpatialMeasurementOverlayView: UIView {
         for (index, geometry) in planeGeometry.enumerated() {
             let (plane, polygon) = geometry, slot = planeSlots[index]
             let selected = plane.id == selectedFloorID
-            let confirmed = selected || plane.classification.lowercased() == "floor"
-            let title = confirmed ? "Floor" : "Horizontal surface"
-            let color: UIColor = selected ? .systemCyan : (confirmed ? .systemTeal : .systemMint)
+            let pendingSelected = !selected && plane.id == pendingSelectedFloorID
+            let classifiedFloor = plane.classification.lowercased() == "floor"
+            let title = selected ? "Floor selected" : (pendingSelected ? "Floor candidate · scan to refine" : (classifiedFloor ? "Floor candidate" : "Horizontal surface"))
+            let color: UIColor = selected ? .systemCyan : (pendingSelected ? .systemOrange : (classifiedFloor ? .systemTeal : .systemMint))
             let path = UIBezierPath(); path.move(to: polygon[0])
             polygon.dropFirst().forEach { path.addLine(to: $0) }; path.close()
             slot.shape.path = path.cgPath; slot.shape.strokeColor = color.withAlphaComponent(0.8).cgColor
-            slot.shape.fillColor = color.withAlphaComponent(selected ? 0.15 : 0.06).cgColor
-            slot.shape.lineDashPattern = confirmed ? nil : [5, 4]
-            slot.label.text = selected ? " Floor · selected " : " \(title) "
+            slot.shape.fillColor = color.withAlphaComponent(selected || pendingSelected ? 0.15 : 0.06).cgColor
+            slot.shape.lineWidth = selected || pendingSelected ? 2.5 : 1.5
+            slot.shape.lineDashPattern = selected ? nil : [5, 4]
+            slot.label.text = " \(title) "
             slot.label.textColor = color
             slot.label.accessibilityIdentifier = "spatial.plane.\(plane.id)"
-            slot.label.accessibilityLabel = selected ? "Selected floor plane" : (confirmed ? "Detected floor plane" : "Horizontal surface candidate")
-            slot.label.accessibilityValue = "ID \(plane.id)"
+            slot.label.accessibilityLabel = selected ? "Floor selected" : (pendingSelected ? "Selected floor candidate" : (classifiedFloor ? "Detected floor candidate" : "Horizontal surface candidate"))
+            slot.label.accessibilityValue = selected ? "ID \(plane.id). Confirmed floor datum." : (pendingSelected ? "ID \(plane.id). Provisional selection. Continue scanning to refine, then choose Done to confirm." : "ID \(plane.id). Not confirmed.")
             let center = polygon.reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
             place(slot.label, near: CGPoint(x: center.x / CGFloat(polygon.count), y: center.y / CGFloat(polygon.count)))
             floorHitPaths.append((plane.id, path))

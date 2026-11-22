@@ -52,6 +52,23 @@ struct SpatialMeasurement {
 enum SpatialMeasurementMath {
     static func array(_ point: SIMD3<Float>) -> [Double] { [Double(point.x), Double(point.y), Double(point.z)] }
     static func finite(_ point: SIMD3<Float>) -> Bool { point.x.isFinite && point.y.isFinite && point.z.isFinite }
+    /// Horizontal coverage, with a rotation-invariant minimum width to reject long narrow strips.
+    static func floorCoverage(_ plane: SpatialPlane) -> (areaSquareMeters: Double, minSpanMeters: Double) {
+        guard plane.vertices.count >= 3, plane.vertices.allSatisfy(finite), let origin = plane.vertices.first else { return (0, 0) }
+        let vertices = plane.vertices.map { SIMD2<Double>(Double($0.x)-Double(origin.x), Double($0.z)-Double(origin.z)) }
+        var twiceArea = 0.0, width = Double.infinity
+        for index in vertices.indices {
+            let a = vertices[index], b = vertices[(index+1) % vertices.count]
+            twiceArea += a.x*b.y-b.x*a.y
+            let edge = b-a, length = simd_length(edge)
+            guard length.isFinite, length > 1e-8 else { continue }
+            let normal = SIMD2<Double>(-edge.y/length, edge.x/length)
+            let projections = vertices.map { simd_dot($0, normal) }
+            if let low = projections.min(), let high = projections.max() { width = min(width, high-low) }
+        }
+        let area = abs(twiceArea)/2
+        return area.isFinite && width.isFinite ? (area, max(0, width)) : (0, 0)
+    }
     static func validate(tracking: String, frameAgeSeconds: Double) throws {
         guard tracking == "normal", frameAgeSeconds.isFinite, frameAgeSeconds >= 0, frameAgeSeconds <= 0.5 else {
             throw SpatialError.invalid("Wait for fresh frames and normal tracking before measuring.")
@@ -77,7 +94,12 @@ enum SpatialMeasurementMath {
 
 struct SpatialMeasurementState {
     private(set) var segmentID: String
-    private(set) var mode = SpatialMode.distance
+    private(set) var mode = SpatialMode.selectFloor
+    private(set) var requestedMode = SpatialMode.distance
+    private(set) var candidate: SpatialPlane?
+    private(set) var candidateSelectionSource = "none"
+    private var currentCandidates = [String: SpatialPlane]()
+    private var manualCandidateID: String?
     private(set) var pending = [SpatialPoint]()
     private(set) var completed = [SpatialMeasurement]()
     private(set) var floor: SpatialPlane?
@@ -87,17 +109,69 @@ struct SpatialMeasurementState {
     }
     mutating func setMode(_ requested: SpatialMode) {
         clearPending()
-        mode = requested == .height && floor == nil ? .selectFloor : requested
+        if requested == .selectFloor {
+            if mode != .selectFloor { requestedMode = mode }
+            mode = .selectFloor; candidate = nil; manualCandidateID = nil; candidateSelectionSource = "none"
+            updateCandidates(Array(currentCandidates.values))
+        } else {
+            requestedMode = requested
+            mode = floor == nil || mode == .selectFloor ? .selectFloor : requested
+        }
     }
-    mutating func confirmFloor(_ plane: SpatialPlane, tracking: String, frameAgeSeconds: Double) throws {
+    mutating func updateCandidates(_ planes: [SpatialPlane]) {
+        currentCandidates = [:]
+        for plane in planes where validCandidate(plane) { currentCandidates[plane.id] = plane }
+        guard mode == .selectFloor else { return }
+        if let manualCandidateID {
+            candidate = currentCandidates[manualCandidateID]; candidateSelectionSource = "manual"
+        } else if let id = candidate?.id, let latest = currentCandidates[id], latest.classification == "floor" {
+            candidate = latest; candidateSelectionSource = "automatic"
+        } else {
+            candidate = currentCandidates.values.filter { $0.classification == "floor" }.max {
+                SpatialMeasurementMath.floorCoverage($0).areaSquareMeters < SpatialMeasurementMath.floorCoverage($1).areaSquareMeters
+            }
+            candidateSelectionSource = candidate == nil ? "none" : "automatic"
+        }
+    }
+    mutating func selectFloorCandidate(_ plane: SpatialPlane, tracking: String, frameAgeSeconds: Double) throws {
         try SpatialMeasurementMath.validate(tracking: tracking, frameAgeSeconds: frameAgeSeconds)
-        guard plane.segmentID == segmentID, !plane.id.isEmpty, !plane.frameID.isEmpty, plane.timestamp.isFinite,
-              ["floor", "unclassified"].contains(plane.classification),
-              plane.vertices.count >= 3, plane.vertices.allSatisfy(SpatialMeasurementMath.finite) else {
+        guard mode == .selectFloor, let latest = currentCandidates[plane.id], validCandidate(latest) else {
             throw SpatialMeasurementMath.SpatialError.invalid("Select a current floor or unclassified horizontal surface.")
         }
-        _ = try SpatialMeasurementMath.verticalFoot(of: plane.origin, onto: plane)
-        floor = plane; clearPending(); mode = .height
+        candidate = latest; manualCandidateID = latest.id; candidateSelectionSource = "manual"
+    }
+    func floorSetupStatus(tracking: String, frameAgeSeconds: Double) -> [String: Any] {
+        let coverage = candidate.map(SpatialMeasurementMath.floorCoverage) ?? (areaSquareMeters: 0, minSpanMeters: 0)
+        let reason: String
+        if candidate == nil { reason = "floorNotSelected" }
+        else if tracking != "normal" { reason = "trackingLimited" }
+        else if !frameAgeSeconds.isFinite || frameAgeSeconds < 0 || frameAgeSeconds > 0.5 { reason = "staleFrame" }
+        else if coverage.areaSquareMeters + 1e-6 < 1 { reason = "insufficientArea" }
+        else if coverage.minSpanMeters + 1e-6 < 0.5 { reason = "insufficientSpan" }
+        else { reason = "ready" }
+        return ["active": mode == .selectFloor, "candidateSelected": candidate != nil, "candidateId": candidate?.id as Any? ?? NSNull(),
+            "areaSquareMeters": coverage.areaSquareMeters, "minSpanMeters": coverage.minSpanMeters,
+            "ready": mode == .selectFloor && reason == "ready", "reason": reason,
+            "selectionSource": candidateSelectionSource, "requestedMode": requestedMode.rawValue]
+    }
+    mutating func completeFloorSetup(expectedCandidateID: String, tracking: String, frameAgeSeconds: Double) throws {
+        try SpatialMeasurementMath.validate(tracking: tracking, frameAgeSeconds: frameAgeSeconds)
+        guard mode == .selectFloor, let selected = candidate, selected.id == expectedCandidateID,
+              let latest = currentCandidates[selected.id], validCandidate(latest) else {
+            throw SpatialMeasurementMath.SpatialError.invalid("The selected floor changed or is no longer current. Review it before tapping Done.")
+        }
+        let status = floorSetupStatus(tracking: tracking, frameAgeSeconds: frameAgeSeconds)
+        guard status["ready"] as? Bool == true else {
+            throw SpatialMeasurementMath.SpatialError.invalid("Scan a larger floor patch (at least 1.0 m² and 0.5 m wide), then tap Done.")
+        }
+        floor = latest; candidate = nil; manualCandidateID = nil; candidateSelectionSource = "none"
+        clearPending(); mode = requestedMode
+    }
+    private func validCandidate(_ plane: SpatialPlane) -> Bool {
+        guard plane.segmentID == segmentID, !plane.id.isEmpty, !plane.frameID.isEmpty, plane.timestamp.isFinite,
+              ["floor", "unclassified"].contains(plane.classification), plane.vertices.count >= 3,
+              plane.vertices.allSatisfy(SpatialMeasurementMath.finite) else { return false }
+        return (try? SpatialMeasurementMath.verticalFoot(of: plane.origin, onto: plane)) != nil
     }
     mutating func append(_ point: SpatialPoint, tracking: String, frameAgeSeconds: Double) throws -> SpatialMeasurement? {
         try SpatialMeasurementMath.validate(tracking: tracking, frameAgeSeconds: frameAgeSeconds)
@@ -109,7 +183,9 @@ struct SpatialMeasurementState {
               let frameID = point.record["frameId"] as? String, !frameID.isEmpty else {
             throw SpatialMeasurementMath.SpatialError.invalid("Select a valid scene-depth point with confidence 1 or 2 in the current segment.")
         }
-        guard mode != .selectFloor else { throw SpatialMeasurementMath.SpatialError.invalid("Tap a visible horizontal surface to confirm the floor first.") }
+        guard mode != .selectFloor, let confirmed = floor, confirmed.segmentID == segmentID else {
+            throw SpatialMeasurementMath.SpatialError.invalid("Scan and confirm a floor with Done before measuring.")
+        }
         guard mode == .tagWidth || completed.count < maximumCount else {
             throw SpatialMeasurementMath.SpatialError.invalid("The live measurement limit is reached. Clear measurements before adding another.")
         }
@@ -136,6 +212,6 @@ struct SpatialMeasurementState {
     mutating func clearMeasurements() { clearPending(); completed.removeAll() }
     mutating func reset(segmentID: String) {
         self.segmentID = segmentID; clearMeasurements(); floor = nil
-        if mode == .height || mode == .selectFloor { mode = .selectFloor }
+        mode = .selectFloor; candidate = nil; manualCandidateID = nil; currentCandidates = [:]; candidateSelectionSource = "none"
     }
 }

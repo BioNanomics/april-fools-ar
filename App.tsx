@@ -58,6 +58,7 @@ type Status = {
   lastError?: string;
   debugMode?: boolean;
   displayZoom?: number;
+  previewMode?: string;
   spatial?: {
     mode?: 'distance' | 'height' | 'selectFloor' | 'tagWidth';
     showFloorPlanes?: boolean;
@@ -66,6 +67,15 @@ type Status = {
     candidateCount?: number;
     measurementCount?: number;
     lastMeasurement?: Measurement | null;
+    floorSetup?: {
+      active?: boolean;
+      candidateSelected?: boolean;
+      candidateId?: string;
+      areaSquareMeters?: number;
+      minSpanMeters?: number;
+      ready?: boolean;
+      reason?: string;
+    };
   };
   aprilTag?: {
     state?:
@@ -128,6 +138,7 @@ function CaptureApp() {
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [measuringTagSize, setMeasuringTagSize] = useState(false);
+  const [finishingFloor, setFinishingFloor] = useState(false);
   const [debugSettings, setDebugSettings] = useState<DebugSettings>(
     DEFAULT_DEBUG_SETTINGS,
   );
@@ -180,6 +191,11 @@ function CaptureApp() {
       setDebugEnabled(status.debugMode);
     }
   }, [status.debugMode]);
+  useEffect(() => {
+    if (status.previewMode) {
+      setPreview(status.previewMode);
+    }
+  }, [status.previewMode]);
   useEffect(() => {
     const enabled = status.aprilTag?.debugSettings?.showImperialHeight;
     if (typeof enabled === 'boolean') {
@@ -267,8 +283,11 @@ function CaptureApp() {
   };
   const setMode = async (mode: string) => {
     try {
-      await Engine.setPreviewMode(mode);
-      setPreview(mode);
+      const next = await Engine.setPreviewMode(mode);
+      setPreview(next?.previewMode || mode);
+      if (next) {
+        setStatus(next);
+      }
     } catch (e) {
       Alert.alert('Preview', errorText(e));
     }
@@ -284,7 +303,9 @@ function CaptureApp() {
       }
       const next = await Engine.setDebugMode(enabled);
       setMeasuringTagSize(false);
-      setDebugEnabled(enabled);
+      setDebugEnabled(
+        typeof next?.debugMode === 'boolean' ? next.debugMode : enabled,
+      );
       if (next) {
         setStatus(next);
       }
@@ -373,6 +394,21 @@ function CaptureApp() {
       Alert.alert('Measurements', errorText(error));
     }
   };
+  const completeFloorSetup = async () => {
+    const candidateId = status.spatial?.floorSetup?.candidateId;
+    if (!candidateId) {
+      return;
+    }
+    setFinishingFloor(true);
+    try {
+      setStatus(await Engine.completeFloorSetup(candidateId));
+    } catch (error) {
+      Alert.alert('Floor setup', errorText(error));
+      await refresh();
+    } finally {
+      setFinishingFloor(false);
+    }
+  };
   const setStatusFromTagWidthReset = async () => {
     try {
       setStatus(await Engine.setSpatialMode('tagWidth'));
@@ -385,6 +421,8 @@ function CaptureApp() {
       ? status.measurement
       : status.spatial?.lastMeasurement || status.measurement;
   const spatialMode = status.spatial?.mode || 'distance';
+  const settingUpFloor = spatialMode === 'selectFloor';
+  const floorSetup = status.spatial?.floorSetup;
   const floorSelected = status.spatial?.floorSelected ?? false;
   const floorVisible = status.spatial?.showFloorPlanes ?? true;
   const measurementCount = status.spatial?.measurementCount ?? 0;
@@ -562,7 +600,7 @@ function CaptureApp() {
                   {status.trackingReason.replace(/([A-Z])/g, ' $1')}
                 </Text>
               )}
-              {!debugEnabled && (
+              {!debugEnabled && !settingUpFloor && (
                 <View style={s.modes}>
                   {['camera', 'depth', 'confidence'].map(mode => (
                     <Pressable
@@ -581,7 +619,7 @@ function CaptureApp() {
                   ))}
                 </View>
               )}
-              {!debugEnabled && (
+              {!debugEnabled && !settingUpFloor && (
                 <View style={s.tagStatus} pointerEvents="none">
                   <Text style={s.tagText} numberOfLines={1}>
                     {tags?.state === 'error'
@@ -597,7 +635,76 @@ function CaptureApp() {
             </View>
             {!debugEnabled && (
               <View style={s.measure}>
-                {measuringTagSize ? (
+                {settingUpFloor ? (
+                  <>
+                    <Text style={s.kicker}>SET UP THE FLOOR</Text>
+                    <Text style={s.floorInstructions}>
+                      Point at the floor and move slowly to scan a larger area.
+                    </Text>
+                    <View style={[s.row, s.floorSetupRow]}>
+                      <View style={s.floorCoverage}>
+                        <Text style={s.floorCoverageValue}>
+                          {floorSetup?.candidateSelected &&
+                          floorSetup.areaSquareMeters != null &&
+                          Number.isFinite(floorSetup.areaSquareMeters)
+                            ? `${(
+                                Math.floor(floorSetup.areaSquareMeters * 100) /
+                                100
+                              ).toFixed(2)} m² scanned`
+                            : 'Looking for the floor…'}
+                        </Text>
+                        <Text style={s.small}>
+                          Target: 1.00 m², at least 50 cm wide
+                        </Text>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Finish floor setup"
+                        accessibilityState={{
+                          disabled:
+                            !floorSetup?.ready ||
+                            !floorSetup?.candidateId ||
+                            finishingFloor,
+                        }}
+                        disabled={
+                          !floorSetup?.ready ||
+                          !floorSetup?.candidateId ||
+                          finishingFloor
+                        }
+                        onPress={completeFloorSetup}
+                        style={[
+                          s.floorDone,
+                          (!floorSetup?.ready ||
+                            !floorSetup?.candidateId ||
+                            finishingFloor) &&
+                            s.dim,
+                        ]}
+                      >
+                        {finishingFloor ? (
+                          <ActivityIndicator color={C.bg} />
+                        ) : (
+                          <Text style={s.exportText}>Done</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                    <Text style={s.hint}>
+                      {floorSetup?.ready
+                        ? 'Check that the highlighted surface is the floor, then tap Done.'
+                        : (
+                            {
+                              trackingLimited:
+                                'Move slowly and wait for normal tracking.',
+                              staleFrame: 'Waiting for a current camera frame.',
+                              insufficientArea:
+                                'Keep moving to extend the highlighted floor to at least 1.00 m².',
+                              insufficientSpan:
+                                'Scan a wider patch of floor before continuing.',
+                            } as Record<string, string>
+                          )[floorSetup?.reason || ''] ||
+                          'Tap the floor if it is not selected automatically. Keep moving to extend the highlighted area.'}
+                    </Text>
+                  </>
+                ) : measuringTagSize ? (
                   <>
                     <Text style={s.kicker}>MEASURE ONE TAG EDGE</Text>
                     <Text style={s.value}>
@@ -666,24 +773,18 @@ function CaptureApp() {
                           accessibilityRole="button"
                           accessibilityLabel="Floor height measurement mode"
                           accessibilityState={{
-                            selected:
-                              spatialMode === 'height' ||
-                              spatialMode === 'selectFloor',
+                            selected: spatialMode === 'height',
                           }}
                           onPress={() => setSpatialMode('height')}
                           style={[
                             s.measureChoice,
-                            (spatialMode === 'height' ||
-                              spatialMode === 'selectFloor') &&
-                              s.modeActive,
+                            spatialMode === 'height' && s.modeActive,
                           ]}
                         >
                           <Text
                             style={[
                               s.modeText,
-                              (spatialMode === 'height' ||
-                                spatialMode === 'selectFloor') &&
-                                s.dark,
+                              spatialMode === 'height' && s.dark,
                             ]}
                           >
                             Floor height
@@ -769,9 +870,7 @@ function CaptureApp() {
                       )}
                     </View>
                     <Text style={s.hint}>
-                      {spatialMode === 'selectFloor'
-                        ? 'Look down, move slowly, then tap the highlighted floor to confirm it.'
-                        : spatialMode === 'height'
+                      {spatialMode === 'height'
                         ? 'Tap the tag center or target surface. Height is vertical above the selected floor.'
                         : m?.pointCount === 1
                         ? `First point${
@@ -1031,6 +1130,28 @@ const s = StyleSheet.create({
     fontSize: 10,
     flexShrink: 1,
     textAlign: 'right',
+  },
+  floorInstructions: {
+    color: C.text,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 7,
+  },
+  floorSetupRow: { marginTop: 12 },
+  floorCoverage: { flex: 1 },
+  floorCoverageValue: {
+    color: C.cyan,
+    fontSize: 16,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  floorDone: {
+    minWidth: 78,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: C.cyan,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cyan: { color: C.cyan },
   dark: { color: C.bg },

@@ -21,5 +21,13 @@ bounded renderer pools, and reuse/owned cleanup.
 An expiry regression also verifies that labels, vector/plane layers, and floor hit
 paths disappear after their deadline when no further camera callback arrives.
 
+Every manual-mode fixture completes the floor scan with an explicit Done action
+before adding points. Floor-first cases cover provisional selection, stable
+automatic choice and manual override, live candidate refinement, 1 m² coverage,
+rotation-invariant 0.5 m minimum width, stale/limited/foreign or lost candidates,
+the expected-candidate-ID race guard, requested-mode restoration, and the frozen
+confirmed datum. The UIKit test distinguishes provisional dashed candidates from
+the confirmed floor without rebuilding its render slot.
+
 Fixtures validate geometry and lifecycle rules; they do not establish physical
 LiDAR, tracking, floor-detection, or field accuracy.

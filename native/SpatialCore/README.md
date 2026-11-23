@@ -7,7 +7,7 @@ One C/C++ implementation serves the iOS app, desktop recording replay, robot pro
 | Component | Owns |
 | --- | --- |
 | Existing AprilTag C core | tag36h11 detection, calibrated pose candidates, ambiguity and reprojection error |
-| Shared measurement core | Euclidean camera ranges, optical-depth differences, validity policy, gravity-vertical floor height |
+| Shared measurement core | Euclidean camera ranges, optical-depth differences, validity policy, gravity-vertical floor height, gravity-relative tag orientation |
 | Shared geometry core | deterministic robust floor fit, floor tilt/coverage, distance, vertical foot and floor patch corners |
 | Shared projection core | camera projection, near-plane/viewport clipping of points, segments and polygons |
 | iOS adapter | ARKit/CoreVideo acquisition, camera-axis conversion, settings, recorded metadata and native drawing |
@@ -26,6 +26,10 @@ Inputs may omit depth. Qualified tag geometry remains usable as an explicit heig
 - Confidence categories are not covariance. Missing uncertainty is unknown, not zero. ARKit pose and depth are processed observations; their correlations must be considered before adding fusion.
 - Arrays/pointers are borrowed only during the call. Caller owns buffers. No core function retains input pointers. Header version is `AFSC_ABI_VERSION=1`; incompatible layout changes require a new ABI version.
 - Floor fitting uses the existing 32–512 sample bounds, fixed seed, 128 hypotheses, three refinements and rejection policy. Geometry/projection work has bounded storage. The existing detector may allocate internally and must be called serially per detector instance.
+
+`afsc_gravity_orientation` composes the matching frame's `world_from_optical` rotation with `optical_from_tag_rotation`. The latter is a column-major homogeneous pure rotation with zero translation. The output retains the composed rotation, unit printed-up (`-tag Y`) and into-print normal (`+tag Z`) directions. `tilt_from_vertical_rad` is an unsigned plane lean: zero for a vertical plane and pi/2 for a horizontal plane. `twist_rad` measures clockwise rotation of the printed square relative to gravity projected into its plane, as seen from the printed front. Twist is unavailable when that projection's magnitude is <=1e-4; the plane lean remains available. Gravity establishes no absolute field heading.
+
+Orientation requires usable tracking, an identified source frame no more than 0.4 seconds old, proper rigid rotations, a resolved visual pose, and passing range/incidence/decode/reprojection gates. It requires no floor, depth, center pixel, image intrinsics or center bearing. Only `max_range_m`, `max_plane_angle_rad` and `max_reprojection_rms_px` from the measurement settings apply; missing depth thresholds have no effect. A computed orientation describes that source frame and must expire or be invalidated with it in the adapter. The standalone `gravity_orientation_test` covers independently constructed tag lean/twist, horizontal-plane twist unavailability, invariance while the phone rotates and moves, and invalid or stale inputs.
 
 ## Build and test
 

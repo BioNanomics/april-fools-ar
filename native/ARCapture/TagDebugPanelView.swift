@@ -3,13 +3,14 @@ import UIKit
 /// Native, reusable readouts. Frame-critical updates never cross the JS bridge.
 final class TagDebugPanelView: UIView {
     private(set) var isExpanded = false
-    var preferredHeight: CGFloat { isExpanded ? 270 : 44 }
+    var preferredHeight: CGFloat { isExpanded ? 290 : 44 }
     var onPreferredHeightChanged: ((CGFloat) -> Void)?
     private let titleLabel = UILabel()
     private let detailsButton = UIButton(type: .system)
     private let metricsScrollView = UIScrollView()
     private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"], valueSize: 19)
-    private let rotationRow = DebugMetricRow(titles: ["Roll · °", "Pitch · °", "Yaw · °"], valueSize: 18)
+    private let rotationRow = DebugMetricRow(titles: ["Cam roll · °", "Cam pitch · °", "Cam yaw · °"], valueSize: 18)
+    private let gravityOrientationLabel = UILabel()
     private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"], valueSize: 21)
     private let geometryRow = DebugMetricRow(titles: ["Distance · m", "Plane · °", "Bearing · °"], valueSize: 18)
     private let meanLabel = UILabel()
@@ -34,7 +35,9 @@ final class TagDebugPanelView: UIView {
         titleLabel.minimumScaleFactor = 0.8
         meanLabel.font = .monospacedSystemFont(ofSize: 13, weight: .medium)
         qualityLabel.font = .monospacedSystemFont(ofSize: 14, weight: .medium)
-        [meanLabel, qualityLabel].forEach {
+        gravityOrientationLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
+        gravityOrientationLabel.accessibilityIdentifier = "tagDebugGravityOrientation"
+        [meanLabel, qualityLabel, gravityOrientationLabel].forEach {
             $0.textColor = .white
             $0.adjustsFontSizeToFitWidth = true
             $0.minimumScaleFactor = 0.85
@@ -50,7 +53,7 @@ final class TagDebugPanelView: UIView {
         metricsScrollView.showsHorizontalScrollIndicator = false
         metricsScrollView.contentInsetAdjustmentBehavior = .never
         addSubview(metricsScrollView)
-        [translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel].forEach(metricsScrollView.addSubview)
+        [translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, meanLabel, qualityLabel].forEach(metricsScrollView.addSubview)
         detailsButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         detailsButton.tintColor = .white
         detailsButton.backgroundColor = UIColor.white.withAlphaComponent(0.10)
@@ -74,7 +77,7 @@ final class TagDebugPanelView: UIView {
         }
         titleLabel.frame = CGRect(x: 12, y: 8, width: max(0, width - 96), height: 42)
         metricsScrollView.frame = CGRect(x: 0, y: 52, width: bounds.width, height: max(0, bounds.height - 54))
-        let rows: [(UIView, CGFloat)] = [(translationRow, 36), (rotationRow, 34),
+        let rows: [(UIView, CGFloat)] = [(translationRow, 36), (rotationRow, 34), (gravityOrientationLabel, 17),
             (depthRow, 38), (geometryRow, 34), (meanLabel, 17), (qualityLabel, 17), (rateLabel, 28)]
         var y: CGFloat = 0
         for (view, height) in rows {
@@ -102,7 +105,7 @@ final class TagDebugPanelView: UIView {
     }
     @objc private func toggleDetails() { setExpanded(!isExpanded) }
     private func updateExpansion() {
-        [translationRow, rotationRow, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        [translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
         metricsScrollView.isHidden = !isExpanded
         if isExpanded { metricsScrollView.addSubview(rateLabel) }
         else { addSubview(rateLabel); metricsScrollView.contentOffset = .zero }
@@ -154,6 +157,7 @@ final class TagDebugPanelView: UIView {
         titleLabel.textColor = .lightGray
         layer.borderColor = UIColor.darkGray.cgColor
         [translationRow, rotationRow, depthRow, geometryRow].forEach { $0.setValues(["—", "—", "—"]) }
+        showGravityOrientation(nil, unavailableReason: reason)
         meanLabel.text = reason
         qualityLabel.text = "Point at a tag · tap its outline to select"
         compactRateText = "No current tag measurement"
@@ -213,6 +217,7 @@ final class TagDebugPanelView: UIView {
         }
         translationRow.setValues(triple("translationMeters", "%+.3f"))
         rotationRow.setValues(triple("eulerDegrees", "%+.1f"))
+        showGravityOrientation(debug["gravityOrientation"] as? [String: Any])
         depthRow.setValues([scalar("opticalPoseZMeters"), scalar("centerDepthMeters"), scalar("depthDifferenceMeters")])
         var deltaColor = UIColor.lightGray
         if let delta = TagDebugMath.number(debug["depthDifferenceMeters"]) {
@@ -241,6 +246,33 @@ final class TagDebugPanelView: UIView {
             guard let self, self.expiryToken == frameID else { return }
             self.showUnavailable("Stale result · waiting for a current frame")
         }
+    }
+
+    private func showGravityOrientation(_ record: [String: Any]?, unavailableReason: String? = nil) {
+        let record = record ?? [:]
+        let rawAvailable = record["available"] as? NSNumber
+        let available = rawAvailable.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
+        func angle(_ key: String, range: ClosedRange<Double>) -> Double? {
+            guard available, let value = record[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(),
+                  value.doubleValue.isFinite, range.contains(value.doubleValue) else { return nil }
+            return value.doubleValue
+        }
+        let tilt = angle("tiltFromVerticalDegrees", range: 0...90)
+        let twist = tilt == nil ? nil : angle("twistDegrees", range: -180...180)
+        let tiltText = tilt.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        let twistText = twist.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        gravityOrientationLabel.text = "Gravity · Tilt \(tiltText) · Twist \(twistText)"
+        let reason = unavailableReason ?? (record["reason"] as? String) ?? "No gravity-relative orientation in this frame"
+        let tiltAccessibility = tilt.map { "Tilt from vertical \(String(format: "%.1f", $0)) degrees; zero degrees is a vertical tag plane." }
+            ?? "Tilt from vertical unavailable. Reason: \(available ? "Invalid gravity-relative orientation" : reason)."
+        let twistReason = tilt.map { $0 > 89.99 } == true
+            ? "Gravity does not define upright within a horizontal tag plane."
+            : "Reason: \(available ? "No valid twist in this frame" : reason)."
+        let twistAccessibility = twist.map { "Twist from upright \(String(format: "%+.1f", $0)) degrees; positive is clockwise when viewing the printed front." }
+            ?? "Twist from upright unavailable. \(twistReason)"
+        gravityOrientationLabel.isAccessibilityElement = true
+        gravityOrientationLabel.accessibilityLabel = "Gravity-relative tag orientation"
+        gravityOrientationLabel.accessibilityValue = tiltAccessibility + " " + twistAccessibility
     }
 }
 

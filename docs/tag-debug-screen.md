@@ -2,6 +2,14 @@
 
 The debug screen compares two estimates from the same AR camera frame: the pose solved from the tag corners and configured tag width, and ARKit's scene-depth sample at the tag center. Agreement is a useful diagnostic; it does not establish surveyed field accuracy.
 
+## Gravity-relative tag angles
+
+Each tag card shows **Tilt** and **Twist**, also available under **Details → Gravity**. Tilt measures how far the printed plane departs from vertical: 0° is vertical and 90° is horizontal. Twist measures rotation of the printed square from upright within its plane; positive values are clockwise when looking at the printed front. A horizontal tag has no gravity-defined upright direction, so its twist is unavailable.
+
+These angles combine the detected tag rotation with the phone's orientation from the same captured AR frame. Turning or tilting the phone therefore does not change the estimated orientation of a stationary tag. They require normal tracking and a current, resolved pose that passes the range, viewing-angle and decoder/reprojection checks. A floor or LiDAR sample is not required. Missing or invalid angles show **—**, separately from a valid 0°.
+
+The **Cam roll / pitch / yaw** diagnostics remain camera-relative. Gravity-relative tilt and twist do not establish the tag's heading on the field. Existing tag-center height uses the same source-frame camera transform and the confirmed floor, preferring accepted LiDAR depth and retaining the labeled tag-pose fallback when depth is unavailable. Changing the floor affects that height reference, not the gravity-relative angles.
+
 ## Using it
 
 **Tag debug** is the default live view. The camera fills the available preview area; the debug readout floats over it instead of reserving a separate panel below it. Small live cards show every detected tag's floor height and an aligned **Distance** comparison for **LiDAR** and **Tag**. These are straight-line camera-to-tag-center distances, including horizontal/vertical offset. **LiDAR Δ** appears only when their absolute difference exceeds **Settings → Distance delta threshold (cm)** (15 cm by default). Missing estimates do not produce a delta. The default selected-tag bar is 44 points high and shows identity, validity and timing. Tap **Details** for translation, orientation, raw pose/LiDAR Z, their difference, angles, distance and decoder quality; tap **Collapse** to return to the compact view. Expanding does not crop, resize or change the camera's projection.

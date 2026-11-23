@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */; };
 		017EB8DE1F5B72D3F7B60A46 /* pnm.c in Sources */ = {isa = PBXBuildFile; fileRef = 2540CE28C05CEEFC3ABC83FF /* pnm.c */; };
 		01CAF493F029E80D5568F3C9 /* AprilTagOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */; };
 		0AE1D41CFDE400D554CB72B9 /* svd22.c in Sources */ = {isa = PBXBuildFile; fileRef = 322A348F58056FBE702D49EA /* svd22.c */; };
@@ -78,6 +79,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagGravityOrientation.swift; path = ARCapture/TagGravityOrientation.swift; sourceTree = "<group>"; };
 		07C953581979F4BA05C64FBA /* SpatialProjection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpatialProjection.swift; path = ARCapture/SpatialProjection.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* AprilFoolsAR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AprilFoolsAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = AprilFoolsAR/Images.xcassets; sourceTree = "<group>"; };
@@ -208,6 +210,7 @@
 				FA6EBBD3B87383B3A1BFDE6C /* SpatialMeasurements.swift */,
 				07C953581979F4BA05C64FBA /* SpatialProjection.swift */,
 				13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */,
+				5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */,
 				3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */,
 				86ABD46FF465A30DB753B623 /* TagCameraRanges.swift */,
 				788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */,
@@ -531,6 +534,7 @@
 				68542CCFC419D2394BD96422 /* SpatialMeasurements.swift in Sources */,
 				3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */,
 				623351B9B74E274B6984B4AD /* TagFloorHeight.swift in Sources */,
+				DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */,
 				3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */,
 				FEF4CE2E105F63F5F7452DE1 /* TagCameraRanges.swift in Sources */,
 				49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */,
@@ -561,7 +565,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -576,7 +580,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.8.2;
+				MARKETING_VERSION = 0.9.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -601,7 +605,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -615,7 +619,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.8.2;
+				MARKETING_VERSION = 0.9.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

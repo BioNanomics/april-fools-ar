@@ -56,7 +56,7 @@ final class AprilTagOverlayView: UIView {
               imageSize.width > 0, imageSize.height > 0, bounds.width.isFinite, bounds.height.isFinite,
               bounds.width > 0, bounds.height > 0 else { clear(); return }
         sourceFrameID = frameID
-        var rendered = [(Int, [CGPoint], UIColor, [String: Any]?, [String: Any]?)]()
+        var rendered = [(Int, [CGPoint], UIColor, [String: Any]?, [String: Any]?, [String: Any]?)]()
         var renderedAxes = [PoseAxisProjection]()
         func displayPoint(_ point: CGPoint) -> CGPoint? {
             let normalized = CGPoint(x: point.x / imageSize.width, y: point.y / imageSize.height).applying(displayTransform)
@@ -79,7 +79,8 @@ final class AprilTagOverlayView: UIView {
             // Keep metadata beside its own detection: duplicate tag IDs may be at different heights.
             let floorHeight = detection["floorHeight"].map { $0 as? [String: Any] ?? [:] }
             let cameraRanges = detection["cameraRanges"] as? [String: Any]
-            rendered.append((id.intValue, points, color, floorHeight, cameraRanges))
+            let gravityOrientation = detection["gravityOrientation"] as? [String: Any]
+            rendered.append((id.intValue, points, color, floorHeight, cameraRanges, gravityOrientation))
             if showPoseAxes, let intrinsics, let pose = detection["pose"] as? [String: Any],
                let projected = Self.projectPoseAxes(pose: pose, intrinsics: intrinsics, axisLengthMeters: axisLengthMeters),
                let origin = displayPoint(projected.origin) {
@@ -126,7 +127,7 @@ final class AprilTagOverlayView: UIView {
         var placedCards = [CGRect]()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for (index, item) in rendered.enumerated() {
-            let (id, points, color, floorHeight, cameraRanges) = item
+            let (id, points, color, floorHeight, cameraRanges, gravityOrientation) = item
             let path = UIBezierPath()
             path.move(to: points[0]); points.dropFirst().forEach { path.addLine(to: $0) }; path.close()
             let shape = outlineLayers[index]
@@ -138,7 +139,7 @@ final class AprilTagOverlayView: UIView {
             for point in points { dots.append(UIBezierPath(ovalIn: CGRect(x: point.x-4, y: point.y-4, width: 8, height: 8))) }
             cornerLayers[index].path = dots.cgPath; cornerLayers[index].fillColor = color.cgColor
             let label = tagLabels[index]
-            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, cameraRanges: cameraRanges, showImperialHeight: showImperialHeight, distanceDeltaThresholdMeters: distanceDeltaThresholdMeters)
+            configure(label, id: id, selected: id == selectedID, floorHeight: floorHeight, cameraRanges: cameraRanges, gravityOrientation: gravityOrientation, showImperialHeight: showImperialHeight, distanceDeltaThresholdMeters: distanceDeltaThresholdMeters)
             label.setTextColor(color)
             label.layer.borderColor = color.withAlphaComponent(0.85).cgColor
             label.layer.borderWidth = id == selectedID ? 1.5 : 0.75
@@ -192,7 +193,7 @@ final class AprilTagOverlayView: UIView {
         }
     }
 
-    private func configure(_ label: TagReadoutCard, id: Int, selected: Bool, floorHeight: [String: Any]?, cameraRanges: [String: Any]?, showImperialHeight: Bool, distanceDeltaThresholdMeters: Double) {
+    private func configure(_ label: TagReadoutCard, id: Int, selected: Bool, floorHeight: [String: Any]?, cameraRanges: [String: Any]?, gravityOrientation: [String: Any]?, showImperialHeight: Bool, distanceDeltaThresholdMeters: Double) {
         let prefix = selected ? "◆ #\(id)" : "#\(id)"
         label.accessibilityIdentifier = "apriltag.label.\(id)"
         label.accessibilityLabel = "AprilTag \(id)"
@@ -246,9 +247,29 @@ final class AprilTagOverlayView: UIView {
                 deltaText = HeightDisplayFormatter.string(meters: delta, showImperial: showImperialHeight)
             }
         }
+        let orientation = gravityOrientation ?? [:]
+        func angle(_ key: String, range: ClosedRange<Double>) -> Double? {
+            guard isTrue(orientation["available"]), let value = orientation[key] as? NSNumber,
+                  CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite,
+                  range.contains(value.doubleValue) else { return nil }
+            return value.doubleValue
+        }
+        let tilt = angle("tiltFromVerticalDegrees", range: 0...90)
+        let twist = tilt == nil ? nil : angle("twistDegrees", range: -180...180)
+        let tiltText = tilt.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        let twistText = twist.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
         label.setContent(id: id, summary: "\(prefix) · H \(heightText)", lidar: lidar.0, tag: tag.0,
-                         delta: deltaText, showImperial: showImperialHeight)
+                         delta: deltaText, orientation: "Tilt \(tiltText) · Twist \(twistText)", showImperial: showImperialHeight)
         label.accessibilityValue = heightAccessibility + " Distance. " + lidar.2 + " " + tag.2
+        let orientationReason = orientation["reason"] as? String ?? "No gravity-relative orientation in this frame"
+        let tiltAccessibility = tilt.map { "Tilt from vertical \(String(format: "%.1f", $0)) degrees; zero degrees is a vertical tag plane." }
+            ?? "Tilt from vertical unavailable. Reason: \(isTrue(orientation["available"]) ? "Invalid gravity-relative orientation" : orientationReason)."
+        let twistReason = tilt.map { $0 > 89.99 } == true
+            ? "Gravity does not define upright within a horizontal tag plane."
+            : "Reason: \(isTrue(orientation["available"]) ? "No valid twist in this frame" : orientationReason)."
+        let twistAccessibility = twist.map { "Twist from upright \(String(format: "%+.1f", $0)) degrees; positive is clockwise when viewing the printed front." }
+            ?? "Twist from upright unavailable. \(twistReason)"
+        label.accessibilityValue = (label.accessibilityValue ?? "") + " Gravity-relative orientation. " + tiltAccessibility + " " + twistAccessibility
         if let deltaText {
             label.accessibilityValue = (label.accessibilityValue ?? "") + " Absolute LiDAR versus Tag camera range difference: \(deltaText)."
         }
@@ -335,6 +356,7 @@ final class AprilTagOverlayView: UIView {
 /// optional English units have their own column, so their varying lengths never move the cm decimals.
 private final class TagReadoutCard: UIView {
     private let summaryLabel = UILabel()
+    private let orientationLabel = UILabel()
     private let headingLabel = UILabel()
     private let sourceLabels = (0..<3).map { _ in UILabel() }
     private let metricLabels = (0..<3).map { _ in UILabel() }
@@ -345,7 +367,7 @@ private final class TagReadoutCard: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        let labels = [summaryLabel, headingLabel] + sourceLabels + metricLabels + englishLabels
+        let labels = [summaryLabel, orientationLabel, headingLabel] + sourceLabels + metricLabels + englishLabels
         for label in labels {
             label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
             label.numberOfLines = 1
@@ -355,15 +377,18 @@ private final class TagReadoutCard: UIView {
             addSubview(label)
         }
         headingLabel.text = "Distance"
+        orientationLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         for label in metricLabels { label.textAlignment = .right }
         sourceLabels[0].text = "LiDAR"; sourceLabels[1].text = "Tag"; sourceLabels[2].text = "LiDAR Δ"
         isUserInteractionEnabled = false
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, showImperial: Bool) {
+    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, orientation: String, showImperial: Bool) {
         summaryLabel.text = summary
+        orientationLabel.text = orientation
         summaryLabel.accessibilityIdentifier = "apriltag.summary.\(id)"
+        orientationLabel.accessibilityIdentifier = "apriltag.gravityOrientation.\(id)"
         headingLabel.accessibilityIdentifier = "apriltag.distanceHeading.\(id)"
         let names = ["lidar", "tag", "delta"]
         let values = [lidar, tag, delta ?? "—"]
@@ -387,15 +412,15 @@ private final class TagReadoutCard: UIView {
     }
 
     func setTextColor(_ color: UIColor) {
-        ([summaryLabel, headingLabel] + sourceLabels + metricLabels + englishLabels).forEach { $0.textColor = color }
+        ([summaryLabel, orientationLabel, headingLabel] + sourceLabels + metricLabels + englishLabels).forEach { $0.textColor = color }
         if hasDelta {
             [sourceLabels[2], metricLabels[2], englishLabels[2]].forEach { $0.textColor = .systemOrange }
         }
     }
 
     func preferredSize(maximumWidth: CGFloat, maximumHeight: CGFloat) -> CGSize {
-        let width = hasEnglish ? 260 : max(150, min(260, summaryLabel.intrinsicContentSize.width + 12))
-        return CGSize(width: min(width, maximumWidth), height: min(rowHeight * (hasDelta ? 5 : 4) + 8, maximumHeight))
+        let width = hasEnglish ? 260 : max(150, min(260, max(summaryLabel.intrinsicContentSize.width, orientationLabel.intrinsicContentSize.width) + 12))
+        return CGSize(width: min(width, maximumWidth), height: min(rowHeight * (hasDelta ? 6 : 5) + 8, maximumHeight))
     }
 
     override func layoutSubviews() {
@@ -407,7 +432,8 @@ private final class TagReadoutCard: UIView {
             return CGRect(x: x, y: top, width: max(0, width), height: max(0, min(rowHeight, bounds.height - top)))
         }
         summaryLabel.frame = frame(x: padding, y: 4, width: inner)
-        headingLabel.frame = frame(x: padding, y: 4 + rowHeight, width: inner)
+        orientationLabel.frame = frame(x: padding, y: 4 + rowHeight, width: inner)
+        headingLabel.frame = frame(x: padding, y: 4 + rowHeight * 2, width: inner)
         let sourceWidth = min(CGFloat(54), inner * 0.24)
         let gap = min(CGFloat(4), max(0, inner - sourceWidth) / 2)
         let metricX = padding + sourceWidth + gap
@@ -415,7 +441,7 @@ private final class TagReadoutCard: UIView {
         let englishX = min(bounds.width - padding, metricX + metricWidth + gap)
         let englishWidth = max(0, bounds.width - padding - englishX)
         for index in 0..<3 {
-            let y = 4 + rowHeight * CGFloat(index + 2)
+            let y = 4 + rowHeight * CGFloat(index + 3)
             sourceLabels[index].frame = frame(x: padding, y: y, width: sourceWidth)
             metricLabels[index].frame = frame(x: metricX, y: y, width: metricWidth)
             englishLabels[index].frame = frame(x: englishX, y: y, width: englishWidth)

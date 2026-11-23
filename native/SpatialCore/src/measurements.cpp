@@ -167,6 +167,61 @@ extern "C" AFSCFloorHeight afsc_floor_height(const AFSCFloorHeightInput *i) {
     return out;
 }
 
+extern "C" AFSCGravityOrientation afsc_gravity_orientation(const AFSCGravityOrientationInput *i) {
+    AFSCGravityOrientation out{};
+    auto fail = [&](AFSCGravityOrientationReason reason) { out.reason = reason; return out; };
+    if (!i) return fail(AFSC_GRAVITY_ORIENTATION_INVALID_POSE);
+    if (!i->tracking_usable) return fail(AFSC_GRAVITY_ORIENTATION_TRACKING_LIMITED);
+    if (!i->frame_id_available || !isFinite(i->timestamp_s) || !isFinite(i->frame_age_s)
+        || i->frame_age_s < 0 || i->frame_age_s > 0.4)
+        return fail(AFSC_GRAVITY_ORIENTATION_STALE_FRAME);
+    const auto &p = i->pose;
+    const auto &s = i->settings;
+    const double halfPi = std::acos(-1.0)/2;
+    const auto measuredRange = p.translation_available ? range(p.translation) : AFSCOptionalDouble{};
+    const auto &tag = i->optical_from_tag_rotation;
+    if (!rigidTransform(i->world_from_optical) || !rigidTransform(tag)
+        || std::abs(tag.values[12]) > 1e-8 || std::abs(tag.values[13]) > 1e-8 || std::abs(tag.values[14]) > 1e-8
+        || !isFinite(s.max_range_m) || s.max_range_m <= 0
+        || !isFinite(s.max_plane_angle_rad) || s.max_plane_angle_rad <= 0 || s.max_plane_angle_rad > halfPi
+        || !isFinite(s.max_reprojection_rms_px) || s.max_reprojection_rms_px <= 0
+        || !p.orientation_available || !measuredRange.available || p.translation.z <= 0
+        || !present(p.range_m) || p.range_m.value <= 0
+        || !present(p.plane_angle_rad) || p.plane_angle_rad.value < 0 || p.plane_angle_rad.value > halfPi
+        || !present(p.reprojection_rms_px) || p.reprojection_rms_px.value < 0)
+        return fail(AFSC_GRAVITY_ORIENTATION_INVALID_POSE);
+    if (p.ambiguous != 0) return fail(AFSC_GRAVITY_ORIENTATION_AMBIGUOUS_POSE);
+    if (measuredRange.value > s.max_range_m || p.range_m.value > s.max_range_m)
+        return fail(AFSC_GRAVITY_ORIENTATION_TOO_FAR);
+    if (p.plane_angle_rad.value > s.max_plane_angle_rad)
+        return fail(AFSC_GRAVITY_ORIENTATION_BAD_ANGLE);
+    if (p.reprojection_rms_px.value > s.max_reprojection_rms_px || !present(p.corrected_bits)
+        || p.corrected_bits.value != 0 || !present(p.decision_margin) || p.decision_margin.value <= 0)
+        return fail(AFSC_GRAVITY_ORIENTATION_LOW_CONFIDENCE_POSE);
+    const double *camera = i->world_from_optical.values;
+    for (int column = 0; column < 3; ++column) for (int row = 0; row < 3; ++row) {
+        double value = 0;
+        for (int k = 0; k < 3; ++k) value += camera[k*4+row]*tag.values[column*4+k];
+        out.world_from_tag_rotation.values[column*4+row] = value;
+    }
+    out.world_from_tag_rotation.values[15] = 1;
+    const double *r = out.world_from_tag_rotation.values;
+    const auto unit = [](AFSCVec3 v) {
+        const double length = std::hypot(std::hypot(v.x, v.y), v.z);
+        return AFSCVec3{v.x/length, v.y/length, v.z/length};
+    };
+    const auto right = unit({r[0], r[1], r[2]});
+    out.up_world = unit({-r[4], -r[5], -r[6]});
+    out.normal_world = unit({r[8], r[9], r[10]});
+    // Rounding in otherwise valid rotations can place |normal.y| slightly over 1.
+    out.tilt_from_vertical_rad = std::asin(std::fmin(1.0, std::abs(out.normal_world.y)));
+    if (std::hypot(right.y, out.up_world.y) > 1e-4)
+        out.twist_rad = some(std::atan2(-right.y, out.up_world.y));
+    out.available = 1;
+    out.reason = AFSC_GRAVITY_ORIENTATION_VALID;
+    return out;
+}
+
 extern "C" uint32_t afsc_measured_tag_size(uint32_t point_count, uint32_t tracking_usable,
     uint32_t points_usable, double frame_age_s, AFSCOptionalDouble distance_m) {
     return point_count == 2 && tracking_usable && points_usable && isFinite(frame_age_s)

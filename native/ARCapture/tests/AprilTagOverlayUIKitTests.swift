@@ -41,7 +41,8 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         }
     }
     private func cardText(_ card: UIView) -> String {
-        var lines = [cardLabel(card, "summary")?.text ?? "", cardLabel(card, "distanceHeading")?.text ?? ""]
+        var lines = [cardLabel(card, "summary")?.text ?? "", cardLabel(card, "gravityOrientation")?.text ?? "",
+                     cardLabel(card, "distanceHeading")?.text ?? ""]
         for row in ["lidar", "tag", "delta"] {
             guard let title = cardLabel(card, row + "Title"), !title.isHidden else { continue }
             lines.append([title.text, cardLabel(card, row + "Metric")?.text, cardLabel(card, row + "English")?.text]
@@ -98,6 +99,77 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         guard let value else { XCTFail("Expected a projected point", file: file, line: line); return }
         XCTAssertEqual(Double(value.x), x, accuracy: 1e-8, file: file, line: line)
         XCTAssertEqual(Double(value.y), y, accuracy: 1e-8, file: file, line: line)
+    }
+
+
+    func testGravityOrientationShowsValidZeroAndIndependentDuplicateTagValues() throws {
+        var upright = metricsRow(), leaning = metricsRow(rect: CGRect(x: 210, y: 280, width: 70, height: 70))
+        upright["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 0.0, "twistDegrees": 0.0]
+        leaning["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 12.5, "twistDegrees": -3.2]
+        show([upright, leaning])
+        let readouts = cards()
+        XCTAssertEqual(readouts.count, 2)
+        XCTAssertEqual(cardLabel(readouts[0], "gravityOrientation")?.text, "Tilt 0.0° · Twist +0.0°")
+        XCTAssertEqual(cardLabel(readouts[1], "gravityOrientation")?.text, "Tilt 12.5° · Twist -3.2°")
+        XCTAssertTrue(readouts[0].accessibilityValue?.contains("zero degrees is a vertical tag plane") == true)
+        XCTAssertTrue(readouts[1].accessibilityValue?.contains("positive is clockwise when viewing the printed front") == true)
+        readouts.forEach { assertCardChildrenContained($0) }
+        try saveOverlayPNG("overlay-gravity-orientation-320x480")
+    }
+
+    func testGravityOrientationHorizontalTwistAndUnavailableReason() throws {
+        var row = metricsRow()
+        row["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 90.0, "twistDegrees": NSNull()]
+        show([row])
+        let card = try XCTUnwrap(cards().first)
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt 90.0° · Twist —")
+        XCTAssertTrue(card.accessibilityValue?.contains("horizontal tag plane") == true)
+        row["gravityOrientation"] = ["available": false, "reason": "trackingLimited", "tiltFromVerticalDegrees": 12.0, "twistDegrees": 3.0]
+        show([row])
+        XCTAssertTrue(cards().first === card)
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt — · Twist —")
+        XCTAssertTrue(card.accessibilityValue?.contains("trackingLimited") == true)
+        row.removeValue(forKey: "gravityOrientation")
+        show([row])
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt — · Twist —")
+        XCTAssertTrue(card.accessibilityValue?.contains("No gravity-relative orientation in this frame") == true)
+        XCTAssertFalse(card.accessibilityValue?.contains("12.0 degrees") == true)
+    }
+
+    func testGravityOrientationRejectsMalformedAnglesAndFlags() throws {
+        let invalid: [Any] = [true, Double.nan, Double.infinity, -1.0, 90.1, "12.0", NSNull()]
+        for tilt in invalid {
+            var row = metricsRow()
+            row["gravityOrientation"] = ["available": true, "tiltFromVerticalDegrees": tilt, "twistDegrees": 1.0]
+            show([row])
+            let card = try XCTUnwrap(cards().first)
+            XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt — · Twist —")
+        }
+        for twist: Any in [true, Double.nan, Double.infinity, -180.1, 180.1, "1.0", NSNull()] {
+            var row = metricsRow()
+            row["gravityOrientation"] = ["available": true, "tiltFromVerticalDegrees": 0.0, "twistDegrees": twist]
+            show([row])
+            XCTAssertEqual(cardLabel(try XCTUnwrap(cards().first), "gravityOrientation")?.text, "Tilt 0.0° · Twist —")
+        }
+        var row = metricsRow()
+        row["gravityOrientation"] = ["available": 1, "tiltFromVerticalDegrees": 1.0, "twistDegrees": 1.0]
+        show([row])
+        XCTAssertEqual(cardLabel(try XCTUnwrap(cards().first), "gravityOrientation")?.text, "Tilt — · Twist —")
+    }
+
+    func testGravityOrientationCardFitsPortraitTabletAndShortLandscape() throws {
+        var row = metricsRow()
+        row["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 89.9, "twistDegrees": -180.0]
+        for size in [CGSize(width: 320, height: 480), CGSize(width: 1024, height: 768), CGSize(width: 440, height: 162)] {
+            overlay.frame.size = size
+            show([row])
+            let card = try XCTUnwrap(cards().first)
+            assertCardChildrenContained(card)
+            XCTAssertTrue(overlay.bounds.contains(card.frame))
+            let orientation = try XCTUnwrap(cardLabel(card, "gravityOrientation"))
+            XCTAssertGreaterThan(orientation.bounds.height, 0)
+            XCTAssertLessThanOrEqual(orientation.intrinsicContentSize.width * orientation.minimumScaleFactor, orientation.bounds.width + 0.5)
+        }
     }
 
     func testARepeatedPositiveLabelsThenEmptyAndIdempotentClear() {

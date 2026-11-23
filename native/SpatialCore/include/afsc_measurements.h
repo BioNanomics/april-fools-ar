@@ -95,6 +95,38 @@ typedef struct {
  * The current conservative policy requires <=0.4 s frame age, floor |normal.y| /
  * |normal| >=0.8, and a nonnegative height <=30 m. */
 AFSCFloorHeight afsc_floor_height(const AFSCFloorHeightInput *input);
+
+typedef enum {
+    AFSC_GRAVITY_ORIENTATION_VALID = 0, AFSC_GRAVITY_ORIENTATION_TRACKING_LIMITED,
+    AFSC_GRAVITY_ORIENTATION_STALE_FRAME, AFSC_GRAVITY_ORIENTATION_INVALID_POSE,
+    AFSC_GRAVITY_ORIENTATION_AMBIGUOUS_POSE, AFSC_GRAVITY_ORIENTATION_TOO_FAR,
+    AFSC_GRAVITY_ORIENTATION_BAD_ANGLE, AFSC_GRAVITY_ORIENTATION_LOW_CONFIDENCE_POSE
+} AFSCGravityOrientationReason;
+typedef struct {
+    uint32_t tracking_usable, frame_id_available;
+    double timestamp_s, frame_age_s;
+    /* Both rotations describe the same captured frame. World is gravity +Y up.
+     * The camera transform is rigid; the tag matrix is a homogeneous pure rotation
+     * with zero translation. Adapters convert native camera axes exactly once. */
+    AFSCMat4 world_from_optical, optical_from_tag_rotation;
+    AFSCPoseObservation pose;
+    AFSCMeasurementSettings settings;
+} AFSCGravityOrientationInput;
+typedef struct {
+    uint32_t available;
+    AFSCGravityOrientationReason reason;
+    AFSCMat4 world_from_tag_rotation;
+    AFSCVec3 normal_world, up_world; /* Unit +tag Z (into print), -tag Y (printed up). */
+    double tilt_from_vertical_rad; /* [0, pi/2]: 0 vertical plane, pi/2 horizontal. */
+    AFSCOptionalDouble twist_rad; /* [-pi, pi]: clockwise from printed front. */
+} AFSCGravityOrientation;
+/* Compose world-from-optical and optical-from-tag rotations, without Euler-angle
+ * addition. No floor, depth, image intrinsics or heading reference is required.
+ * Requires a resolved pose and <=0.4 s frame age; only the range, incidence and
+ * reprojection settings apply. Twist is relative to gravity projected into the
+ * tag plane, and unavailable when that projection's magnitude is <=1e-4. */
+AFSCGravityOrientation afsc_gravity_orientation(const AFSCGravityOrientationInput *input);
+
 /* Numeric validation for an operator-reviewed two-point tag edge. Sensor/source
  * and segment identity are supplied by the native adapter, never guessed. */
 uint32_t afsc_measured_tag_size(uint32_t point_count, uint32_t tracking_usable,

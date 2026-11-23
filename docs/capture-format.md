@@ -2,6 +2,14 @@
 
 Schema version 1 describes the on-device capture data. Preserve the complete exported MP4 so later analysis has the original inputs. It is not a calibrated field map. [MP4 recording format version 1](../recording-format/FORMAT.md) packages these files with readable YAML metadata; it is separate from the capture schema version.
 
+## Gravity-relative tag orientation
+
+New AprilTag detections include an additive `gravityOrientation` dictionary, also copied into `debug.gravityOrientation`. It combines the tag-to-optical-camera rotation and the same source frame's gravity-aligned camera-to-world rotation, including the ARKit/optical axis conversion. No separate Core Motion stream, floor selection or depth sample is required. `frameId`, `segmentId`, `timestamp` and `frameAgeSeconds` identify the source observation; `source`, `method`, `coordinateFrame`, `angleConvention` and `estimate` retain interpretation.
+
+When `available` is true, `tiltFromVerticalDegrees` is in [0,90], with zero indicating a vertical printed plane. `twistDegrees` is in [-180,180], positive clockwise when viewing the printed front, relative to gravity projected into that plane. A near-horizontal plane has `twistAvailable: false`, null `twistDegrees` and `twistReason: horizontalTagPlane`; its tilt remains available. The record also preserves `worldFromTagRotationRowMajor` (nine values), `normalWorld` (unit +tag Z, into the print) and `upWorld` (unit -tag Y, toward the printed top). These world axes establish gravity-relative orientation, not surveyed field heading.
+
+Limited tracking, stale/future frame ages, missing/invalid/ambiguous poses and failed range/incidence/decode/reprojection gates set `available: false`, retain `reason`, and leave all angles and world geometry null. A valid zero remains numeric. Recorded playback displays the saved angles within their original frame/segment lifetime; older captures without this dictionary show unavailable angles rather than a synthesized orientation. Existing `floorHeight` retains its independent confirmed-floor reference and depth/pose source.
+
 ## Files and clocks
 
 Each session has a UUID directory containing `manifest.json`, `frames.jsonl`, `events.jsonl`, `rgb.mp4`, `frames/`, and `depth/`. JSONL contains one JSON object per line. UTF-8 text, meters, and seconds are used unless a field says otherwise.

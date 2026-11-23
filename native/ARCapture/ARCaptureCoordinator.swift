@@ -858,7 +858,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     let enriched = TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
                     let ranged = TagCameraRanges.enrich(enriched, context: TagCameraRangesContext(intrinsics: k,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp))
-                    return TagFloorHeight.enrich(ranged, context: TagFloorHeightContext(floor: sourceFloor,
+                    let oriented = TagGravityOrientation.enrich(ranged, context: TagGravityOrientationContext(
+                        cameraToWorld: sourceCameraToWorld, settings: settings, tracking: sourceTracking,
+                        frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
+                        frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))
+                    return TagFloorHeight.enrich(oriented, context: TagFloorHeightContext(floor: sourceFloor,
                         cameraToWorld: sourceCameraToWorld, intrinsics: k, settings: settings, tracking: sourceTracking,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
                         frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))

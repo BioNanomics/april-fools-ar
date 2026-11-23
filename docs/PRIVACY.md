@@ -26,7 +26,9 @@ Play opens the saved camera video in the app's native video player without uploa
 
 Original capture folders and prepared MP4 files are separate copies stored in the app's Documents folder. Small integrity records are saved alongside the MP4s. These files remain until you remove them or delete the app; prepared MP4s are not temporary cache files. Keeping both copies uses additional storage.
 
-You can manage these files through the Files app or device file sharing. This version has no in-app deletion control. Removing an original capture folder alone does not remove its separate prepared MP4; remove both copies if you want to delete the complete local recording. Cached MP4 or ZIP exports created by earlier versions may also remain. The operating system may remove cached files, but the app does not promise a deletion schedule.
+In **Saved sessions**, choose **Delete** and confirm to permanently remove that session's original capture folder, prepared MP4 and integrity record from this device. Unfinished recordings from earlier runs can also be deleted. Recordings that are currently being captured or saved are protected from deletion.
+
+You can also manage these files through the Files app or device file sharing. Removing an original capture folder there alone does not remove its separate prepared MP4; remove both copies if you want to delete the complete local recording. Cached MP4 or ZIP exports created by earlier versions may also remain after deleting a saved session. The operating system may remove cached files, but the app does not promise a deletion schedule.
 
 Your device or cloud backup settings may include app data. To remove the app's local recordings, preferences, and cached exports together, delete the app rather than offloading it. Copies you exported or backed up must be managed separately at those destinations. Deleting a local recording does not recall a shared copy.
 

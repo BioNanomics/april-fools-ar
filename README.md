@@ -27,11 +27,11 @@ Tracking, depth status and zoom controls share one compact line at the top of th
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
 4. In **Measure** mode, tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
-6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to review the video with recorded overlays, or **Share** to send the same recording through AirDrop or Files. In the player, **Recorded overlays** switches between annotated and clean playback.
+6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to review the video with recorded overlays, or **Share** to send the same recording through AirDrop or Files. In the player, **Recorded overlays** switches between annotated and clean playback. Use **Delete**, then confirm, to permanently remove a session's video and original capture data from this device. Unfinished recordings from earlier runs can also be deleted.
 
 Keep recordings short initially and check an export before the first field visit. Files stay on the phone until you explicitly share them. No server, account, BLE meter, or internet connection is needed for capture.
 
-The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage.
+The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage until you delete the session.
 
 ## Capture contents
 

@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.8.2",
+      "build": "28",
+      "title": "Delete saved recordings",
+      "changes": [
+        "Delete a recording from Saved sessions after confirming removal of its video and original capture data.",
+        "Remove unfinished recordings from earlier runs, while protecting recordings that are still being captured or saved."
+      ]
+    },
+    {
       "version": "0.7.1",
       "build": "24",
       "title": "Recorded overlays during playback",

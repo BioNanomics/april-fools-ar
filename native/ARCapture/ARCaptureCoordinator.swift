@@ -27,6 +27,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     static let shared = ARCaptureCoordinator()
     private let captureQueue = DispatchQueue(label: "AprilFoolsAR.capture.frames", qos: .userInitiated)
     private let tagQueue = DispatchQueue(label: "AprilFoolsAR.apriltag.detect", qos: .userInitiated)
+    private let savedSessionQueue = DispatchQueue(label: "AprilFoolsAR.saved-sessions", qos: .utility)
     // Detector ownership stays exclusively on tagQueue; job/status ownership stays on captureQueue.
     private var tagDetector: AFTagDetector?
     private var tagInFlight = false
@@ -450,6 +451,25 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 guard value?["finalized"] as? Bool == true else { throw CaptureError.message("Stop and finalize this session before exporting.") }
                 completion(.success(["sessionId": id, "folderPath": folder.path, "manifestPath": manifest.path, "finalized": true]))
             } catch { completion(.failure(error)) }
+        }
+    }
+
+    func deleteSession(id: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            guard let identifier = UUID(uuidString: id) else { completion(.failure(CaptureError.message("Invalid session identifier."))); return }
+            guard self.recorder.map({ UUID(uuidString: $0.id) != identifier }) ?? true,
+                  self.finalizingRecorder.map({ UUID(uuidString: $0.id) != identifier }) ?? true else {
+                completion(.failure(CaptureError.message("Stop and finish saving this recording before deleting it.")))
+                return
+            }
+            // Recording IDs are newly generated at start and never reused, so
+            // this checked ID cannot become active while disk cleanup runs.
+            self.savedSessionQueue.async {
+                do {
+                    try SavedRecordingStore.shared.delete(sessionID: id)
+                    completion(.success(["sessionId": id, "deleted": true]))
+                } catch { completion(.failure(error)) }
+            }
         }
     }
 

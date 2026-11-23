@@ -129,6 +129,66 @@ final class SavedRecordingStore {
                 "recordingPath": url.path, "recordingBytes": NSNumber(value: identity.bytes)]
     }
 
+    /// Explicit deletion removes both copies, including a capture whose save
+    /// failed. Keep the source until last so an artifact-cleanup failure is
+    /// visible in Saved sessions and can be retried.
+    func delete(sessionID: String) throws {
+        guard let identifier = UUID(uuidString: sessionID) else { throw failure("Invalid session identifier.") }
+        prepareLock.lock()
+        defer { prepareLock.unlock() }
+        try requireDirectory(sessionsRoot)
+        let folder = sessionsRoot.appendingPathComponent(sessionID, isDirectory: true)
+        guard folder.deletingLastPathComponent().path == sessionsRoot.path else {
+            throw failure("Select one session directly inside the sessions folder.")
+        }
+        if let attributes = try optionalAttributes(folder) {
+            guard attributes[.type] as? FileAttributeType == .typeDirectory,
+                  folder.resolvingSymlinksInPath().deletingLastPathComponent().path == sessionsRoot.path else {
+                throw failure("The session must be a local capture directory, not a link.")
+            }
+        }
+        guard recordingsRoot.path != folder.path,
+              !recordingsRoot.path.hasPrefix(folder.path + "/"),
+              !sessionsRoot.path.hasPrefix(recordingsRoot.path + "/") else {
+            throw failure("The recording destination must be outside the capture folders.")
+        }
+        try manager.createDirectory(at: recordingsRoot, withIntermediateDirectories: true)
+        let lock = try acquirePublicationLock(shouldCancel: { false })
+        defer { _ = flock(lock, LOCK_UN); Darwin.close(lock) }
+
+        let artifacts = [movieURL(sessionID), receiptURL(sessionID)]
+        // Validate every target before removing anything. Never follow a link
+        // or recursively remove an unexpected directory in place of a movie.
+        for artifact in artifacts {
+            if let attributes = try optionalAttributes(artifact),
+               attributes[.type] as? FileAttributeType != .typeRegular {
+                throw failure("A saved recording file has an unexpected type.")
+            }
+        }
+        let stages = try manager.contentsOfDirectory(at: recordingsRoot, includingPropertiesForKeys: nil)
+            .filter { stageSessionID($0) == identifier }
+        for stage in stages { try requireDirectory(stage) }
+        for artifact in artifacts where try optionalAttributes(artifact) != nil { try manager.removeItem(at: artifact) }
+        for stage in stages { try manager.removeItem(at: stage) }
+        if try optionalAttributes(folder) != nil { try manager.removeItem(at: folder) }
+        verificationLock.lock()
+        verified = verified.filter { UUID(uuidString: $0.key) != identifier }
+        verificationLock.unlock()
+    }
+
+    private func optionalAttributes(_ url: URL) throws -> [FileAttributeKey: Any]? {
+        do { return try manager.attributesOfItem(atPath: url.path) }
+        catch let error as NSError where error.domain == NSCocoaErrorDomain &&
+            [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) { return nil }
+    }
+
+    private func requireDirectory(_ url: URL) throws {
+        let attributes = try manager.attributesOfItem(atPath: url.path)
+        guard attributes[.type] as? FileAttributeType == .typeDirectory else {
+            throw failure("Expected a local recording directory, not a link.")
+        }
+    }
+
     private func source(folderPath: String) throws -> Source {
         let decoded = folderPath.removingPercentEncoding ?? folderPath
         guard !decoded.contains("\0"), !decoded.split(separator: "/").contains("..") else {
@@ -221,20 +281,24 @@ final class SavedRecordingStore {
 
     private func removeInterruptedStages() throws {
         for entry in try manager.contentsOfDirectory(at: recordingsRoot, includingPropertiesForKeys: nil) {
-            let name = entry.lastPathComponent
-            guard name.hasPrefix("."), name.hasSuffix(".pending") else { continue }
-            let identifiers = name.dropFirst().dropLast(".pending".count)
-            guard identifiers.count == 73 else { continue }
-            let boundary = identifiers.index(identifiers.startIndex, offsetBy: 36)
-            guard identifiers[boundary] == "-",
-                  UUID(uuidString: String(identifiers[..<boundary])) != nil,
-                  UUID(uuidString: String(identifiers[identifiers.index(after: boundary)...])) != nil else { continue }
+            guard stageSessionID(entry) != nil else { continue }
             let attributes = try manager.attributesOfItem(atPath: entry.path)
             // attributesOfItem reports a link itself as .typeSymbolicLink;
             // never follow a matching-name link during cleanup.
             guard attributes[.type] as? FileAttributeType == .typeDirectory else { continue }
             try manager.removeItem(at: entry)
         }
+    }
+
+    private func stageSessionID(_ url: URL) -> UUID? {
+        let name = url.lastPathComponent
+        guard name.hasPrefix("."), name.hasSuffix(".pending") else { return nil }
+        let identifiers = name.dropFirst().dropLast(".pending".count)
+        guard identifiers.count == 73 else { return nil }
+        let boundary = identifiers.index(identifiers.startIndex, offsetBy: 36)
+        guard identifiers[boundary] == "-",
+              UUID(uuidString: String(identifiers[identifiers.index(after: boundary)...])) != nil else { return nil }
+        return UUID(uuidString: String(identifiers[..<boundary]))
     }
 
     private func receipt(source: Source) -> Receipt? {

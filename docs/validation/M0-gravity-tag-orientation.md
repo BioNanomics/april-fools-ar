@@ -23,3 +23,17 @@ Implemented November 23, 2026 in the working checkout. The feature combines each
 ## Physical status
 
 No physical-device session, runner, screen capture or install was started during the initial implementation validation above. The task-owned simulator was shut down and removed after testing. The simulator checks establish implementation behavior and native layout, not real-camera numerical accuracy. A subsequent phone handoff is recorded separately below once completed.
+
+## Signed iPhone handoff — November 23, 2026
+
+Gravity-angle code and release identity were committed as `1d9a490fa2a9401430f579218980b2246d13baf9`. An independent source export of that commit passed **132 native simulator tests**, confirming the committed feature has no dependency on the other pending Kalman or playback changes.
+
+While this package was being prepared, another task installed the thumb-control layout as 0.9.0 (28). The final phone package preserves that layout: bottom controls, quick actions, lower-half sheets and the separate native details readout. Its details view was raised to 290 points for the new gravity row. The isolated release source also preserves current saved-session deletion, recording/playback changes and Kalman settings; the main checkout's other pending edits were left uncommitted. The combined source passed TypeScript, **72 Jest tests** and **151 native simulator tests**, including the passive details panel's lifecycle, freshness and gravity-row containment. The passive 390×290 panel screenshot was visually inspected.
+
+The development-signed Release app **0.9.0 (29)** was installed in place on the iPhone and launched successfully. The installed-app query confirmed its version/build, and a process query confirmed the app running. The complete Documents listing, directory flags and file sizes matched before and after installation. No recording was started or deleted.
+
+The package embeds source commit `1d9a490`, `workingTreeDirty: true` and build timestamp `2026-11-23T05:17:09Z`. The modified-source marker accurately includes the preserved pending features and combined thumb layout. Full source hashes matched before and after the build. Strict/deep signature, provisioning, embedded identity, bundled JavaScript, release notes and matching dSYM UUID checks passed before device access.
+
+No screen sharing, Appium, WDA or XCTest runner was started on the phone. Every owned deployment command exited; the global device guard returned **released**, with no errors, before documentation resumed. This handoff establishes installation and launch, not real-camera numerical accuracy or physical accessibility acceptance.
+
+Exact app, symbols, source archive/hashes and private deployment evidence are retained under `/tmp/april-gravity-handoff-20261123/`. The combined release source remains in the managed `gravity-phone-release` checkout; the app protects it as this chat's primary checkout, so automatic archival was refused. Build log: `/tmp/april-gravity-phone-signed-build-final.log`. Executable SHA-256: `4c6dabd04a8a36b8f7cda388abbb7989410c119a20607861912c910185a4f5a7`.

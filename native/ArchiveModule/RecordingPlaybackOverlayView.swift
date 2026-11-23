@@ -82,12 +82,15 @@ final class RecordingPlaybackOverlayView: UIView {
             color.withAlphaComponent(0.8).setStroke(); path.lineWidth = 1.5
             path.setLineDash([6, 4], count: 2, phase: 0); path.stroke()
         }
-        for line in snapshot.lines.prefix(256) {
+        for line in snapshot.lines.prefix(512) {
             let points = mapped(line.points)
             guard points.count >= 2 else { continue }
             let color = Self.color(line.style), path = UIBezierPath()
             path.move(to: points[0]); points.dropFirst().forEach { path.addLine(to: $0) }
             path.lineWidth = 2; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            if line.style == "distance-horizontal" || line.style == "distance-vertical" {
+                path.setLineDash([6, 4], count: 2, phase: 0)
+            }
             color.setStroke(); path.stroke()
             color.setFill()
             for point in [points[0], points[points.count - 1]] {
@@ -129,7 +132,7 @@ final class RecordingPlaybackOverlayView: UIView {
         }
         var used = Set<String>(), occupied: [CGRect] = []
         func place(_ key: String, _ text: String, _ anchor: CGPoint, _ color: UIColor,
-                   identifier: String, avoidOverlap: Bool = true) {
+                   identifier: String, avoidOverlap: Bool = true, accessibilityText: String? = nil) {
             guard !text.isEmpty, Self.finite(anchor) else { return }
             let label: UILabel
             if let existing = labels[key] { label = existing }
@@ -147,7 +150,7 @@ final class RecordingPlaybackOverlayView: UIView {
             label.text = " \(text) "
             label.textColor = color
             label.accessibilityIdentifier = identifier
-            label.accessibilityLabel = text
+            label.accessibilityLabel = accessibilityText ?? text
             let maximum = CGSize(width: min(230, clipping.width), height: clipping.height)
             var size = label.sizeThatFits(maximum)
             size.width = min(maximum.width, ceil(size.width) + 4)
@@ -174,13 +177,13 @@ final class RecordingPlaybackOverlayView: UIView {
             place("tag.\(tag.id)", tag.label, CGPoint(x: extent.midX, y: extent.maxY + 7), Self.color(tag.severity),
                   identifier: "recording.preview.tag.\(tag.id)")
         }
-        for line in snapshot.lines.prefix(256) {
+        for line in snapshot.lines.prefix(512) {
             guard let label = line.label else { continue }
             let points = mapped(line.points)
             guard points.count >= 2, let extent = Self.enclosing(points), extent.insetBy(dx: -2, dy: -2).intersects(videoRect) else { continue }
             let first = points[0], last = points[points.count - 1]
             place("line.\(line.id)", label, CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 - 16), Self.color(line.style),
-                  identifier: "recording.preview.measurement.\(line.id)")
+                  identifier: "recording.preview.measurement.\(line.id)", accessibilityText: line.accessibilityLabel)
         }
         for polygon in snapshot.polygons.prefix(32) {
             guard let label = polygon.label else { continue }
@@ -214,6 +217,8 @@ final class RecordingPlaybackOverlayView: UIView {
         case "bad", "axisx", "x", "red": return .systemRed
         case "axisy", "y": return .systemGreen
         case "axisz", "z", "blue": return .systemBlue
+        case "distancehorizontal": return .systemCyan
+        case "distancevertical": return .systemOrange
         case "height", "tagheight", "pending", "floor", "base", "selectedfloor", "cyan": return .systemCyan
         case "candidate", "orange": return .systemOrange
         default: return .lightGray

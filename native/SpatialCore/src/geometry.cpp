@@ -219,3 +219,13 @@ extern "C" AFSCGeometryStatus afsc_distance(AFSCVec3 start, AFSCVec3 end, AFSCDi
     *distance=value;
     return AFSC_GEOMETRY_OK;
 }
+
+extern "C" AFSCGeometryStatus afsc_distance_triangle(AFSCVec3 start, AFSCVec3 end,
+                                                      AFSCDistanceTriangle *triangle) {
+    if (!triangle) return AFSC_GEOMETRY_INVALID_ARGUMENT;
+    AFSCDistance lengths{};
+    const auto status = afsc_distance(start, end, &lengths);
+    if (status != AFSC_GEOMETRY_OK) return status;
+    *triangle = {{end.x, start.y, end.z}, lengths};
+    return AFSC_GEOMETRY_OK;
+}

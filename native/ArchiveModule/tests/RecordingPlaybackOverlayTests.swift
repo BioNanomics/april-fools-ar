@@ -47,10 +47,11 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
                 "detections": empty ? [] : [tag]]
     }
 
-    private func measurementEvent(pts: Double = 0.1) -> [String: Any] {
+    private func measurementEvent(pts: Double = 0.1, start: [Double] = [-0.2, 0, -2],
+                                  end: [Double] = [0.2, 0.2, -2], kind: String = "distance") -> [String: Any] {
         ["type": "measurementCompleted", "segmentId": "A", "timestamp": 1000 + pts,
-         "measurement": ["id": "m1", "kind": "distance", "segmentId": "A", "timestamp": 1000 + pts,
-                         "startWorldMeters": [-0.2, 0, -2], "endWorldMeters": [0.2, 0.2, -2],
+         "measurement": ["id": "m1", "kind": kind, "segmentId": "A", "timestamp": 1000 + pts,
+                         "startWorldMeters": start, "endWorldMeters": end,
                          "distanceMeters": sqrt(0.2), "verticalMeters": 0.2, "sourcePoints": []]]
     }
 
@@ -162,10 +163,10 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
                       frame("f3", 0.6, tracking: "limited"), frame("f4", 1, segment: "B")]
         let timeline = try RecordingPlaybackTimeline(manifest: manifest, frames: frames,
                                                      events: [measurementEvent(), clear])
-        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0.2)).lines.count, 1)
+        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0.2)).lines.count, 3)
         XCTAssertTrue(try XCTUnwrap(timeline.snapshot(at: 0.4)).lines.isEmpty)
         XCTAssertTrue(try XCTUnwrap(timeline.snapshot(at: 1)).lines.isEmpty)
-        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0.2)).lines.count, 1)
+        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0.2)).lines.count, 3)
         let withoutClear = try RecordingPlaybackTimeline(manifest: manifest, frames: frames,
                                                          events: [measurementEvent()])
         XCTAssertTrue(try XCTUnwrap(withoutClear.snapshot(at: 0.6)).lines.isEmpty)
@@ -183,7 +184,94 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
         XCTAssertEqual(limited.frameID, "limited")
         XCTAssertTrue(limited.lines.isEmpty)
         XCTAssertTrue(limited.message?.contains("limited") == true)
-        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0.4)).lines.count, 1)
+        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0.4)).lines.count, 3)
+    }
+
+    func testDistanceTriangleUsesSavedEndpointsAndReprojectsEveryEdge() throws {
+        let timeline = try RecordingPlaybackTimeline(manifest: manifest,
+            frames: [frame("f0", 0), frame("f1", 0.2), frame("moved", 0.3, x: 0.2)], events: [measurementEvent()])
+        let before = Dictionary(uniqueKeysWithValues: try XCTUnwrap(timeline.snapshot(at: 0.2)).lines.map { ($0.id, $0) })
+        let after = Dictionary(uniqueKeysWithValues: try XCTUnwrap(timeline.snapshot(at: 0.3)).lines.map { ($0.id, $0) })
+        XCTAssertEqual(Set(before.keys), ["measurement.m1", "measurement.m1.horizontal", "measurement.m1.vertical"])
+        XCTAssertEqual(before["measurement.m1"]?.label, "D 0.447 m")
+        XCTAssertEqual(before["measurement.m1.horizontal"]?.label, "H 0.400 m")
+        XCTAssertEqual(before["measurement.m1.vertical"]?.label, "V +0.200 m")
+        XCTAssertEqual(before["measurement.m1.horizontal"]?.style, "distance-horizontal")
+        XCTAssertEqual(before["measurement.m1.vertical"]?.style, "distance-vertical")
+        let direct = try XCTUnwrap(before["measurement.m1"])
+        XCTAssertTrue(direct.accessibilityLabel?.contains("Horizontal 0.400 meters") == true)
+        XCTAssertTrue(direct.accessibilityLabel?.contains("Vertical difference +0.200 meters") == true)
+        let horizontal = try XCTUnwrap(before["measurement.m1.horizontal"])
+        let vertical = try XCTUnwrap(before["measurement.m1.vertical"])
+        XCTAssertEqual(horizontal.points[0].y, horizontal.points[1].y, accuracy: 1e-5)
+        XCTAssertEqual(vertical.points[0].x, vertical.points[1].x, accuracy: 1e-5)
+        XCTAssertEqual(horizontal.points[1], vertical.points[0])
+        for (id, line) in before {
+            let moved = try XCTUnwrap(after[id])
+            XCTAssertEqual(moved.label, line.label)
+            for index in line.points.indices {
+                XCTAssertEqual(moved.points[index].x, line.points[index].x - 10, accuracy: 1e-4)
+                XCTAssertEqual(moved.points[index].y, line.points[index].y, accuracy: 1e-4)
+            }
+        }
+    }
+
+    func testDistanceTriangleClipsLegsIndependentlyOfInvisibleDiagonalAndNearPlane() throws {
+        let outside = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0.2)],
+            events: [measurementEvent(start: [-3, 0, -2], end: [0, 3, -2])])
+        let legs = try XCTUnwrap(outside.snapshot(at: 0.2)).lines
+        XCTAssertEqual(Set(legs.map(\.id)), ["measurement.m1.horizontal", "measurement.m1.vertical"])
+        XCTAssertEqual(Set(legs.compactMap(\.label)), ["H 3.000 m", "V +3.000 m"], "Old recordings derive component lengths from endpoints")
+
+        let crossing = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0.2)],
+            events: [measurementEvent(start: [-0.2, 0, 0.2], end: [0.2, 0.2, -2])])
+        let clipped = try XCTUnwrap(crossing.snapshot(at: 0.2)).lines
+        XCTAssertEqual(clipped.count, 3)
+        for line in legs + clipped {
+            XCTAssertEqual(line.points.count, 2)
+            for point in line.points {
+                XCTAssertTrue(point.x.isFinite && point.y.isFinite)
+                XCTAssertTrue((-1e-5...100.00001).contains(point.x))
+                XCTAssertTrue((-1e-5...100.00001).contains(point.y))
+            }
+        }
+    }
+
+    func testDistanceTriangleDegenerateLegsKeepZeroValuesWithoutOverlappingHelpers() throws {
+        let cases: [([Double], [Double], String)] = [
+            ([-0.2, 0, -2], [0.2, 0, -2], "D 0.400 m · H 0.400 m · V +0.000 m"),
+            ([0, 0.2, -2], [0, -0.2, -2], "D 0.400 m · H 0.000 m · V -0.400 m"),
+            ([0, 0, -2], [0, 0, -2], "D 0.000 m · H 0.000 m · V +0.000 m"),
+        ]
+        for (start, end, expected) in cases {
+            let timeline = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0.2)],
+                events: [measurementEvent(start: start, end: end)])
+            let lines = try XCTUnwrap(timeline.snapshot(at: 0.2)).lines
+            XCTAssertEqual(lines.map(\.id), ["measurement.m1"])
+            XCTAssertEqual(lines.first?.label, expected)
+            XCTAssertTrue(lines.first?.accessibilityLabel?.contains("Horizontal") == true)
+            XCTAssertTrue(lines.first?.accessibilityLabel?.contains("Vertical difference") == true)
+        }
+        let height = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0.2)],
+            events: [measurementEvent(kind: "height")])
+        let heightLines = try XCTUnwrap(height.snapshot(at: 0.2)).lines
+        XCTAssertEqual(heightLines.map(\.id), ["measurement.m1"])
+        XCTAssertEqual(heightLines.first?.style, "height")
+        XCTAssertTrue(heightLines.first?.label?.hasPrefix("Height ") == true)
+    }
+
+    func testOtherAndMissingMeasurementKindsKeepLegacyDirectLineWithoutTriangle() throws {
+        for kind: String? in ["tagWidth", "unknown", nil] {
+            var event = measurementEvent(kind: kind ?? "distance")
+            var record = try XCTUnwrap(event["measurement"] as? [String: Any])
+            record["kind"] = kind
+            event["measurement"] = record
+            let timeline = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0.2)], events: [event])
+            let lines = try XCTUnwrap(timeline.snapshot(at: 0.2)).lines
+            XCTAssertEqual(lines.map(\.id), ["measurement.m1"])
+            XCTAssertEqual(lines.first?.label, "0.447 m · ΔY 0.200 m")
+            XCTAssertEqual(lines.first?.style, "distance")
+        }
     }
 
     func testSettingsFloorAndTrackingChangesInvalidateHeldTagContext() throws {
@@ -510,5 +598,26 @@ final class RecordingPlaybackOverlayUIKitTests: XCTestCase {
             naturalSize: image, preferredTransform: .identity, videoRect: identityRect))
         XCTAssertNil(RecordingPlaybackOverlayView.imagePoint(CGPoint(x: CGFloat.nan, y: 0), imageSize: image,
             naturalSize: image, preferredTransform: .identity, videoRect: identityRect))
+    }
+
+    func testDistanceTriangleLabelsUseLegColorsAndCompleteDirectAccessibility() throws {
+        let directAccessibility = "Distance 0.500 meters. Horizontal 0.400 meters. Vertical difference +0.300 meters."
+        let snapshot = RecordingPlaybackSnapshot(imageSize: CGSize(width: 100, height: 100), frameID: "f0", segmentID: "A",
+            tags: [], lines: [
+                .init(id: "measurement.m1", points: [CGPoint(x: 20, y: 80), CGPoint(x: 80, y: 20)],
+                      label: "D 0.500 m", style: "distance", accessibilityLabel: directAccessibility),
+                .init(id: "measurement.m1.horizontal", points: [CGPoint(x: 20, y: 80), CGPoint(x: 80, y: 80)],
+                      label: "H 0.400 m", style: "distance-horizontal"),
+                .init(id: "measurement.m1.vertical", points: [CGPoint(x: 80, y: 80), CGPoint(x: 80, y: 20)],
+                      label: "V +0.300 m", style: "distance-vertical"),
+            ], polygons: [], message: nil)
+        let view = RecordingPlaybackOverlayView(frame: CGRect(x: 0, y: 0, width: 400, height: 400))
+        view.show(snapshot: snapshot, videoRect: view.bounds, naturalSize: snapshot.imageSize, preferredTransform: .identity)
+        let labels = descendants(view).compactMap { $0 as? UILabel }
+        let direct = try XCTUnwrap(labels.first { $0.accessibilityIdentifier == "recording.preview.measurement.measurement.m1" })
+        XCTAssertEqual(direct.accessibilityLabel, directAccessibility)
+        XCTAssertEqual(direct.textColor, .systemYellow)
+        XCTAssertEqual(labels.first { $0.text?.contains("H 0.400 m") == true }?.textColor, .systemCyan)
+        XCTAssertEqual(labels.first { $0.text?.contains("V +0.300 m") == true }?.textColor, .systemOrange)
     }
 }

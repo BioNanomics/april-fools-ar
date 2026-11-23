@@ -67,6 +67,13 @@ struct SpatialMeasurement {
     }
 }
 
+struct SpatialDistanceTriangle {
+    let corner: SIMD3<Float>
+    let distanceMeters: Double
+    let horizontalMeters: Double
+    let verticalMeters: Double
+}
+
 enum SpatialMeasurementMath {
     static func array(_ point: SIMD3<Float>) -> [Double] { [Double(point.x), Double(point.y), Double(point.z)] }
     static func finite(_ point: SIMD3<Float>) -> Bool { point.x.isFinite && point.y.isFinite && point.z.isFinite }
@@ -85,6 +92,14 @@ enum SpatialMeasurementMath {
             return AFSCDistance(distance_meters: .nan, vertical_meters: .nan, horizontal_meters: .nan)
         }
         return result
+    }
+    static func distanceTriangle(from start: SIMD3<Float>, to end: SIMD3<Float>) -> SpatialDistanceTriangle? {
+        var result = AFSCDistanceTriangle()
+        guard afsc_distance_triangle(coreVector(start), coreVector(end), &result) == AFSC_GEOMETRY_OK else { return nil }
+        let corner = swiftVector(result.corner)
+        guard finite(corner) else { return nil }
+        return SpatialDistanceTriangle(corner: corner, distanceMeters: result.lengths.distance_meters,
+            horizontalMeters: result.lengths.horizontal_meters, verticalMeters: result.lengths.vertical_meters)
     }
     static func floorTiltDegrees(_ normal: SIMD3<Float>) -> Double? {
         var radians = 0.0

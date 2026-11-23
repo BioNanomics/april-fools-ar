@@ -33,8 +33,30 @@ final class SpatialMeasurementOverlayView: UIView {
         }
         func remove() { label.removeFromSuperview(); line.removeFromSuperlayer(); dots.removeFromSuperlayer(); basePatch.removeFromSuperlayer() }
     }
+    private final class DistanceTriangleSlot {
+        let horizontal = CAShapeLayer(), vertical = CAShapeLayer()
+        let horizontalLabel = UILabel(), verticalLabel = UILabel()
+        init(in view: UIView) {
+            for shape in [horizontal, vertical] {
+                shape.lineWidth = 1.5; shape.lineCap = .round; shape.lineDashPattern = [5, 4]
+                shape.fillColor = UIColor.clear.cgColor
+                shape.shadowColor = UIColor.black.cgColor; shape.shadowOpacity = 0.8
+                shape.shadowRadius = 1; shape.shadowOffset = .zero
+                view.layer.addSublayer(shape)
+            }
+            for label in [horizontalLabel, verticalLabel] {
+                SpatialMeasurementOverlayView.style(label)
+                view.addSubview(label)
+            }
+        }
+        func remove() {
+            horizontal.removeFromSuperlayer(); vertical.removeFromSuperlayer()
+            horizontalLabel.removeFromSuperview(); verticalLabel.removeFromSuperview()
+        }
+    }
     private var planeSlots = [PlaneSlot]()
     private var vectorSlots = [VectorSlot]()
+    private var distanceTriangleSlots = [DistanceTriangleSlot]()
     private var pendingSlots = [VectorSlot]()
     private var automaticHeightSlots = [VectorSlot]()
     private var automaticHeightDeadlines = [Double]()
@@ -62,6 +84,7 @@ final class SpatialMeasurementOverlayView: UIView {
         expiryTimer?.invalidate(); expiryTimer = nil; expiryDeadline = nil
         planeSlots.forEach { $0.remove() }; planeSlots.removeAll()
         vectorSlots.forEach { $0.remove() }; vectorSlots.removeAll()
+        distanceTriangleSlots.forEach { $0.remove() }; distanceTriangleSlots.removeAll()
         pendingSlots.forEach { $0.remove() }; pendingSlots.removeAll()
         automaticHeightSlots.forEach { $0.remove() }; automaticHeightSlots.removeAll(); automaticHeightDeadlines = []
         floorHitPaths.removeAll()
@@ -96,11 +119,21 @@ final class SpatialMeasurementOverlayView: UIView {
             }
             if abs(doubleArea) > 2 { planeGeometry.append((plane, polygon)) }
         }
-        var vectors = [(SpatialMeasurement, [CGPoint])]()
+        var vectors = [(SpatialMeasurement, [CGPoint]?, SpatialDistanceTriangle?, [CGPoint]?, [CGPoint]?)]()
         for measurement in measurements.suffix(50) {
-            guard measurement.distanceMeters.isFinite, measurement.verticalMeters.isFinite,
-                  let segment = camera.segment(from: measurement.start, to: measurement.end) else { continue }
-            vectors.append((measurement, segment))
+            guard measurement.distanceMeters.isFinite, measurement.verticalMeters.isFinite else { continue }
+            let diagonal = camera.segment(from: measurement.start, to: measurement.end)
+            if measurement.kind == "distance" {
+                guard let triangle = SpatialMeasurementMath.distanceTriangle(from: measurement.start, to: measurement.end) else { continue }
+                // Each original edge is clipped separately; a visible leg does not depend on the diagonal.
+                let hasLegs = triangle.horizontalMeters > 1e-6 && abs(triangle.verticalMeters) > 1e-6
+                let horizontal = hasLegs ? camera.segment(from: measurement.start, to: triangle.corner) : nil
+                let vertical = hasLegs ? camera.segment(from: triangle.corner, to: measurement.end) : nil
+                guard diagonal != nil || horizontal != nil || vertical != nil else { continue }
+                vectors.append((measurement, diagonal, triangle, horizontal, vertical))
+            } else if let diagonal {
+                vectors.append((measurement, diagonal, nil, nil, nil))
+            }
         }
         let pending = pendingPoints.prefix(2).enumerated().compactMap { index, world -> (Int, CGPoint)? in
             guard let point = camera.point(world), camera.viewport.contains(point) else { return nil }
@@ -117,6 +150,9 @@ final class SpatialMeasurementOverlayView: UIView {
         while planeSlots.count < planeGeometry.count { planeSlots.append(PlaneSlot(in: self)) }
         while vectorSlots.count > vectors.count { vectorSlots.removeLast().remove() }
         while vectorSlots.count < vectors.count { vectorSlots.append(VectorSlot(in: self)) }
+        let triangleCount = vectors.filter { $0.2 != nil }.count
+        while distanceTriangleSlots.count > triangleCount { distanceTriangleSlots.removeLast().remove() }
+        while distanceTriangleSlots.count < triangleCount { distanceTriangleSlots.append(DistanceTriangleSlot(in: self)) }
         while pendingSlots.count > pending.count { pendingSlots.removeLast().remove() }
         while pendingSlots.count < pending.count { pendingSlots.append(VectorSlot(in: self)) }
         while automaticHeightSlots.count > automatic.count { automaticHeightSlots.removeLast().remove() }
@@ -147,10 +183,13 @@ final class SpatialMeasurementOverlayView: UIView {
             place(slot.label, near: CGPoint(x: center.x / CGFloat(polygon.count), y: center.y / CGFloat(polygon.count)))
             floorHitPaths.append((plane.id, path))
         }
+        var triangleIndex = 0
         for (index, geometry) in vectors.enumerated() {
-            let (measurement, segment) = geometry, slot = vectorSlots[index]
+            let (measurement, segment, triangle, horizontalSegment, verticalSegment) = geometry, slot = vectorSlots[index]
             let isHeight = measurement.kind == "height", color: UIColor = isHeight ? .systemOrange : .systemYellow
-            slot.line.path = arrow(from: segment[0], to: segment[1]).cgPath
+            slot.line.name = "spatial.measurement.\(measurement.id).diagonal"
+            slot.line.path = segment.map { arrow(from: $0[0], to: $0[1]).cgPath }
+            slot.line.isHidden = segment == nil
             slot.line.strokeColor = color.cgColor; slot.dots.fillColor = color.cgColor
             let dots = UIBezierPath()
             for world in [measurement.start, measurement.end] {
@@ -159,21 +198,53 @@ final class SpatialMeasurementOverlayView: UIView {
                 }
             }
             slot.dots.path = dots.cgPath
-            let distance = Double(measurement.distanceMeters), vertical = Double(measurement.verticalMeters)
+            let distance = triangle?.distanceMeters ?? Double(measurement.distanceMeters)
+            let vertical = triangle?.verticalMeters ?? Double(measurement.verticalMeters)
             let formattedHeight = isHeight ? HeightDisplayFormatter.string(meters: abs(vertical), showImperial: showImperialHeight) : nil
             slot.label.text = isHeight ? " Height \(formattedHeight ?? "—") " : String(format: " %.3f m · ΔY %.3f m ", distance, vertical)
             slot.label.textColor = color
             slot.label.font = .monospacedSystemFont(ofSize: isHeight ? 11 : 12, weight: isHeight ? .regular : .semibold)
+            slot.label.numberOfLines = 1
+            slot.label.lineBreakMode = .byTruncatingTail
             slot.label.accessibilityIdentifier = "spatial.measurement.\(measurement.id)"
             slot.label.accessibilityLabel = isHeight ? "Height measurement" : "Distance measurement"
             slot.label.accessibilityValue = isHeight ? "ID \(measurement.id). Height \(formattedHeight ?? "unavailable")." : String(format: "ID %@. Distance %.3f meters. Vertical difference %.3f meters.", measurement.id, distance, vertical)
+            if let triangle {
+                let triangleSlot = distanceTriangleSlots[triangleIndex]; triangleIndex += 1
+                let horizontalIsZero = triangle.horizontalMeters <= 1e-6, verticalIsZero = abs(triangle.verticalMeters) <= 1e-6
+                var directText = String(format: " D %.3f m", triangle.distanceMeters)
+                if horizontalIsZero || verticalIsZero {
+                    directText += String(format: " · H %.3f m · V %+.3f m", triangle.horizontalMeters, triangle.verticalMeters)
+                    slot.label.numberOfLines = 0
+                    slot.label.lineBreakMode = .byWordWrapping
+                }
+                slot.label.text = directText + " "
+                slot.label.accessibilityValue = String(format: "ID %@. Direct distance %.3f meters. Horizontal distance %.3f meters. Signed vertical difference %+.3f meters. Horizontal is level with gravity; positive vertical is upward.", measurement.id, triangle.distanceMeters, triangle.horizontalMeters, triangle.verticalMeters)
+                showTriangleLeg(triangleSlot.horizontal, label: triangleSlot.horizontalLabel, segment: horizontalSegment,
+                    opposite: measurement.end, camera: camera, color: .systemCyan,
+                    text: String(format: " H %.3f m ", triangle.horizontalMeters),
+                    identifier: "spatial.measurement.\(measurement.id).horizontal", accessibility: "Horizontal distance",
+                    value: String(format: "%.3f meters. Level with gravity.", triangle.horizontalMeters))
+                showTriangleLeg(triangleSlot.vertical, label: triangleSlot.verticalLabel, segment: verticalSegment,
+                    opposite: measurement.start, camera: camera, color: .systemOrange,
+                    text: String(format: " V %+.3f m ", triangle.verticalMeters),
+                    identifier: "spatial.measurement.\(measurement.id).vertical", accessibility: "Signed vertical difference",
+                    value: String(format: "%+.3f meters. Positive is upward along gravity-aligned vertical.", triangle.verticalMeters))
+            }
             if isHeight {
                 let state = showFloorBase(slot, center: measurement.start, floor: measurement.floor,
                     camera: camera, owner: "manual.\(measurement.id)")
                 slot.label.accessibilityValue = (slot.label.accessibilityValue ?? "") + " " + baseAccessibility(state)
             } else { hideFloorBase(slot) }
             if isHeight { placeAtWorldMidpoint(slot.label, world: measurement.start+(measurement.end-measurement.start)/2, camera: camera) }
-            else { slot.label.isHidden = false; place(slot.label, near: CGPoint(x: (segment[0].x + segment[1].x) / 2, y: (segment[0].y + segment[1].y) / 2 - 14)) }
+            else if let anchor = segment ?? horizontalSegment ?? verticalSegment {
+                slot.label.isHidden = false
+                if let triangle {
+                    place(slot.label, near: edgeLabelPoint(anchor, opposite: camera.point(triangle.corner)))
+                } else {
+                    place(slot.label, near: CGPoint(x: (anchor[0].x + anchor[1].x) / 2, y: (anchor[0].y + anchor[1].y) / 2 - 14))
+                }
+            }
         }
         for (index, geometry) in automatic.enumerated() {
             let (vector, segment) = geometry, slot = automaticHeightSlots[index]
@@ -216,6 +287,31 @@ final class SpatialMeasurementOverlayView: UIView {
             place(slot.label, near: CGPoint(x: point.x, y: point.y - 22))
         }
         CATransaction.commit()
+    }
+
+    private func showTriangleLeg(_ shape: CAShapeLayer, label: UILabel, segment: [CGPoint]?, opposite: SIMD3<Float>,
+                                 camera: SpatialProjection.Camera, color: UIColor, text: String,
+                                 identifier: String, accessibility: String, value: String) {
+        shape.name = identifier
+        shape.strokeColor = color.cgColor
+        label.text = text; label.textColor = color
+        label.accessibilityIdentifier = identifier
+        label.accessibilityLabel = accessibility; label.accessibilityValue = value
+        // Open, independently clipped edges preserve their world-space meaning at the viewport boundary.
+        guard let segment else { shape.path = nil; shape.isHidden = true; label.isHidden = true; return }
+        let path = UIBezierPath(); path.move(to: segment[0]); path.addLine(to: segment[1])
+        shape.path = path.cgPath; shape.isHidden = false; label.isHidden = false
+        place(label, near: edgeLabelPoint(segment, opposite: camera.point(opposite)))
+    }
+
+    private func edgeLabelPoint(_ segment: [CGPoint], opposite: CGPoint?) -> CGPoint {
+        let midpoint = CGPoint(x: (segment[0].x + segment[1].x) / 2, y: (segment[0].y + segment[1].y) / 2)
+        let dx = segment[1].x - segment[0].x, dy = segment[1].y - segment[0].y
+        let length = hypot(dx, dy)
+        guard length > 1e-6 else { return CGPoint(x: midpoint.x, y: midpoint.y - 14) }
+        var nx = -dy / length, ny = dx / length
+        if let opposite, nx * (opposite.x - midpoint.x) + ny * (opposite.y - midpoint.y) > 0 { nx = -nx; ny = -ny }
+        return CGPoint(x: midpoint.x + nx * 16, y: midpoint.y + ny * 16)
     }
 
     /// One timer per visible overlay; incoming frames replace the deadline rather than enqueueing timers.
@@ -275,8 +371,12 @@ final class SpatialMeasurementOverlayView: UIView {
     }
 
     private func place(_ label: UILabel, near point: CGPoint) {
-        label.sizeToFit()
-        let size = CGSize(width: min(label.bounds.width, bounds.width), height: min(label.bounds.height, bounds.height))
+        let natural = label.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+        let width = min(ceil(natural.width), bounds.width)
+        // Degenerate distance summaries retain all three values when the viewport needs multiple lines.
+        let fittedHeight = label.numberOfLines == 1 ? natural.height
+            : label.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)).height
+        let size = CGSize(width: width, height: min(ceil(fittedHeight), bounds.height))
         label.frame = CGRect(x: max(0, min(bounds.width - size.width, point.x - size.width / 2)),
                              y: max(0, min(bounds.height - size.height, point.y - size.height / 2)), width: size.width, height: size.height)
     }

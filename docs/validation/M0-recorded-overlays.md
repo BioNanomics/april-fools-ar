@@ -35,3 +35,11 @@ ruby native/ARCapture/tests/run-build-info-tests.rb --device-id <dedicated-simul
 ```
 
 The playback runner optionally accepts `--recording-folder` and `--recording-video` to test a private recording in a generated temporary test bundle. Both options are required together; no recording is copied into the repository.
+
+## Signed iPhone handoff
+
+Installed and launched **0.7.1 (24)** on the user's iPhone 17 Pro from source commit `408a7967e7cd0ac7b458ca2a44488444df6f90e7`. The signed Release build embeds that commit with `workingTreeDirty: false`; its build identity and code signature were verified before installation. The installed-app query confirmed the version and build, and the app's top-level Documents listing was unchanged after the in-place update.
+
+The first attempt could not establish CoreDevice connectivity and made no installation changes. After the user connected and unlocked the phone, the retry completed successfully. Both attempts used the shared global device lease and finished **released** with no cleanup errors. No WDA/XCTest runner or screen-sharing session was started. Private install/release evidence is under `/tmp/april-fools-overlays-handoff-20261122/`; device identifiers and lease tokens are not committed.
+
+This verifies installation and launch. Physical playback interaction and alignment remain for the user's **Saved sessions → Play** check; the overlay behavior and the supplied recording were verified in the simulator as described above.

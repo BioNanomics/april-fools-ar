@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.7.1",
+      "build": "24",
+      "title": "Recorded overlays during playback",
+      "changes": [
+        "Show recorded tags, floor heights and measurements over saved video on the device.",
+        "Keep overlays aligned while playing, pausing, seeking and rotating; toggle them off to inspect the clean video.",
+        "Preserve the clean MP4 and original sensor data for sharing and later processing."
+      ]
+    },
+    {
       "version": "0.7.0",
       "build": "21",
       "title": "Play saved recordings",

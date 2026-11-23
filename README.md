@@ -27,7 +27,7 @@ Tracking, depth status and zoom controls share one compact line at the top of th
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
 4. In **Measure** mode, tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
-6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to preview it, or **Share** to send the same recording through AirDrop or Files.
+6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to review the video with recorded overlays, or **Share** to send the same recording through AirDrop or Files. In the player, **Recorded overlays** switches between annotated and clean playback.
 
 Keep recordings short initially and check an export before the first field visit. Files stay on the phone until you explicitly share them. No server, account, BLE meter, or internet connection is needed for capture.
 
@@ -44,7 +44,7 @@ The app stops and saves an active recording when it goes into the background. Ke
 
 The recorder uses bounded frame retention. Counters and saved diagnostics identify omitted samples; UI update rate is separate from native capture. A heatmap is only a preview—the numeric depth files are the measurement evidence.
 
-The automatically saved MP4 carries that camera video plus readable session/frame/event YAML and a TAR data track containing the original images, numeric buffers and JSON/JSONL files. A normal player shows the clean video. Tag outlines, measurements and other live graphics stay separate from the pixels so later analysis can use the original imagery; their recorded geometry supports a future overlay viewer. The app does not yet include an offline overlay player.
+The automatically saved MP4 carries that camera video plus readable session/frame/event YAML and a TAR data track containing the original images, numeric buffers and JSON/JSONL files. A normal external player shows the clean video. In-app playback draws recorded tags, floor heights and measurements over it, synchronized to the video while playing, paused or seeking. **Recorded overlays** starts on and can be switched off without changing the file. Review uses the recorded geometry and available samples; it does not recreate every historical panel, preview zoom or unrecorded UI setting. If overlay metadata is missing or fails its integrity check, the player explains that overlays are unavailable and still plays the clean video.
 
 See [the recording format and extraction commands](recording-format/README.md) and [the capture data conventions](docs/capture-format.md). Install the local extractor with `npm ci --prefix recording-format/npm`, then run `python3 scripts/inspect-session.py /path/to/recording.mp4` to inspect a returned recording. Legacy ZIPs and copied session directories remain readable by the inspector.
 

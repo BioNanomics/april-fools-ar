@@ -1183,8 +1183,8 @@ function CaptureApp() {
             </Pressable>
           </View>
           <Text style={s.description}>
-            Play your saved camera video, or share the MP4 with its images,
-            numeric depth, tag detections, measurements, and notes.
+            Play recordings with tag and measurement overlays, or share the
+            clean MP4 with its images, depth, and recorded data.
           </Text>
           <FlatList
             key={`sessions-${sessionColumns}`}

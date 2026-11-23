@@ -21,6 +21,7 @@
 		24A7BA2A23FCD99934CAB655 /* TagDebugPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */; };
 		25EF4F5FAE49956C2FAE1179 /* tag36h11.c in Sources */ = {isa = PBXBuildFile; fileRef = CDF97A947CC1CF95873D4345 /* tag36h11.c */; };
 		25F3EB70CBEDF571F10FF5EA /* AppBuildInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEC2C5BC195027DE0268E191 /* AppBuildInfo.swift */; };
+		27F0E25F88387DE1E9D35F9B /* RecordingPlaybackTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA37155F0B3202487D32839D /* RecordingPlaybackTimeline.swift */; };
 		291316D7E0441B79FD5C74D5 /* ArchiveModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */; };
 		2D82BE3B05D0147C467888BC /* PreviewZoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */; };
 		2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */ = {isa = PBXBuildFile; fileRef = 8B743D7F395310A75BDE0593 /* string_util.c */; };
@@ -72,6 +73,7 @@
 		E3745BA9CBBD387DC7A94A7E /* release-notes.json in Resources */ = {isa = PBXBuildFile; fileRef = 3FD063604D0BCFCE34FDDB80 /* release-notes.json */; };
 		E5447352652A80E035CB8F29 /* workerpool.c in Sources */ = {isa = PBXBuildFile; fileRef = AF54B392AF6AF22FF9C87B16 /* workerpool.c */; };
 		EDD5F009E1328D5ECD12C581 /* image_u8_parallel.c in Sources */ = {isa = PBXBuildFile; fileRef = 493908AED57E2288AFD6D880 /* image_u8_parallel.c */; };
+		EF5BA93AAA6D2A4E15907A2A /* RecordingPlaybackOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66981AB7881E49092B514059 /* RecordingPlaybackOverlayView.swift */; };
 		FEF4CE2E105F63F5F7452DE1 /* TagCameraRanges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86ABD46FF465A30DB753B623 /* TagCameraRanges.swift */; };
 /* End PBXBuildFile section */
 
@@ -105,6 +107,7 @@
 		636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag_quad_thresh.c; sourceTree = "<group>"; };
 		65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AprilTagOverlayView.swift; path = ARCapture/AprilTagOverlayView.swift; sourceTree = "<group>"; };
 		65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */ = {isa = PBXFileReference; includeInIndex = 1; name = "pjpeg-idct.c"; path = "common/pjpeg-idct.c"; sourceTree = "<group>"; };
+		66981AB7881E49092B514059 /* RecordingPlaybackOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecordingPlaybackOverlayView.swift; path = ArchiveModule/RecordingPlaybackOverlayView.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AprilFoolsAR/AppDelegate.swift; sourceTree = "<group>"; };
 		761780EE2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = AprilFoolsAR/SceneDelegate.swift; sourceTree = "<group>"; };
 		78764DD7E780CABC9B355826 /* matd.c */ = {isa = PBXFileReference; includeInIndex = 1; name = matd.c; path = common/matd.c; sourceTree = "<group>"; };
@@ -127,6 +130,7 @@
 		C163298A0F6DC8A250C20E13 /* time_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = time_util.c; path = common/time_util.c; sourceTree = "<group>"; };
 		C1A8F909AE5351319C8CE446 /* ARCaptureReact.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ARCaptureReact.swift; path = ARCapture/ARCaptureReact.swift; sourceTree = "<group>"; };
 		C2B656219EB5E72270FF25D5 /* CaptureRecorder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CaptureRecorder.swift; path = ARCapture/CaptureRecorder.swift; sourceTree = "<group>"; };
+		CA37155F0B3202487D32839D /* RecordingPlaybackTimeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecordingPlaybackTimeline.swift; path = ArchiveModule/RecordingPlaybackTimeline.swift; sourceTree = "<group>"; };
 		CA4D9A9C2175E6193DDC55E8 /* zarray.c */ = {isa = PBXFileReference; includeInIndex = 1; name = zarray.c; path = common/zarray.c; sourceTree = "<group>"; };
 		CDF97A947CC1CF95873D4345 /* tag36h11.c */ = {isa = PBXFileReference; includeInIndex = 1; path = tag36h11.c; sourceTree = "<group>"; };
 		CEC2C5BC195027DE0268E191 /* AppBuildInfo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppBuildInfo.swift; path = ARCapture/AppBuildInfo.swift; sourceTree = "<group>"; };
@@ -218,6 +222,8 @@
 				EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */,
 				243818E4794C7EE0D5DA109D /* SavedRecordingStore.swift */,
 				2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */,
+				66981AB7881E49092B514059 /* RecordingPlaybackOverlayView.swift */,
+				CA37155F0B3202487D32839D /* RecordingPlaybackTimeline.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -539,6 +545,8 @@
 				357ABBDD1218E6353FF2B9D8 /* RecordingPreview.swift in Sources */,
 				18011C70795E9644EC325B5D /* SavedRecordingStore.swift in Sources */,
 				D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */,
+				EF5BA93AAA6D2A4E15907A2A /* RecordingPlaybackOverlayView.swift in Sources */,
+				27F0E25F88387DE1E9D35F9B /* RecordingPlaybackTimeline.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -553,7 +561,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 24;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -568,7 +576,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.0;
+				MARKETING_VERSION = 0.7.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -593,7 +601,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 24;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -607,7 +615,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.0;
+				MARKETING_VERSION = 0.7.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

@@ -41,6 +41,20 @@ final class ArchiveModule: NSObject {
                     guard FileManager.default.isReadableFile(atPath: recording.url.path) else {
                         throw RecordingPreview.PreviewError.missingRecording
                     }
+                    let timeline: RecordingPlaybackTimeline?
+                    let overlayMessage: String?
+                    do {
+                        let folderURL = folderPath.hasPrefix("file:")
+                            ? URL(string: folderPath) : URL(fileURLWithPath: folderPath, isDirectory: true)
+                        guard let folderURL, folderURL.isFileURL else {
+                            throw RecordingPreview.PreviewError.missingRecording
+                        }
+                        timeline = try RecordingPlaybackTimeline.load(folderURL: folderURL)
+                        overlayMessage = nil
+                    } catch {
+                        timeline = nil
+                        overlayMessage = "Recorded overlay data is unavailable for this recording."
+                    }
                     let asset = AVURLAsset(url: recording.url)
                     Task {
                         do {
@@ -49,7 +63,8 @@ final class ArchiveModule: NSObject {
                             }
                             DispatchQueue.main.async {
                                 do {
-                                    try self.recordingPreview.present(asset: asset) {
+                                    try self.recordingPreview.present(asset: asset, timeline: timeline,
+                                                                     overlayMessage: overlayMessage) {
                                         resolve(Self.descriptor(recording))
                                     }
                                 } catch {

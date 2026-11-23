@@ -21,3 +21,13 @@ Every original edge is clipped independently, so visible legs remain when the hy
 ## Physical status
 
 The checks above used simulators and portable math tests. Physical installation and launch are recorded below after the signed phone handoff; those checks do not establish numerical accuracy against independently measured real-world distances.
+
+## Signed iPhone handoff — November 23, 2026
+
+The triangle feature was committed as `bc8b71b8460b63c68ec77dd955b92973ac2ad4fa` on `codex/measurement-triangles`, with the unrelated pending changes left uncommitted. The development-signed Release package **0.9.1 (30)** preserves the previously deployed bottom controls, details sheet, gravity-relative angles and Kalman behavior, together with the current recording/deletion work.
+
+The package passed strict/deep signature verification, provisioning checks for the target phone, embedded version/build/source verification, bundled JavaScript/release-note checks and matching dSYM UUID validation. Source hashes matched before/after building. Embedded source is `bc8b71b`, build timestamp `2026-11-23T05:47:05Z`, and `workingTreeDirty: true` accurately records the preserved pending features in this integrated source tree.
+
+Installed in place and launched successfully. Installed-app metadata confirmed **0.9.1 (30)** and the app process was present after launch. The complete Documents listing, directory flags and file sizes were unchanged across installation. No recording was started or deleted. No screen sharing, Appium, WDA or phone XCTest runner was started; all deployment commands exited and the global device guard returned **released**, with no errors, before this report was written. Both task-owned simulators were removed after testing.
+
+Exact app, symbols, source archive/hashes and private deployment evidence are retained under `/tmp/april-triangle-handoff-20261123/`. Build log: `/tmp/april-triangle-phone-signed-build.log`. Executable SHA-256: `db3d9fead9a23e6708eb12b291ee6359f1178ad47f1a07a6bdfec98b32d30e45`.

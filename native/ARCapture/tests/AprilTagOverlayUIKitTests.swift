@@ -100,6 +100,34 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         XCTAssertEqual(Double(value.y), y, accuracy: 1e-8, file: file, line: line)
     }
 
+    func testKalmanReadoutsAreLabeledAndReuseClearsFilterIndicator() throws {
+        var filter = TagReadoutFilter()
+        var first = metricsRow(height: 1.42, lidar: 2.5, tag: 2.55)
+        var height = first["floorHeight"] as! [String: Any]
+        height["floorId"] = "floor"; height["segmentId"] = "segment"
+        first["floorHeight"] = height
+        _ = filter.apply(to: [first], timestamp: 10, enabled: true, samples: 5)
+        var next = metricsRow(height: 1.72, lidar: 2.8, tag: 2.85)
+        height["meters"] = 1.72; next["floorHeight"] = height
+        let readouts = filter.apply(to: [next], timestamp: 10 + 1.0 / 30, enabled: true, samples: 5)
+        overlay.show(readouts, imageSize: CGSize(width: 320, height: 480), displayTransform: .identity,
+                     frameID: "filtered", expiresAt: ProcessInfo.processInfo.systemUptime + 0.5, showImperialHeight: false)
+        overlay.layoutIfNeeded()
+        let card = try XCTUnwrap(cards().first)
+        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "Distance · Kalman")
+        XCTAssertTrue(cardLabel(card, "summary")?.text?.contains("152.0 cm") == true)
+        XCTAssertEqual(cardLabel(card, "lidarMetric")?.text, "260.0 cm")
+        XCTAssertEqual(cardLabel(card, "tagMetric")?.text, "265.0 cm")
+        XCTAssertTrue(card.accessibilityValue?.contains("Kalman smoothing") == true)
+        assertCardChildrenContained(card)
+        XCTAssertEqual((next["floorHeight"] as? [String: Any])?["meters"] as? Double, 1.72)
+
+        show([next])
+        XCTAssertTrue(cards().first === card)
+        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "Distance")
+        XCTAssertFalse(card.accessibilityValue?.contains("Kalman") == true)
+    }
+
     func testARepeatedPositiveLabelsThenEmptyAndIdempotentClear() {
         for index in 0..<250 {
             autoreleasepool {

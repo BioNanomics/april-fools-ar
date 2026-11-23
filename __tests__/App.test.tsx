@@ -2,12 +2,15 @@ import React from 'react';
 import {
   Alert,
   DeviceEventEmitter,
+  Modal,
   NativeModules,
   Share,
-  TextInput,
+  Text,
 } from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import App from '../App';
+import { AboutModal } from '../AboutModal';
+import { ReleaseNotesModal } from '../ReleaseNotesModal';
 import {
   DebugSettingsModal,
   DEFAULT_DEBUG_SETTINGS,
@@ -171,12 +174,65 @@ async function openSavedSessions() {
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  const tab = tree.root
-    .findAllByProps({ accessibilityRole: 'tab' })
-    .find(
-      node => node.findAllByProps({ children: 'Saved sessions' }).length > 0,
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Saved sessions' })
+      .props.onPress(),
+  );
+}
+
+async function openMoreControls() {
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'More controls' })
+      .props.onPress(),
+  );
+}
+
+async function openDebugSettings() {
+  if (tree.root.findAllByProps({ testID: 'capture.toolSheet' }).length > 0) {
+    await act(async () =>
+      tree.root
+        .findByProps({ accessibilityLabel: 'Close capture tools' })
+        .props.onPress(),
     );
-  await act(async () => tab!.props.onPress());
+  }
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .props.onPress(),
+  );
+}
+
+async function editSessionName(name: string) {
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Edit session name' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Session name' })
+      .props.onChangeText(name),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Close capture tools' })
+      .props.onPress(),
+  );
+}
+
+const visibleNativeModals = () =>
+  tree.root.findAllByType(Modal).filter(modal => modal.props.visible === true);
+
+async function closeVersionPage() {
+  const page = tree.root.findByType(ReleaseNotesModal);
+  await act(async () =>
+    page
+      .findByProps({ accessibilityLabel: 'Close release notes' })
+      .props.onPress(),
+  );
+  await act(async () => page.findByType(Modal).props.onDismiss());
 }
 
 test('plays the validated saved session in the native player', async () => {
@@ -437,9 +493,7 @@ test('starts a named native recording and stops it using the same control', asyn
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root.findByType(TextInput).props.onChangeText('North field'),
-  );
+  await editSessionName('North field');
   engine.startSession.mockImplementation(async () => {
     engine.getStatus.mockResolvedValue({
       recording: true,
@@ -467,20 +521,459 @@ test('starts a named native recording and stops it using the same control', asyn
   expect(engine.stopSession).toHaveBeenCalledTimes(1);
 });
 
-test('shows the native installed version and opens its build information', async () => {
+test.each(['badge', 'More menu'])(
+  '%s opens the full-screen Version page with bottom navigation and installed build details',
+  async entryPoint => {
+    await act(async () => {
+      tree = Renderer.create(<App />);
+    });
+    if (entryPoint === 'More menu') {
+      await openMoreControls();
+      expect(JSON.stringify(tree.toJSON())).toContain('v0.1.1 (6) · 1234567');
+    }
+    await act(async () =>
+      tree.root
+        .findByProps({
+          accessibilityLabel:
+            entryPoint === 'badge'
+              ? 'Open version and release notes'
+              : 'Version and release notes',
+        })
+        .props.onPress(),
+    );
+    const page = tree.root.findByType(ReleaseNotesModal);
+    expect(page.props.visible).toBe(true);
+    const modal = page.findByType(Modal);
+    expect(modal.props.presentationStyle).toBe('overFullScreen');
+    expect(visibleNativeModals()).toEqual([modal]);
+    const contents = JSON.stringify(tree.toJSON());
+    expect(contents).toContain('1234567890abcdef1234567890abcdef12345678');
+    expect(contents).toContain('2026-11-21T10:00:00Z');
+    const navigation = page.findByProps({ testID: 'release.notes.navigation' });
+    expect(
+      navigation.findByProps({ accessibilityLabel: 'Version' }).props
+        .accessibilityState.selected,
+    ).toBe(true);
+    await act(async () =>
+      navigation
+        .findByProps({ accessibilityLabel: 'Release notes' })
+        .props.onPress(),
+    );
+    expect(page.findByProps({ testID: 'current-release' })).toBeTruthy();
+    expect(
+      navigation.findByProps({ accessibilityLabel: 'Release notes' }).props
+        .accessibilityState.selected,
+    ).toBe(true);
+    await closeVersionPage();
+    expect(visibleNativeModals()).toHaveLength(0);
+    expect(
+      tree.root.findByProps({ testID: 'capture.native-camera' }),
+    ).toBeTruthy();
+    expect(engine.startSession).not.toHaveBeenCalled();
+  },
+);
+
+test.each(['About', 'Settings', 'Bookmark'])(
+  'the %s badge waits for native dismissal before presenting Version',
+  async source => {
+    if (source === 'Bookmark') {
+      engine.getStatus.mockResolvedValue({
+        ...(await engine.getStatus()),
+        recording: true,
+      });
+    }
+    await act(async () => {
+      tree = Renderer.create(<App />);
+    });
+    if (source === 'About') {
+      await openMoreControls();
+      await act(async () =>
+        tree.root
+          .findByProps({ accessibilityLabel: 'About and sponsors' })
+          .props.onPress(),
+      );
+    } else if (source === 'Settings') {
+      await openDebugSettings();
+    } else {
+      await act(async () =>
+        tree.root
+          .findByProps({ accessibilityLabel: 'Bookmark' })
+          .props.onPress(),
+      );
+    }
+    const currentModal = visibleNativeModals()[0];
+    expect(visibleNativeModals()).toHaveLength(1);
+    const pressBadge = currentModal.findByProps({
+      accessibilityLabel: 'Open version and release notes',
+    }).props.onPress;
+    const previousInfoRequests = engine.getAppInfo.mock.calls.length;
+    await act(async () => {
+      pressBadge();
+      pressBadge();
+    });
+    expect(currentModal.props.visible).toBe(false);
+    expect(tree.root.findByType(ReleaseNotesModal).props.visible).toBe(false);
+    expect(visibleNativeModals()).toHaveLength(0);
+    expect(engine.getAppInfo).toHaveBeenCalledTimes(previousInfoRequests + 1);
+    await act(async () => {
+      DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 4 });
+    });
+    expect(
+      tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+    ).toHaveLength(0);
+    await act(async () => currentModal.props.onDismiss());
+    const versionModal = tree.root
+      .findByType(ReleaseNotesModal)
+      .findByType(Modal);
+    expect(versionModal.props.visible).toBe(true);
+    expect(versionModal.props.presentationStyle).toBe('overFullScreen');
+    expect(visibleNativeModals()).toEqual([versionModal]);
+    await closeVersionPage();
+    expect(visibleNativeModals()).toHaveLength(0);
+    expect(engine.setDebugSettings).not.toHaveBeenCalled();
+    expect(engine.stopSession).not.toHaveBeenCalled();
+  },
+);
+
+test('repeated version taps are coalesced while open and during native dismissal', async () => {
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  expect(JSON.stringify(tree.toJSON())).toContain('v0.1.1 (6) · 1234567');
+  const pressBadge = tree.root.findByProps({
+    accessibilityLabel: 'Open version and release notes',
+  }).props.onPress;
+  const previousInfoRequests = engine.getAppInfo.mock.calls.length;
+  await act(async () => {
+    pressBadge();
+    pressBadge();
+  });
+  expect(engine.getAppInfo).toHaveBeenCalledTimes(previousInfoRequests + 1);
+  expect(visibleNativeModals()).toHaveLength(1);
+  await act(async () => pressBadge());
+  expect(engine.getAppInfo).toHaveBeenCalledTimes(previousInfoRequests + 1);
+  const page = tree.root.findByType(ReleaseNotesModal);
   await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Version and release notes' })
+    page
+      .findByProps({ accessibilityLabel: 'Close release notes' })
       .props.onPress(),
   );
-  expect(JSON.stringify(tree.toJSON())).toContain(
-    '1234567890abcdef1234567890abcdef12345678',
+  await act(async () => pressBadge());
+  expect(page.props.visible).toBe(false);
+  expect(visibleNativeModals()).toHaveLength(0);
+  expect(engine.getAppInfo).toHaveBeenCalledTimes(previousInfoRequests + 1);
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 4 });
+  });
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+  ).toHaveLength(0);
+  await act(async () => page.findByType(Modal).props.onDismiss());
+  await act(async () => pressBadge());
+  expect(page.props.visible).toBe(true);
+  expect(engine.getAppInfo).toHaveBeenCalledTimes(previousInfoRequests + 2);
+});
+
+test('opening Version preserves the active recording, camera, zoom and filter preference', async () => {
+  engine.getStatus.mockResolvedValue({
+    ...(await engine.getStatus()),
+    recording: true,
+    displayZoom: 2,
+    aprilTag: {
+      debugSettings: {
+        ...DEFAULT_DEBUG_SETTINGS,
+        kalmanFilterEnabled: true,
+        kalmanFilterSamples: 20,
+      },
+    },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const camera = tree.root.findByProps({ testID: 'capture.native-camera' });
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Open version and release notes' })
+      .props.onPress(),
   );
-  expect(JSON.stringify(tree.toJSON())).toContain('2026-11-21T10:00:00Z');
+  expect(tree.root.findByType(ReleaseNotesModal).props.visible).toBe(true);
+  await closeVersionPage();
+  expect(tree.root.findByProps({ testID: 'capture.native-camera' })).toBe(
+    camera,
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Stop and save recording' })
+      .props.disabled,
+  ).toBe(false);
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'View zoom 2×' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  const filter = tree.root.findByProps({ accessibilityLabel: 'Kalman filter' });
+  expect(filter.props.accessibilityState.checked).toBe(true);
+  expect(filter.props.accessibilityValue.text).toBe('20 samples');
+  expect(engine.startSession).not.toHaveBeenCalled();
+  expect(engine.stopSession).not.toHaveBeenCalled();
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+});
+
+test('installed version stays visible in live capture, tool panels and saved recordings', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const expectVersionBadge = () => {
+    const badge = tree.root.findByProps({ testID: 'app.versionBadge' });
+    expect(
+      badge.findByProps({ accessibilityLabel: 'Installed app version' }).props
+        .children,
+    ).toBe('v0.1.1 (6)');
+  };
+  expectVersionBadge();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Tag details' })
+      .props.onPress(),
+  );
+  expectVersionBadge();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Close capture tools' })
+      .props.onPress(),
+  );
+  await openMoreControls();
+  expectVersionBadge();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Close capture tools' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
+      .props.onPress(),
+  );
+  expectVersionBadge();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Close capture tools' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Saved sessions' })
+      .props.onPress(),
+  );
+  expectVersionBadge();
+  expect(engine.startSession).not.toHaveBeenCalled();
+});
+
+test('explicit native tag taps open details and the same tag can reopen them after closing', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  for (const id of [4, 4, 0]) {
+    expect(
+      tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+    ).toHaveLength(0);
+    await act(async () => {
+      DeviceEventEmitter.emit('ARCaptureTagSelected', { id });
+    });
+    expect(
+      tree.root.findByProps({ testID: 'capture.tagReadout' }),
+    ).toBeTruthy();
+    expect(
+      tree.root.findByProps({ accessibilityLabel: 'Start recording' }).props
+        .disabled,
+    ).toBe(false);
+    await act(async () =>
+      tree.root
+        .findByProps({ accessibilityLabel: 'Close capture tools' })
+        .props.onPress(),
+    );
+  }
+  expect(engine.startSession).not.toHaveBeenCalled();
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+});
+
+test('malformed native tag selection events leave the current screen unchanged', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  for (const payload of [
+    {},
+    { id: -1 },
+    { id: 1.5 },
+    { id: '4' },
+    { id: true },
+    { id: null },
+    { id: NaN },
+    { id: Infinity },
+    { id: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    await act(async () => {
+      DeviceEventEmitter.emit('ARCaptureTagSelected', payload);
+    });
+    expect(
+      tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAllByProps({ testID: 'capture.toolSheet' }),
+    ).toHaveLength(0);
+  }
+});
+
+test('queued tag selection events do not replace saved recordings or an open settings modal', async () => {
+  await openSavedSessions();
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 4 });
+  });
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Saved sessions' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.native-camera' }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+  ).toHaveLength(0);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Tag debug mode' })
+      .props.onPress(),
+  );
+  await openDebugSettings();
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 4 });
+  });
+  expect(tree.root.findByType(DebugSettingsModal).props.visible).toBe(true);
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+  ).toHaveLength(0);
+  await act(async () =>
+    tree.root.findByType(DebugSettingsModal).props.onCancel(),
+  );
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 4 });
+  });
+  expect(tree.root.findByProps({ testID: 'capture.tagReadout' })).toBeTruthy();
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+});
+
+test('automatic and stale tag status never open or reopen the details sheet', async () => {
+  const initial = await engine.getStatus();
+  engine.getStatus.mockResolvedValue({
+    ...initial,
+    aprilTag: { state: 'running', ids: [4], selectedId: 4 },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+  ).toHaveLength(0);
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      ...initial,
+      aprilTag: { state: 'running', ids: [17], selectedId: 17 },
+    });
+  });
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+  ).toHaveLength(0);
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 17 });
+  });
+  expect(tree.root.findByProps({ testID: 'capture.tagReadout' })).toBeTruthy();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Close capture tools' })
+      .props.onPress(),
+  );
+  for (const aprilTag of [
+    { state: 'waiting', ids: [], selectedId: 17, ageMilliseconds: 5000 },
+    { state: 'error', ids: [], selectedId: -1, error: 'Stale result' },
+    { state: 'running', ids: [4], selectedId: 4 },
+  ]) {
+    await act(async () => {
+      DeviceEventEmitter.emit('ARCaptureStatus', { ...initial, aprilTag });
+    });
+    expect(
+      tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+    ).toHaveLength(0);
+  }
+});
+
+test('More opens the full-screen About and sponsors page with bottom privacy and license tabs', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(
+    tree.root.findAllByProps({ accessibilityLabel: 'About and sponsors' }),
+  ).toHaveLength(0);
+  await openMoreControls();
+  expect(
+    tree.root.findAllByProps({ accessibilityLabel: 'Sponsors' }),
+  ).toHaveLength(0);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'About and sponsors' })
+      .props.onPress(),
+  );
+  const about = tree.root.findByType(AboutModal);
+  expect(about.findByType(Modal).props.presentationStyle).toBe(
+    'overFullScreen',
+  );
+  expect(visibleNativeModals()).toEqual([about.findByType(Modal)]);
+  expect(JSON.stringify(tree.toJSON())).toContain('Don Wood Foundation');
+  expect(JSON.stringify(tree.toJSON())).toContain(
+    'Medical Informatics Engineering',
+  );
+  const navigation = about.findByProps({ testID: 'about.bottomNav' });
+  const pressAboutTab = async (title: string) => {
+    const tab = navigation
+      .findAllByProps({ accessibilityRole: 'tab' })
+      .find(node =>
+        node.findAllByType(Text).some(label => label.props.children === title),
+      );
+    expect(tab).toBeDefined();
+    await act(async () => tab!.props.onPress());
+  };
+  await pressAboutTab('Privacy');
+  expect(about.findByProps({ testID: 'privacy-policy' })).toBeTruthy();
+  await pressAboutTab('Licenses & notices');
+  expect(about.findByProps({ testID: 'app-license' })).toBeTruthy();
+  expect(about.findByProps({ testID: 'third-party-notices' })).toBeTruthy();
+  await act(async () =>
+    about
+      .findByProps({ accessibilityLabel: 'Close about and privacy' })
+      .props.onPress(),
+  );
+  await act(async () => about.findByType(Modal).props.onDismiss());
+  expect(visibleNativeModals()).toHaveLength(0);
+  expect(engine.startSession).not.toHaveBeenCalled();
+});
+
+test('bottom Saved and Tags tabs switch between the recordings list and live camera', async () => {
+  await openSavedSessions();
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Saved sessions' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.native-camera' }),
+  ).toHaveLength(0);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Tag debug mode' })
+      .props.onPress(),
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Tag debug mode' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.native-camera' }),
+  ).not.toHaveLength(0);
   expect(engine.startSession).not.toHaveBeenCalled();
 });
 
@@ -488,9 +981,7 @@ test('falls back to a nonempty session name when the input is blank', async () =
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root.findByType(TextInput).props.onChangeText('  '),
-  );
+  await editSessionName('  ');
   engine.startSession.mockResolvedValue(undefined);
   await act(async () =>
     tree.root
@@ -531,11 +1022,7 @@ test('debug settings convert displayed millimeters and centimeters to native met
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   await act(async () => {
     tree.root
       .findByProps({ accessibilityLabel: 'Tag width (mm)' })
@@ -564,6 +1051,183 @@ test('debug settings convert displayed millimeters and centimeters to native met
   });
 });
 
+test('live Kalman checkbox toggles in both directions without opening Settings or rewriting calibration', async () => {
+  const saved = {
+    ...DEFAULT_DEBUG_SETTINGS,
+    tagSizeMeters: 0.1723456789,
+    tagSizeSource: 'ar-two-point-edge',
+    kalmanFilterEnabled: false,
+    kalmanFilterSamples: 20,
+    maxDistanceMeters: 7,
+    levelFloorWithGravity: true,
+  };
+  const nativeStatus = await engine.getStatus();
+  engine.getStatus.mockResolvedValue({
+    ...nativeStatus,
+    aprilTag: { debugSettings: saved },
+  });
+  engine.setDebugSettings.mockImplementation(async (patch: object) => ({
+    ...saved,
+    ...patch,
+  }));
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Kalman filter' });
+  expect(toggle().props.accessibilityRole).toBe('checkbox');
+  expect(toggle().props.accessibilityState.checked).toBe(false);
+  expect(
+    tree.root.findAllByProps({ accessibilityLabel: 'Smoothing strength' }),
+  ).toHaveLength(0);
+  expect(engine.getDebugSettings).not.toHaveBeenCalled();
+  await act(async () => toggle().props.onPress());
+  expect(engine.setDebugSettings).toHaveBeenNthCalledWith(1, {
+    kalmanFilterEnabled: true,
+  });
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+  expect(
+    tree.root.findByType(DebugSettingsModal).props.initialSettings,
+  ).toEqual({ ...saved, kalmanFilterEnabled: true });
+  await act(async () => toggle().props.onPress());
+  expect(engine.setDebugSettings).toHaveBeenNthCalledWith(2, {
+    kalmanFilterEnabled: false,
+  });
+  expect(toggle().props.accessibilityState.checked).toBe(false);
+  expect(
+    tree.root.findByType(DebugSettingsModal).props.initialSettings,
+  ).toEqual(saved);
+  expect(
+    tree.root.findAllByProps({ accessibilityLabel: 'Smoothing strength' }),
+  ).toHaveLength(0);
+});
+
+test('live Kalman checkbox waits for native acknowledgement and suppresses repeated presses while saving', async () => {
+  let acknowledge!: (settings: typeof DEFAULT_DEBUG_SETTINGS) => void;
+  engine.setDebugSettings.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        acknowledge = resolve;
+      }),
+  );
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Kalman filter' });
+  const press = toggle().props.onPress;
+  await act(async () => {
+    press();
+    press();
+  });
+  expect(engine.setDebugSettings).toHaveBeenCalledTimes(1);
+  expect(engine.setDebugSettings).toHaveBeenCalledWith({
+    kalmanFilterEnabled: true,
+  });
+  expect(toggle().props.disabled).toBe(true);
+  expect(toggle().props.accessibilityState.disabled).toBe(true);
+  expect(toggle().props.accessibilityState.checked).toBe(false);
+  await act(async () => toggle().props.onPress());
+  expect(engine.setDebugSettings).toHaveBeenCalledTimes(1);
+  await act(async () =>
+    acknowledge({ ...DEFAULT_DEBUG_SETTINGS, kalmanFilterEnabled: true }),
+  );
+  expect(toggle().props.disabled).toBe(false);
+  expect(toggle().props.accessibilityState.disabled).toBe(false);
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+});
+
+test('live Kalman checkbox displays the acknowledged native value when it differs from the requested value', async () => {
+  engine.setDebugSettings.mockResolvedValue({
+    ...DEFAULT_DEBUG_SETTINGS,
+    kalmanFilterEnabled: false,
+    kalmanFilterSamples: 30,
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Kalman filter' });
+  await act(async () => toggle().props.onPress());
+  expect(engine.setDebugSettings).toHaveBeenCalledWith({
+    kalmanFilterEnabled: true,
+  });
+  expect(toggle().props.accessibilityState.checked).toBe(false);
+  expect(toggle().props.disabled).toBe(false);
+  expect(
+    tree.root.findByType(DebugSettingsModal).props.initialSettings
+      .kalmanFilterSamples,
+  ).toBe(30);
+});
+
+test('failed live Kalman changes show the native error and preserve the last acknowledged setting', async () => {
+  const status = await engine.getStatus();
+  engine.getStatus.mockResolvedValue({
+    ...status,
+    aprilTag: {
+      debugSettings: {
+        ...DEFAULT_DEBUG_SETTINGS,
+        kalmanFilterEnabled: true,
+        kalmanFilterSamples: 10,
+      },
+    },
+  });
+  engine.setDebugSettings.mockRejectedValue(
+    new Error('Filter settings unavailable'),
+  );
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Kalman filter' });
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+  await act(async () => toggle().props.onPress());
+  expect(engine.setDebugSettings).toHaveBeenCalledWith({
+    kalmanFilterEnabled: false,
+  });
+  expect(alert).toHaveBeenCalledWith(
+    expect.any(String),
+    'Filter settings unavailable',
+  );
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+  expect(toggle().props.disabled).toBe(false);
+});
+
+test('live Kalman checkbox restores the native preference at startup and follows later native status changes', async () => {
+  const status = await engine.getStatus();
+  const saved = {
+    ...DEFAULT_DEBUG_SETTINGS,
+    kalmanFilterEnabled: true,
+    kalmanFilterSamples: 20,
+  };
+  engine.getStatus.mockResolvedValue({
+    ...status,
+    aprilTag: { debugSettings: saved },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const toggle = () =>
+    tree.root.findByProps({ accessibilityLabel: 'Kalman filter' });
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      ...status,
+      aprilTag: { debugSettings: { ...saved, kalmanFilterEnabled: false } },
+    });
+  });
+  expect(toggle().props.accessibilityState.checked).toBe(false);
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      ...status,
+      aprilTag: { debugSettings: saved },
+    });
+  });
+  expect(toggle().props.accessibilityState.checked).toBe(true);
+  expect(engine.setDebugSettings).not.toHaveBeenCalled();
+});
+
 test('distance delta threshold accepts zero and rejects invalid limits', () => {
   const draft = {
     tagSizeMeters: '165.1',
@@ -586,11 +1250,7 @@ test('AR width estimate requires explicit acceptance before changing tag size', 
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   await act(async () =>
     tree.root
       .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
@@ -633,11 +1293,7 @@ test('threshold-only edits preserve the full precision of an AR-measured width',
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   expect(
     tree.root.findByProps({ accessibilityLabel: 'Tag width (mm)' }).props.value,
   ).toBe('172.3457');
@@ -669,11 +1325,7 @@ test('reset to FRC defaults replaces a measured width even when both display the
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   expect(
     tree.root.findByProps({ accessibilityLabel: 'Tag width (mm)' }).props.value,
   ).toBe('165.1');
@@ -702,11 +1354,7 @@ test('pose axes switch is opt-in and saves without rounding the measured tag wid
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   const toggle = tree.root.findByProps({
     accessibilityLabel: 'Show pose axes',
   });
@@ -946,11 +1594,7 @@ test('tag-width entry, point reset and cancellation preserve completed measureme
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   await act(async () =>
     tree.root
       .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
@@ -1017,11 +1661,7 @@ test('saved height remains visible after pending points clear and is excluded fr
     });
   });
   expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   await act(async () =>
     tree.root
       .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
@@ -1060,11 +1700,7 @@ test('English height units default on for legacy settings, cancel locally, and p
       .props.onPress(),
   );
   expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   const toggle = () =>
     tree.root.findByProps({ accessibilityLabel: 'Show English units' });
   expect(toggle().props.value).toBe(true);
@@ -1073,12 +1709,13 @@ test('English height units default on for legacy settings, cancel locally, and p
   await act(async () =>
     tree.root.findByType(DebugSettingsModal).props.onCancel(),
   );
-  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
   await act(async () =>
     tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
       .props.onPress(),
   );
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm (4 ft 7.9 in)');
+  await openDebugSettings();
   expect(toggle().props.value).toBe(true);
   await act(async () => toggle().props.onValueChange(false));
   await act(async () =>
@@ -1091,13 +1728,14 @@ test('English height units default on for legacy settings, cancel locally, and p
     tagSizeMeters: preciseWidth,
     showImperialHeight: false,
   });
-  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm');
-  expect(JSON.stringify(tree.toJSON())).not.toContain('4 ft 7.9 in');
   await act(async () =>
     tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
+      .findByProps({ accessibilityLabel: 'Measurement mode' })
       .props.onPress(),
   );
+  expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('4 ft 7.9 in');
+  await openDebugSettings();
   expect(toggle().props.value).toBe(false);
 });
 
@@ -1270,11 +1908,7 @@ test('AR-width entry scans before showing points and waits for Done acknowledgem
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   await act(async () =>
     tree.root
       .findByProps({ accessibilityLabel: 'Measure tag width with AR' })
@@ -1350,11 +1984,7 @@ test('floor leveling defaults off, saves explicitly and reloads the saved prefer
   await act(async () => {
     tree = Renderer.create(<App />);
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   const toggle = () =>
     tree.root.findByProps({ accessibilityLabel: 'Level floor with gravity' });
   expect(toggle().props.value).toBe(false);
@@ -1369,21 +1999,13 @@ test('floor leveling defaults off, saves explicitly and reloads the saved prefer
     ...DEFAULT_DEBUG_SETTINGS,
     levelFloorWithGravity: true,
   });
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   expect(toggle().props.value).toBe(true);
   await act(async () => toggle().props.onValueChange(false));
   await act(async () =>
     tree.root.findByType(DebugSettingsModal).props.onCancel(),
   );
-  await act(async () =>
-    tree.root
-      .findByProps({ accessibilityLabel: 'Debug settings' })
-      .props.onPress(),
-  );
+  await openDebugSettings();
   expect(toggle().props.value).toBe(true);
   expect(engine.setDebugSettings).toHaveBeenCalledTimes(1);
 });

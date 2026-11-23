@@ -35,6 +35,89 @@ final class TagDebugPanelUIKitTests: XCTestCase {
          "meanDepthMeters": 1.251, "centerConfidence": 2, "validNeighborCount": 9,
          "reprojectionRMSEPixels": 0.42, "decisionMargin": 92.1, "hamming": 0]
     }
+    func testFilteredHeightIsIdentifiedWhileDetailedPoseStaysRaw() throws {
+        var filter = TagReadoutFilter()
+        func row(_ meters: Double) -> [String: Any] {
+            ["id": 42, "debug": validDebug(), "floorHeight": ["available": true, "meters": meters,
+                "source": "sceneDepth", "floorId": "floor", "segmentId": "segment"]]
+        }
+        _ = filter.apply(to: [row(1)], timestamp: 10, enabled: true, samples: 5)
+        let result = filter.apply(to: [row(1.6)], timestamp: 10 + 1.0 / 30, enabled: true, samples: 5)
+        show(result.first?["debug"] as? [String: Any])
+        XCTAssertTrue(labels().contains { $0.text?.contains("Kalman") == true })
+        XCTAssertTrue(labels().contains { $0.accessibilityLabel?.contains("Detailed pose and depth metrics are raw") == true })
+        expandPanel()
+        XCTAssertTrue(labels().contains { $0.text?.contains("120.0 cm") == true })
+        _ = try label("1.234")
+        _ = try label("+0.123")
+        assertReadable()
+    }
+
+    func testPassiveEmbeddedDetailsShowAllMetricsWithoutDisclosureOrTouchInterception() throws {
+        panel.configureAsPassiveReadout()
+        resizePanel(to: panel.preferredHeight)
+        show(validDebug())
+        XCTAssertTrue(panel.isExpanded)
+        let button = try detailsButton()
+        XCTAssertTrue(button.isHidden)
+        XCTAssertFalse(button.isAccessibilityElement)
+        _ = try label("+0.123")
+        _ = try label("1.234")
+        let scroll = try XCTUnwrap(panel.subviews.compactMap { $0 as? UIScrollView }.first)
+        XCTAssertFalse(scroll.isScrollEnabled, "The surrounding bottom sheet owns scrolling")
+        for y in stride(from: CGFloat(5), to: panel.bounds.height, by: 17) {
+            for x in stride(from: CGFloat(5), to: panel.bounds.width, by: 23) {
+                XCTAssertNil(panel.hitTest(CGPoint(x: x, y: y), with: nil))
+            }
+        }
+        panel.setExpanded(false)
+        XCTAssertTrue(panel.isExpanded, "An embedded readout has no independent collapsed state")
+        assertReadable()
+    }
+
+    func testSeparateReadoutMountLifecycleAndFreshnessAreIndependentOfCamera() throws {
+        let readout = ARCaptureReadoutView(frame: CGRect(x: 0, y: 450, width: 390, height: 270))
+        var attachments = [Bool]()
+        readout.onWindowAttachmentChanged = { [weak readout] view, attached in
+            XCTAssertTrue(view === readout)
+            attachments.append(attached)
+        }
+        let host = try XCTUnwrap(window.rootViewController?.view)
+        host.addSubview(readout)
+        readout.layoutIfNeeded()
+        XCTAssertEqual(attachments, [true])
+        XCTAssertEqual(readout.panel.frame, readout.bounds)
+        XCTAssertNil(readout.hitTest(CGPoint(x: 50, y: 100), with: nil))
+        XCTAssertTrue(readout.panel.isExpanded)
+        func show(_ debug: [String: Any]?, timestamp: Double) {
+            readout.panel.show(debug: debug, frameID: UUID().uuidString, timestamp: timestamp,
+                               analysisHz: 30, latencyMilliseconds: 12, settings: settings)
+        }
+        func contains(_ text: String) -> Bool {
+            allViews(readout).compactMap { $0 as? UILabel }.contains { $0.text == text }
+        }
+        show(validDebug(), timestamp: ProcessInfo.processInfo.systemUptime)
+        XCTAssertTrue(contains("+0.123"))
+        show(nil, timestamp: ProcessInfo.processInfo.systemUptime)
+        XCTAssertFalse(contains("+0.123"))
+        XCTAssertTrue(contains("TAG DEBUG · WAITING"))
+        for offset in [-1.0, 1.0] {
+            show(validDebug(), timestamp: ProcessInfo.processInfo.systemUptime + offset)
+            XCTAssertFalse(contains("+0.123"), "Stale and future cached snapshots must stay unavailable")
+        }
+        show(validDebug(), timestamp: ProcessInfo.processInfo.systemUptime)
+        XCTAssertTrue(contains("+0.123"))
+        let expiry = expectation(description: "Embedded cached snapshot expires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { expiry.fulfill() }
+        wait(for: [expiry], timeout: 1)
+        XCTAssertFalse(contains("+0.123"))
+        readout.removeFromSuperview()
+        XCTAssertEqual(attachments, [true, false])
+        host.addSubview(readout)
+        XCTAssertEqual(attachments, [true, false, true])
+        readout.removeFromSuperview()
+    }
+
     private func show(_ debug: [String: Any]?, frame: String = UUID().uuidString) {
         panel.traitCollection.performAsCurrent {
             panel.show(debug: debug, frameID: frame, timestamp: ProcessInfo.processInfo.systemUptime,

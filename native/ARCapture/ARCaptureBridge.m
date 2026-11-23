@@ -25,3 +25,6 @@ RCT_EXTERN_METHOD(exportSession:(NSString *)sessionId resolver:(RCTPromiseResolv
 
 @interface RCT_EXTERN_MODULE(ARCaptureViewManager, RCTViewManager)
 @end
+
+@interface RCT_EXTERN_MODULE(ARCaptureReadoutViewManager, RCTViewManager)
+@end

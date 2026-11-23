@@ -265,10 +265,13 @@ final class SavedRecordingStore {
         let input = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         defer { try? input.close() }
         var digest = SHA256()
-        while let data = try input.read(upToCount: 1_048_576), !data.isEmpty {
+        // Do not retain every Foundation read buffer while verifying a movie.
+        while try autoreleasepool(invoking: { () throws -> Bool in
+            guard let data = try input.read(upToCount: 1_048_576), !data.isEmpty else { return false }
             try checkCancellation(shouldCancel)
             digest.update(data: data)
-        }
+            return true
+        }) {}
         try checkCancellation(shouldCancel)
         return digest.finalize().map { String(format: "%02x", $0) }.joined()
     }

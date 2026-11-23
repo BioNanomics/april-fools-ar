@@ -1,6 +1,75 @@
 {
   "releases": [
     {
+      "version": "0.11.0",
+      "build": "31",
+      "title": "Landscape side controls",
+      "changes": [
+        "Move capture navigation, Kalman filtering, zoom and recording to the right side in landscape, leaving portrait controls at the bottom.",
+        "Use taller right-side panels for measurement tools, tag details, More, saved sessions and Settings, with recording and Settings actions pinned within reach.",
+        "Respect the camera cutout and home indicator in both landscape directions, and retain camera, recording and settings state when rotating."
+      ]
+    },
+    {
+      "version": "0.10.0",
+      "build": "30",
+      "title": "Full-screen app information",
+      "changes": [
+        "Tap the upper-right version badge or More to open the full-screen Version page with bottom navigation for build information and release notes.",
+        "Combine About and Sponsors into one full-screen page, with About, Privacy, Licenses and Done along the bottom.",
+        "Keep More controls at half height and preserve the live camera beneath information pages."
+      ]
+    },
+    {
+      "version": "0.9.1",
+      "build": "29",
+      "title": "Version and tag details",
+      "changes": [
+        "Keep the installed version and build visible in the upper-right corner, including while tools and information sheets are open.",
+        "Open tag details by tapping a detected tag or the new Details button in the bottom dock.",
+        "Keep details in the lower-half panel and preserve recording controls within thumb reach."
+      ]
+    },
+    {
+      "version": "0.9.0",
+      "build": "28",
+      "title": "Controls within thumb reach",
+      "changes": [
+        "Move navigation, Kalman filtering, zoom, Settings and recording into three compact rows at the bottom of the screen.",
+        "Keep measurement tools, tag details, saved recordings and app information in scrollable panels within the lower half.",
+        "Keep recording controls pinned while tools are open and preserve the camera session through layout and orientation changes."
+      ]
+    },
+    {
+      "version": "0.8.1",
+      "build": "27",
+      "title": "Live filter toggle",
+      "changes": [
+        "Switch Kalman filtering on or off directly from the live capture controls to compare readings while watching the camera.",
+        "Show the current filter state and sample count; keep the smoothing-strength dropdown in Settings.",
+        "Retain the selected sample count and calibration when toggling, and wait for the saved filter state before accepting another tap."
+      ]
+    },
+    {
+      "version": "0.8.0",
+      "build": "26",
+      "title": "Optional Kalman smoothing",
+      "changes": [
+        "Add a saved Kalman filter checkbox for live tag heights and LiDAR/tag distance readouts, off by default.",
+        "Choose smoothing strength from 3, 5, 10, 20 or 30 equivalent samples; higher settings reduce jitter and add response lag.",
+        "Label filtered readouts and preserve original measurements, quality diagnostics and recorded sensor data."
+      ]
+    },
+    {
+      "version": "0.7.1",
+      "build": "25",
+      "title": "Recording preparation memory fix",
+      "changes": [
+        "Reduce memory use while preparing and verifying saved recordings, including when reopening a capture for playback.",
+        "Preserve the original recording data and exported file contents."
+      ]
+    },
+    {
       "version": "0.7.1",
       "build": "24",
       "title": "Recorded overlays during playback",

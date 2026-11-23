@@ -302,12 +302,16 @@ struct SessionMP4Writer {
         let input = try openEntry(entry, inside: source)
         defer { try? input.close() }
         var read: UInt64 = 0
-        while let data = try input.read(upToCount: Self.chunkBytes), !data.isEmpty {
+        // FileHandle's Foundation buffers must drain per chunk, including the
+        // consumer's temporaries, rather than surviving the whole export.
+        while try autoreleasepool(invoking: { () throws -> Bool in
+            guard let data = try input.read(upToCount: Self.chunkBytes), !data.isEmpty else { return false }
             try Self.checkCancellation(shouldCancel)
             read += UInt64(data.count)
             guard read <= entry.bytes else { throw ExportError.sourceChanged(entry.name) }
             try consume(data)
-        }
+            return true
+        }) {}
         guard read == entry.bytes else { throw ExportError.sourceChanged(entry.name) }
         try verifyEntry(entry, inside: source)
     }
@@ -417,12 +421,16 @@ struct SessionMP4Writer {
             try checkCancellation(shouldCancel)
             let bytes = Data(line)
             if String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
-            guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
-                throw ExportError.integrity("each JSONL record must be an object")
+            // Drain Foundation's parsing/scalar-encoding temporaries per record;
+            // retaining them across a full capture can consume several GiB.
+            try autoreleasepool {
+                guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
+                    throw ExportError.integrity("each JSONL record must be an object")
+                }
+                count += 1
+                guard count <= 100_000 else { throw ExportError.limit("at most 100,000 records per metadata stream") }
+                try output.append("---\n"); try output.emit(object)
             }
-            count += 1
-            guard count <= 100_000 else { throw ExportError.limit("at most 100,000 records per metadata stream") }
-            try output.append("---\n"); try output.emit(object)
         }
         if count == 0 { try output.append("# No records.\n") }
         return output.data

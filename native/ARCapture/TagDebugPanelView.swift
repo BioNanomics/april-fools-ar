@@ -21,6 +21,7 @@ final class TagDebugPanelView: UIView {
     private var expandedTitleText = "TAG DEBUG · WAITING"
     private var titleAccessibilityText = "TAG DEBUG · WAITING"
     private var expiryToken: String?
+    private var passiveReadout = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -66,13 +67,14 @@ final class TagDebugPanelView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         let width = max(0, bounds.width - 24)
+        let disclosureWidth: CGFloat = passiveReadout ? 0 : 96
         detailsButton.frame = CGRect(x: max(12, bounds.width - 100), y: 0, width: 88, height: 44)
         if !isExpanded {
-            titleLabel.frame = CGRect(x: 12, y: 3, width: max(0, width - 96), height: 21)
-            rateLabel.frame = CGRect(x: 12, y: 24, width: max(0, width - 96), height: 14)
+            titleLabel.frame = CGRect(x: 12, y: 3, width: max(0, width - disclosureWidth), height: 21)
+            rateLabel.frame = CGRect(x: 12, y: 24, width: max(0, width - disclosureWidth), height: 14)
             return
         }
-        titleLabel.frame = CGRect(x: 12, y: 8, width: max(0, width - 96), height: 42)
+        titleLabel.frame = CGRect(x: 12, y: 8, width: max(0, width - disclosureWidth), height: 42)
         metricsScrollView.frame = CGRect(x: 0, y: 52, width: bounds.width, height: max(0, bounds.height - 54))
         let rows: [(UIView, CGFloat)] = [(translationRow, 36), (rotationRow, 34),
             (depthRow, 38), (geometryRow, 34), (meanLabel, 17), (qualityLabel, 17), (rateLabel, 28)]
@@ -82,7 +84,7 @@ final class TagDebugPanelView: UIView {
             y += height + 2
         }
         metricsScrollView.contentSize = CGSize(width: bounds.width, height: max(0, y - 2))
-        metricsScrollView.isScrollEnabled = metricsScrollView.contentSize.height > metricsScrollView.bounds.height + 0.5
+        metricsScrollView.isScrollEnabled = !passiveReadout && metricsScrollView.contentSize.height > metricsScrollView.bounds.height + 0.5
         let maximumOffset = max(0, metricsScrollView.contentSize.height - metricsScrollView.bounds.height)
         metricsScrollView.contentOffset.y = max(0, min(metricsScrollView.contentOffset.y, maximumOffset))
     }
@@ -95,10 +97,19 @@ final class TagDebugPanelView: UIView {
     }
     /// The host keeps the camera full size and lays out this overlay using preferredHeight.
     func setExpanded(_ expanded: Bool) {
+        guard !passiveReadout || expanded else { return }
         guard expanded != isExpanded else { return }
         isExpanded = expanded
         updateExpansion()
         onPreferredHeightChanged?(preferredHeight)
+    }
+    /// Embedded details are controlled and scrolled by the surrounding bottom sheet.
+    func configureAsPassiveReadout() {
+        passiveReadout = true
+        detailsButton.isHidden = true
+        detailsButton.isAccessibilityElement = false
+        setExpanded(true)
+        setNeedsLayout()
     }
     @objc private func toggleDetails() { setExpanded(!isExpanded) }
     private func updateExpansion() {
@@ -124,6 +135,7 @@ final class TagDebugPanelView: UIView {
     }
     /// Readout taps pass through unless a constrained expanded panel needs scrolling.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !passiveReadout else { return nil }
         guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
         let localPoint = detailsButton.convert(point, from: self)
         if detailsButton.point(inside: localPoint, with: event) {
@@ -163,7 +175,7 @@ final class TagDebugPanelView: UIView {
     func show(debug: [String: Any]?, frameID: String, timestamp: Double, analysisHz: Double,
               latencyMilliseconds: Double?, settings: TagDebugSettings) {
         let age = ProcessInfo.processInfo.systemUptime - timestamp
-        guard age.isFinite, age <= 0.4 else { showUnavailable("Stale result · waiting for a current frame"); return }
+        guard age.isFinite, age >= 0, age <= 0.4 else { showUnavailable("Stale result · waiting for a current frame"); return }
         guard let debug else {
             showUnavailable("No tag in the current camera frame")
             expandedRateText = String(format: "Edge %.1f mm · %.1f Hz\nFrame age %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
@@ -202,6 +214,10 @@ final class TagDebugPanelView: UIView {
         }
         titleAccessibilityText = expandedTitleText
         if let heightSource { titleAccessibilityText += ". Height source: \(heightSource)." }
+        let filteredHeight = (debug["floorHeight"] as? [String: Any])?["readoutFilter"] != nil
+        if filteredHeight {
+            titleAccessibilityText += " Live height is Kalman filtered. Detailed pose and depth metrics are raw."
+        }
         updateTitleText()
         titleLabel.textColor = Self.color(severity)
         layer.borderColor = Self.color(severity).cgColor
@@ -236,12 +252,43 @@ final class TagDebugPanelView: UIView {
             compactRateText = "\(heightSource) height · " + compactRateText
             expandedRateText += " · \(heightSource) height"
         }
+        if filteredHeight {
+            compactRateText = "Kalman · " + compactRateText
+            expandedRateText = expandedRateText.replacingOccurrences(of: "\n", with: " · Kalman\n")
+        }
         updateRateText()
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, 0.4 - age)) { [weak self] in
             guard let self, self.expiryToken == frameID else { return }
             self.showUnavailable("Stale result · waiting for a current frame")
         }
     }
+}
+
+/// A separately mounted readout never starts, stops or resizes the camera session.
+final class ARCaptureReadoutView: UIView {
+    let panel = TagDebugPanelView(frame: .zero)
+    var onWindowAttachmentChanged: ((ARCaptureReadoutView, Bool) -> Void)?
+    private var windowAttached = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        accessibilityIdentifier = "capture.tagDetailsReadout"
+        panel.configureAsPassiveReadout()
+        addSubview(panel)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        panel.frame = bounds
+    }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        let attached = window != nil
+        guard attached != windowAttached else { return }
+        windowAttached = attached
+        onWindowAttachmentChanged?(self, attached)
+    }
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
 }
 
 private final class DebugMetricRow: UIView {

@@ -246,9 +246,13 @@ final class AprilTagOverlayView: UIView {
                 deltaText = HeightDisplayFormatter.string(meters: delta, showImperial: showImperialHeight)
             }
         }
+        let filtered = floorHeight["readoutFilter"] != nil || ranges["readoutFilter"] != nil
         label.setContent(id: id, summary: "\(prefix) · H \(heightText)", lidar: lidar.0, tag: tag.0,
-                         delta: deltaText, showImperial: showImperialHeight)
+                         delta: deltaText, showImperial: showImperialHeight, filtered: filtered)
         label.accessibilityValue = heightAccessibility + " Distance. " + lidar.2 + " " + tag.2
+        if filtered {
+            label.accessibilityValue = (label.accessibilityValue ?? "") + " Kalman smoothing applied to live readouts."
+        }
         if let deltaText {
             label.accessibilityValue = (label.accessibilityValue ?? "") + " Absolute LiDAR versus Tag camera range difference: \(deltaText)."
         }
@@ -361,8 +365,9 @@ private final class TagReadoutCard: UIView {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, showImperial: Bool) {
+    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, showImperial: Bool, filtered: Bool) {
         summaryLabel.text = summary
+        headingLabel.text = filtered ? "Distance · Kalman" : "Distance"
         summaryLabel.accessibilityIdentifier = "apriltag.summary.\(id)"
         headingLabel.accessibilityIdentifier = "apriltag.distanceHeading.\(id)"
         let names = ["lidar", "tag", "delta"]

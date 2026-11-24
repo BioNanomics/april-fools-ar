@@ -41,6 +41,55 @@ final class SpatialMeasurementTests: XCTestCase {
         return try XCTUnwrap(state.append(point([offset + 3, 4, -2], frame: "frame-B"), tracking: "normal", frameAgeSeconds: 0.1))
     }
 
+    func testDistanceTriangleReturnsGravityAlignedCornerAndSignedVerticalLeg() throws {
+        let start: SIMD3<Float> = [1, 2, 3], end: SIMD3<Float> = [4, 6, 3]
+        let triangle = try XCTUnwrap(SpatialMeasurementMath.distanceTriangle(from: start, to: end))
+        assertVector(triangle.corner, [4, 2, 3])
+        XCTAssertEqual(triangle.distanceMeters, 5, accuracy: 1e-10)
+        XCTAssertEqual(triangle.horizontalMeters, 3, accuracy: 1e-10)
+        XCTAssertEqual(triangle.verticalMeters, 4, accuracy: 1e-10)
+        let reversed = try XCTUnwrap(SpatialMeasurementMath.distanceTriangle(from: end, to: start))
+        assertVector(reversed.corner, [1, 6, 3])
+        XCTAssertEqual(reversed.distanceMeters, triangle.distanceMeters, accuracy: 1e-10)
+        XCTAssertEqual(reversed.horizontalMeters, triangle.horizontalMeters, accuracy: 1e-10)
+        XCTAssertEqual(reversed.verticalMeters, -triangle.verticalMeters, accuracy: 1e-10)
+    }
+
+    func testDistanceTriangleAllowsZeroLegsAndRejectsNonfiniteEndpoints() throws {
+        let start: SIMD3<Float> = [1, 2, 3]
+        for end: SIMD3<Float> in [[4, 2, 7], [1, -2, 3], start] {
+            let triangle = try XCTUnwrap(SpatialMeasurementMath.distanceTriangle(from: start, to: end))
+            assertVector(triangle.corner, [end.x, start.y, end.z])
+            XCTAssertEqual(triangle.distanceMeters, hypot(triangle.horizontalMeters, triangle.verticalMeters), accuracy: 1e-10)
+            if end.y == start.y { XCTAssertEqual(triangle.verticalMeters, 0) }
+            if end.x == start.x && end.z == start.z { XCTAssertEqual(triangle.horizontalMeters, 0) }
+        }
+        for invalid: SIMD3<Float> in [[.nan, 0, 0], [0, .infinity, 0], [0, 0, -.infinity]] {
+            XCTAssertNil(SpatialMeasurementMath.distanceTriangle(from: invalid, to: start))
+            XCTAssertNil(SpatialMeasurementMath.distanceTriangle(from: start, to: invalid))
+        }
+        // Conversion to the double-precision core precedes subtraction; valid
+        // finite Float endpoints must not overflow in an intermediate Float delta.
+        let huge = try XCTUnwrap(SpatialMeasurementMath.distanceTriangle(
+            from: [-Float.greatestFiniteMagnitude, 0, 0], to: [Float.greatestFiniteMagnitude, 0, 0]))
+        XCTAssertTrue(huge.distanceMeters.isFinite)
+        XCTAssertEqual(huge.distanceMeters, Double(Float.greatestFiniteMagnitude)*2)
+    }
+
+    func testDistanceTriangleMovesWithGravityAlignedWorldTranslationAndYaw() throws {
+        let start: SIMD3<Float> = [1, 2, 3], end: SIMD3<Float> = [4, 6, 3]
+        for yaw: Float in [-.pi, -0.37, 0, 0.81, .pi/2] {
+            let rotation = simd_quatf(angle: yaw, axis: [0, 1, 0])
+            let translation: SIMD3<Float> = [10, -7, -20]
+            let movedStart = rotation.act(start)+translation, movedEnd = rotation.act(end)+translation
+            let triangle = try XCTUnwrap(SpatialMeasurementMath.distanceTriangle(from: movedStart, to: movedEnd))
+            assertVector(triangle.corner, rotation.act([end.x, start.y, end.z])+translation)
+            XCTAssertEqual(triangle.distanceMeters, 5, accuracy: 1e-5)
+            XCTAssertEqual(triangle.horizontalMeters, 3, accuracy: 1e-5)
+            XCTAssertEqual(triangle.verticalMeters, 4, accuracy: 1e-5)
+        }
+    }
+
     func testVerticalIntersectionIsWorldVerticalForHorizontalAndSlopedFloors() throws {
         assertVector(try SpatialMeasurementMath.verticalFoot(of: [1, 2, -3], onto: plane(origin: [0, -0.5, 0])), [1, -0.5, -3])
         // Plane y = 0.1x + 0.2z. A plumb height keeps x/z, unlike shortest normal distance.

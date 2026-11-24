@@ -9,7 +9,10 @@ import simd
 /// the movie track's orientation and aspect-fit rectangle.
 struct RecordingPlaybackSnapshot {
     struct Tag { let id: String; let label: String; let corners: [CGPoint]; let severity: String }
-    struct Line { let id: String; let points: [CGPoint]; let label: String?; let style: String }
+    struct Line {
+        let id: String; let points: [CGPoint]; let label: String?; let style: String
+        var accessibilityLabel: String? = nil
+    }
     struct Polygon { let id: String; let points: [CGPoint]; let label: String?; let style: String }
     let imageSize: CGSize
     let frameID: String
@@ -227,15 +230,42 @@ final class RecordingPlaybackTimeline {
             for record in state.measurements.suffix(50) {
                 guard Self.identifier(record["segmentId"]) == frame.segment,
                       let id = Self.identifier(record["id"]), let start = Self.point(record["startWorldMeters"]),
-                      let end = Self.point(record["endWorldMeters"]), let projected = camera.segment(from: start, to: end) else { continue }
+                      let end = Self.point(record["endWorldMeters"]) else { continue }
                 let height = record["kind"] as? String == "height"
-                let distance = Self.number(record["distanceMeters"]) ?? Double(simd_length(end-start))
-                let vertical = Self.number(record["verticalMeters"]) ?? Double(end.y-start.y)
-                let label = height ? "Height \(Self.height(abs(vertical), imperial: imperial))"
-                    : String(format: "%.3f m · ΔY %.3f m", distance, vertical)
-                lines.append(.init(id: "measurement.\(id)", points: projected, label: label, style: height ? "height" : "distance"))
-                if height, let floor = record["floor"] as? [String: Any] {
-                    Self.addBase(at: start, floor: floor, camera: camera, id: "measurement.\(id).base", to: &polygons)
+                if height {
+                    guard let projected = camera.segment(from: start, to: end) else { continue }
+                    let vertical = Self.number(record["verticalMeters"]) ?? Double(end.y-start.y)
+                    lines.append(.init(id: "measurement.\(id)", points: projected,
+                        label: "Height \(Self.height(abs(vertical), imperial: imperial))", style: "height"))
+                    if let floor = record["floor"] as? [String: Any] {
+                        Self.addBase(at: start, floor: floor, camera: camera, id: "measurement.\(id).base", to: &polygons)
+                    }
+                } else if record["kind"] as? String == "distance",
+                          let triangle = SpatialMeasurementMath.distanceTriangle(from: start, to: end) {
+                    let hasLegs = triangle.horizontalMeters > 1e-6 && abs(triangle.verticalMeters) > 1e-6
+                    let summary = String(format: "D %.3f m · H %.3f m · V %+.3f m",
+                        triangle.distanceMeters, triangle.horizontalMeters, triangle.verticalMeters)
+                    if let projected = camera.segment(from: start, to: end) {
+                        lines.append(.init(id: "measurement.\(id)", points: projected,
+                            label: hasLegs ? String(format: "D %.3f m", triangle.distanceMeters) : summary, style: "distance",
+                            accessibilityLabel: String(format: "Distance %.3f meters. Horizontal %.3f meters. Vertical difference %+.3f meters.",
+                                triangle.distanceMeters, triangle.horizontalMeters, triangle.verticalMeters)))
+                    }
+                    if hasLegs {
+                        if let horizontal = camera.segment(from: start, to: triangle.corner) {
+                            lines.append(.init(id: "measurement.\(id).horizontal", points: horizontal,
+                                label: String(format: "H %.3f m", triangle.horizontalMeters), style: "distance-horizontal"))
+                        }
+                        if let vertical = camera.segment(from: triangle.corner, to: end) {
+                            lines.append(.init(id: "measurement.\(id).vertical", points: vertical,
+                                label: String(format: "V %+.3f m", triangle.verticalMeters), style: "distance-vertical"))
+                        }
+                    }
+                } else if let projected = camera.segment(from: start, to: end) {
+                    let distance = Self.number(record["distanceMeters"]) ?? Double(simd_length(end-start))
+                    let vertical = Self.number(record["verticalMeters"]) ?? Double(end.y-start.y)
+                    lines.append(.init(id: "measurement.\(id)", points: projected,
+                        label: String(format: "%.3f m · ΔY %.3f m", distance, vertical), style: "distance"))
                 }
             }
             for (index, point) in state.pending.prefix(1).enumerated() {

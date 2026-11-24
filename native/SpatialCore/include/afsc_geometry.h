@@ -30,6 +30,11 @@ typedef struct {
 } AFSCDistance;
 
 typedef struct {
+    AFSCVec3 corner; /* (end.x, start.y, end.z), in the same gravity +Y-up world. */
+    AFSCDistance lengths; /* vertical_meters remains signed; use abs for leg length. */
+} AFSCDistanceTriangle;
+
+typedef struct {
     double area_square_meters;
     double min_span_meters;
 } AFSCFloorCoverage;
@@ -55,6 +60,11 @@ AFSCGeometryStatus afsc_floor_coverage(const AFSCVec3 *vertices, size_t count,
 AFSCGeometryStatus afsc_floor_marker(AFSCVec3 center, AFSCPlane plane,
                                     double side_meters, AFSCQuad *corners);
 AFSCGeometryStatus afsc_distance(AFSCVec3 start, AFSCVec3 end, AFSCDistance *distance);
+/* Horizontal start-to-corner and vertical corner-to-end legs share the original
+ * endpoint distance as their hypotenuse. Zero-length legs and coincident points
+ * are valid; renderers decide how to display those degenerate triangles. */
+AFSCGeometryStatus afsc_distance_triangle(AFSCVec3 start, AFSCVec3 end,
+                                        AFSCDistanceTriangle *triangle);
 #ifdef __cplusplus
 }
 #endif

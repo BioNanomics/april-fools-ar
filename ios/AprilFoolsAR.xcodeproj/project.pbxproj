@@ -32,6 +32,7 @@
 		3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */; };
 		3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C953581979F4BA05C64FBA /* SpatialProjection.swift */; };
 		40B3ADBE9B5EC5EEAEEDDD59 /* AFTagCore.c in Sources */ = {isa = PBXBuildFile; fileRef = E8B8A96D63698D4255EFFE75 /* AFTagCore.c */; };
+		419292C85561BB538BB90DF3 /* AFTagPoseConventions.c in Sources */ = {isa = PBXBuildFile; fileRef = F21D57571BFFC7949DCB1D41 /* AFTagPoseConventions.c */; };
 		470CF29463DF079EA40F9288 /* TagReadoutFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F0FC8935F8289FB9623CB5 /* TagReadoutFilter.swift */; };
 		493E2B21D726B34BB0493700 /* image_u8x4.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E3A4C79448974334F594FA9 /* image_u8x4.c */; };
 		49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */; };
@@ -156,6 +157,7 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecordingPreview.swift; path = ArchiveModule/RecordingPreview.swift; sourceTree = "<group>"; };
 		EEB2EF0D8CBAF081733145FB /* geometry.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = geometry.cpp; path = SpatialCore/src/geometry.cpp; sourceTree = "<group>"; };
+		F21D57571BFFC7949DCB1D41 /* AFTagPoseConventions.c */ = {isa = PBXFileReference; includeInIndex = 1; name = AFTagPoseConventions.c; path = AprilTag/AFTagPoseConventions.c; sourceTree = "<group>"; };
 		F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PreviewZoom.swift; path = ARCapture/PreviewZoom.swift; sourceTree = "<group>"; };
 		F65F24E17F0D91A4485AC78B /* image_u8.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8.c; path = common/image_u8.c; sourceTree = "<group>"; };
 		F884C01AD6DBA3B8CDFFEB41 /* TagDebugPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagDebugPanelView.swift; path = ARCapture/TagDebugPanelView.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 				8C84E1B9B3EDD7BAD903A0D3 /* FieldOverlayView.swift */,
 				98EFF00BBB8C0C29F0ED6EA4 /* FieldTextCodec.swift */,
 				B39EEE6DE4D81A82F329537E /* fields.cpp */,
+				F21D57571BFFC7949DCB1D41 /* AFTagPoseConventions.c */,
 			);
 			name = Native;
 			path = ../native;
@@ -595,6 +598,7 @@
 				DFE0A03165A7CBEEB0F72392 /* FieldOverlayView.swift in Sources */,
 				50B4567814FDA2B8A4C537AE /* FieldTextCodec.swift in Sources */,
 				A1F63622C42A35C4EA9D66F2 /* fields.cpp in Sources */,
+				419292C85561BB538BB90DF3 /* AFTagPoseConventions.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

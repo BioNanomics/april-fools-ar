@@ -114,6 +114,55 @@ void testVerticalFootTiltAndDistance() {
     assert(afsc_distance({INFINITY,0,0},{0,0,0},&distance)==AFSC_GEOMETRY_INVALID_ARGUMENT);
     assert(afsc_distance({-1e308,0,0},{1e308,0,0},&distance)==AFSC_GEOMETRY_OUT_OF_RANGE);
 }
+void testDistanceTriangle() {
+    AFSCDistanceTriangle triangle{};
+    const AFSCVec3 start={1,2,3}, end={4,6,3};
+    assert(afsc_distance_triangle(start,end,&triangle)==AFSC_GEOMETRY_OK);
+    assert(triangle.corner.x==4 && triangle.corner.y==2 && triangle.corner.z==3);
+    assert(near(triangle.lengths.distance_meters,5) && near(triangle.lengths.horizontal_meters,3)
+        && triangle.lengths.vertical_meters==4);
+    assert(near(dot(sub(triangle.corner,start),sub(end,triangle.corner)),0));
+    assert(afsc_distance_triangle(end,start,&triangle)==AFSC_GEOMETRY_OK);
+    assert(triangle.corner.x==1 && triangle.corner.y==6 && triangle.corner.z==3);
+    assert(near(triangle.lengths.distance_meters,5) && near(triangle.lengths.horizontal_meters,3)
+        && triangle.lengths.vertical_meters==-4);
+    for (const auto finish : {AFSCVec3{4,2,7}, AFSCVec3{1,-2,3}, start}) {
+        assert(afsc_distance_triangle(start,finish,&triangle)==AFSC_GEOMETRY_OK);
+        assert(triangle.corner.x==finish.x && triangle.corner.y==start.y && triangle.corner.z==finish.z);
+        AFSCDistance horizontal{}, vertical{};
+        assert(afsc_distance(start,triangle.corner,&horizontal)==AFSC_GEOMETRY_OK);
+        assert(afsc_distance(triangle.corner,finish,&vertical)==AFSC_GEOMETRY_OK);
+        assert(near(horizontal.distance_meters,triangle.lengths.horizontal_meters));
+        assert(near(vertical.distance_meters,std::abs(triangle.lengths.vertical_meters)));
+        assert(near(std::hypot(horizontal.distance_meters,vertical.distance_meters),triangle.lengths.distance_meters));
+    }
+    // A gravity-aligned world may translate and rotate around +Y. The lengths
+    // remain invariant, and the constructed right-angle corner moves with it.
+    for (double yaw : {-pi, -.37, 0., .81, pi/2}) {
+        const auto transform = [yaw](AFSCVec3 p) {
+            return AFSCVec3{100+std::cos(yaw)*p.x-std::sin(yaw)*p.z,
+                p.y-7, -20+std::sin(yaw)*p.x+std::cos(yaw)*p.z};
+        };
+        assert(afsc_distance_triangle(transform(start),transform(end),&triangle)==AFSC_GEOMETRY_OK);
+        const auto expectedCorner=transform({end.x,start.y,end.z});
+        assert(near(triangle.corner.x,expectedCorner.x) && near(triangle.corner.y,expectedCorner.y)
+            && near(triangle.corner.z,expectedCorner.z));
+        assert(near(triangle.lengths.distance_meters,5) && near(triangle.lengths.horizontal_meters,3)
+            && near(triangle.lengths.vertical_meters,4));
+    }
+    const AFSCDistanceTriangle sentinel={{7,8,9},{10,11,12}};
+    for (const auto invalid : {AFSCVec3{NAN,2,3}, AFSCVec3{1,INFINITY,3}, AFSCVec3{1,2,-INFINITY}}) {
+        triangle=sentinel;
+        assert(afsc_distance_triangle(invalid,end,&triangle)==AFSC_GEOMETRY_INVALID_ARGUMENT);
+        assert(std::memcmp(&triangle,&sentinel,sizeof(triangle))==0);
+        assert(afsc_distance_triangle(start,invalid,&triangle)==AFSC_GEOMETRY_INVALID_ARGUMENT);
+        assert(std::memcmp(&triangle,&sentinel,sizeof(triangle))==0);
+    }
+    triangle=sentinel;
+    assert(afsc_distance_triangle({-1e308,0,0},{1e308,0,0},&triangle)==AFSC_GEOMETRY_OUT_OF_RANGE);
+    assert(std::memcmp(&triangle,&sentinel,sizeof(triangle))==0);
+    assert(afsc_distance_triangle(start,end,nullptr)==AFSC_GEOMETRY_INVALID_ARGUMENT);
+}
 void testCoverageAndMarker() {
     AFSCVec3 rectangle[4];
     const double rotation=pi/4;
@@ -147,6 +196,6 @@ void testCoverageAndMarker() {
 } // namespace
 int main() {
     testAnalyticPlanes(); testRobustDeterminismAndBounds(); testRejectedFitsLeaveOutputUnchanged();
-    testVerticalFootTiltAndDistance(); testCoverageAndMarker();
+    testVerticalFootTiltAndDistance(); testDistanceTriangle(); testCoverageAndMarker();
     std::cout << "Geometry tests passed\n";
 }

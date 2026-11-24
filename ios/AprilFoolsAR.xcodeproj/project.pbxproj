@@ -69,6 +69,7 @@
 		D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */; };
 		D67D403D684BB61E9B6F4FA1 /* pjpeg-idct.c in Sources */ = {isa = PBXBuildFile; fileRef = 65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */; };
 		DA27C35703607F1813578B2B /* pjpeg.c in Sources */ = {isa = PBXBuildFile; fileRef = D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */; };
+		DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */; };
 		E25CDE140876A1CCDA05B580 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = 9959BA1C7D343658916BEE71 /* NOTICE.md */; };
 		E3745BA9CBBD387DC7A94A7E /* release-notes.json in Resources */ = {isa = PBXBuildFile; fileRef = 3FD063604D0BCFCE34FDDB80 /* release-notes.json */; };
 		E5447352652A80E035CB8F29 /* workerpool.c in Sources */ = {isa = PBXBuildFile; fileRef = AF54B392AF6AF22FF9C87B16 /* workerpool.c */; };
@@ -102,6 +103,7 @@
 		48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArchiveModule.swift; path = ArchiveModule/ArchiveModule.swift; sourceTree = "<group>"; };
 		493908AED57E2288AFD6D880 /* image_u8_parallel.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8_parallel.c; path = common/image_u8_parallel.c; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-AprilFoolsAR.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AprilFoolsAR.release.xcconfig"; path = "Target Support Files/Pods-AprilFoolsAR/Pods-AprilFoolsAR.release.xcconfig"; sourceTree = "<group>"; };
+		5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagGravityOrientation.swift; path = ARCapture/TagGravityOrientation.swift; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-AprilFoolsAR.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AprilFoolsAR.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DF00A1907A26462253BD5F7 /* getopt.c */ = {isa = PBXFileReference; includeInIndex = 1; name = getopt.c; path = common/getopt.c; sourceTree = "<group>"; };
 		636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag_quad_thresh.c; sourceTree = "<group>"; };
@@ -208,6 +210,7 @@
 				FA6EBBD3B87383B3A1BFDE6C /* SpatialMeasurements.swift */,
 				07C953581979F4BA05C64FBA /* SpatialProjection.swift */,
 				13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */,
+				5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */,
 				3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */,
 				86ABD46FF465A30DB753B623 /* TagCameraRanges.swift */,
 				788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */,
@@ -531,6 +534,7 @@
 				68542CCFC419D2394BD96422 /* SpatialMeasurements.swift in Sources */,
 				3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */,
 				623351B9B74E274B6984B4AD /* TagFloorHeight.swift in Sources */,
+				DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */,
 				3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */,
 				FEF4CE2E105F63F5F7452DE1 /* TagCameraRanges.swift in Sources */,
 				49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */,
@@ -561,7 +565,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 32;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -576,7 +580,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.1;
+				MARKETING_VERSION = 0.10.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -601,7 +605,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 32;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -615,7 +619,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.1;
+				MARKETING_VERSION = 0.10.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

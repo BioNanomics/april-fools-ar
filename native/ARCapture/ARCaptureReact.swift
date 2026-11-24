@@ -106,6 +106,10 @@ final class ARCaptureEngine: RCTEventEmitter {
     func exportSession(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.exportSession(id: id) { self.complete($0, resolve: resolve, reject: reject) }
     }
+    @objc(deleteSession:resolver:rejecter:)
+    func deleteSession(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.deleteSession(id: id) { self.complete($0, resolve: resolve, reject: reject) }
+    }
 }
 
 @objc(ARCaptureViewManager)

@@ -14,7 +14,7 @@ In landscape, the camera sits beside a tool rail with recording controls kept in
 
 The header shows the installed version, build number and short commit hash. Tap it for **Version and release notes**, including the full source hash, UTC build date and whether the build contains modified sources. New session manifests and recording-start events retain the same identity.
 
-**Tag debug** uses a compact translucent overlay over the full camera preview. It shows validity and pose/LiDAR depth agreement; tap **Details** for translation, orientation, range, angles and decode quality, or **Collapse** to reclaim the view. Tap a tag to select it. Use **Settings** for the physical tag width and quality thresholds; width defaults to FRC 165.1 mm. You can enter a width or use **Measure tag width with AR**, then review and accept the two-point edge estimate. See [debug definitions and conventions](docs/tag-debug-screen.md).
+**Tag debug** uses a compact translucent overlay over the full camera preview. It shows validity and pose/LiDAR depth agreement; tap **Details** for translation, orientation, range, angles and decode quality, or **Collapse** to reclaim the view. Tap a tag to select it. New settings default to **Auto** tag sizing, which uses matching-frame LiDAR to select a supported physical width for each tag. Settings also offers explicit **Field type** (**FTC** or **FRC**) and **Competition year** selections, plus custom widths. FTC seasons 2023–24 through 2026–27 and FRC 2024–2026 have size presets; CENTERSTAGE handles its 2- and 5-inch tags by ID within that selected season. The tag ID and family alone cannot identify the competition. You can enter a measured width or use **Measure tag width with AR**, then review and accept the two-point edge estimate. See [sizes, automatic-selection limits and conventions](docs/tag-debug-screen.md).
 
 Enable **Show pose axes** in Settings to add red X, green Y and blue Z axes to each solved tag pose.
 
@@ -27,11 +27,11 @@ Tracking, depth status and zoom controls share one compact line at the top of th
 3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
 4. In **Measure** mode, tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
-6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to review the video with recorded overlays, or **Share** to send the same recording through AirDrop or Files. In the player, **Recorded overlays** switches between annotated and clean playback.
+6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to review the video with recorded overlays, or **Share** to send the same recording through AirDrop or Files. In the player, **Recorded overlays** switches between annotated and clean playback. Use **Delete**, then confirm, to permanently remove a session's video and original capture data from this device. Unfinished recordings from earlier runs can also be deleted.
 
 Keep recordings short initially and check an export before the first field visit. Files stay on the phone until you explicitly share them. No server, account, BLE meter, or internet connection is needed for capture.
 
-The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage.
+The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage until you delete the session.
 
 ## Capture contents
 

@@ -27,6 +27,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     static let shared = ARCaptureCoordinator()
     private let captureQueue = DispatchQueue(label: "AprilFoolsAR.capture.frames", qos: .userInitiated)
     private let tagQueue = DispatchQueue(label: "AprilFoolsAR.apriltag.detect", qos: .userInitiated)
+    private let savedSessionQueue = DispatchQueue(label: "AprilFoolsAR.saved-sessions", qos: .utility)
     // Detector ownership stays exclusively on tagQueue; job/status ownership stays on captureQueue.
     private var tagDetector: AFTagDetector?
     private var tagInFlight = false
@@ -252,6 +253,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let age = self.latestFrame.map { ProcessInfo.processInfo.systemUptime - $0.timestamp } ?? .infinity
                 let width = try TagDebugMath.measuredTagSize(points: self.points, worldDistance: distance, segmentID: self.segment, tracking: self.tracking, frameAgeSeconds: age)
                 var settings = try self.debugSettings.merging(["tagSizeMeters": width])
+                settings.tagSizeMode = "custom"
+                settings.competitionYear = 0
                 settings.tagSizeSource = "ar-two-point-edge"
                 self.updateDebugSettings(settings, source: "ar-two-point-edge", evidence: ["sourcePoints": self.points, "measuredEdgeMeters": width, "method": "Euclidean distance of two live sceneDepth world endpoints; no PnP-derived size"])
                 completion(.success(settings.dictionary))
@@ -450,6 +453,25 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 guard value?["finalized"] as? Bool == true else { throw CaptureError.message("Stop and finalize this session before exporting.") }
                 completion(.success(["sessionId": id, "folderPath": folder.path, "manifestPath": manifest.path, "finalized": true]))
             } catch { completion(.failure(error)) }
+        }
+    }
+
+    func deleteSession(id: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            guard let identifier = UUID(uuidString: id) else { completion(.failure(CaptureError.message("Invalid session identifier."))); return }
+            guard self.recorder.map({ UUID(uuidString: $0.id) != identifier }) ?? true,
+                  self.finalizingRecorder.map({ UUID(uuidString: $0.id) != identifier }) ?? true else {
+                completion(.failure(CaptureError.message("Stop and finish saving this recording before deleting it.")))
+                return
+            }
+            // Recording IDs are newly generated at start and never reused, so
+            // this checked ID cannot become active while disk cleanup runs.
+            self.savedSessionQueue.async {
+                do {
+                    try SavedRecordingStore.shared.delete(sessionID: id)
+                    completion(.success(["sessionId": id, "deleted": true]))
+                } catch { completion(.failure(error)) }
+            }
         }
     }
 
@@ -835,10 +857,15 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let detections = (result ?? []).map { detection -> [String: Any] in
                     let center = TagDebugMath.numbers(detection["center"], count: 2) ?? []
                     let depth = TagDebugMath.sampleDepth(depth: depthBuffer, confidence: confidenceBuffer, center: center, imageWidth: width, imageHeight: height)
-                    let enriched = TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                    let sized = TagDebugMath.resolveTagSize(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                    let enriched = TagDebugMath.enrich(sized, depth: depth, settings: settings, tracking: sourceTracking)
                     let ranged = TagCameraRanges.enrich(enriched, context: TagCameraRangesContext(intrinsics: k,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp))
-                    return TagFloorHeight.enrich(ranged, context: TagFloorHeightContext(floor: sourceFloor,
+                    let oriented = TagGravityOrientation.enrich(ranged, context: TagGravityOrientationContext(
+                        cameraToWorld: sourceCameraToWorld, settings: settings, tracking: sourceTracking,
+                        frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
+                        frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))
+                    return TagFloorHeight.enrich(oriented, context: TagFloorHeightContext(floor: sourceFloor,
                         cameraToWorld: sourceCameraToWorld, intrinsics: k, settings: settings, tracking: sourceTracking,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
                         frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))

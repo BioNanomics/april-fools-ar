@@ -160,10 +160,11 @@ function CaptureApp() {
   const [busy, setBusy] = useState(false);
   const [sessionAction, setSessionAction] = useState<{
     id: string;
-    action: 'play' | 'share';
+    action: 'play' | 'share' | 'delete';
   } | null>(null);
   const sessionActionRef = useRef(false);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const sessionsRefreshRef = useRef(0);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   const [preview, setPreview] = useState('camera');
@@ -190,8 +191,15 @@ function CaptureApp() {
     }
   }, []);
   const refreshSessions = useCallback(async () => {
+    if (sessionActionRef.current) {
+      return;
+    }
+    const request = ++sessionsRefreshRef.current;
     try {
-      setSessions(await Engine.listSessions());
+      const next = await Engine.listSessions();
+      if (request === sessionsRefreshRef.current) {
+        setSessions(next);
+      }
     } catch (e) {
       Alert.alert('Sessions', errorText(e));
     }
@@ -337,6 +345,57 @@ function CaptureApp() {
       setSessionAction(null);
       setBusy(false);
     }
+  };
+  const deleteSession = (session: Session) => {
+    if (
+      sessionActionRef.current ||
+      busy ||
+      status.finalizing ||
+      (status.recording && status.sessionId === session.id)
+    ) {
+      return;
+    }
+    sessionActionRef.current = true;
+    setBusy(true);
+    let confirmed = false;
+    const finish = () => {
+      sessionActionRef.current = false;
+      setSessionAction(null);
+      setBusy(false);
+    };
+    const remove = async () => {
+      if (confirmed || !sessionActionRef.current) {
+        return;
+      }
+      confirmed = true;
+      setSessionAction({ id: session.id, action: 'delete' });
+      try {
+        await Engine.deleteSession(session.id);
+        // Ignore a list request that started before this deletion completed.
+        sessionsRefreshRef.current++;
+        setSessions(previous => previous.filter(item => item.id !== session.id));
+      } catch (e) {
+        Alert.alert('Delete recording', errorText(e));
+      } finally {
+        finish();
+      }
+    };
+    Alert.alert(
+      'Delete recording?',
+      `Permanently delete “${session.name}” from this device? Its video and original capture data will be removed. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: finish },
+        { text: 'Delete', style: 'destructive', onPress: remove },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          if (!confirmed) {
+            finish();
+          }
+        },
+      },
+    );
   };
   const bookmark = async () => {
     try {
@@ -1178,7 +1237,14 @@ function CaptureApp() {
         >
           <View style={s.row}>
             <Text style={s.title}>Your field recordings</Text>
-            <Pressable onPress={refreshSessions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Refresh saved sessions"
+              accessibilityState={{ disabled: Boolean(working) }}
+              disabled={Boolean(working)}
+              style={working && s.dim}
+              onPress={refreshSessions}
+            >
               <Text style={s.link}>Refresh</Text>
             </Pressable>
           </View>
@@ -1256,6 +1322,31 @@ function CaptureApp() {
                   >
                     <Text style={s.exportText}>Share ↗</Text>
                   </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete recording ${item.name}`}
+                    accessibilityHint="Permanently removes the video and original capture data."
+                    accessibilityState={{
+                      disabled: Boolean(
+                        working ||
+                          (status.recording && status.sessionId === item.id),
+                      ),
+                    }}
+                    disabled={Boolean(
+                      working ||
+                        (status.recording && status.sessionId === item.id),
+                    )}
+                    style={[
+                      s.sessionButton,
+                      s.deleteButton,
+                      (working ||
+                        (status.recording && status.sessionId === item.id)) &&
+                        s.dim,
+                    ]}
+                    onPress={() => deleteSession(item)}
+                  >
+                    <Text style={s.exportText}>Delete</Text>
+                  </Pressable>
                 </View>
                 {sessionAction?.id === item.id ? (
                   <View style={s.sessionProgress}>
@@ -1267,7 +1358,9 @@ function CaptureApp() {
                     >
                       {sessionAction.action === 'play'
                         ? 'Opening recording…'
-                        : 'Preparing to share…'}
+                        : sessionAction.action === 'share'
+                          ? 'Preparing to share…'
+                          : 'Deleting recording…'}
                     </Text>
                   </View>
                 ) : !item.finalized ? (
@@ -1723,6 +1816,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 9,
   },
+  deleteButton: { backgroundColor: C.coral },
   sessionProgress: {
     flexDirection: 'row',
     alignItems: 'center',

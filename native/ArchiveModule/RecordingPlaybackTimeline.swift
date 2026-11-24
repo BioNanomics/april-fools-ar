@@ -215,7 +215,7 @@ final class RecordingPlaybackTimeline {
                             }
                         }
                         if let projectedCorners {
-                            tags.append(.init(id: identifier, label: Self.tagLabel(Int(tagID), detection: detection, settings: settings), corners: projectedCorners, severity: severity))
+                            tags.append(.init(id: identifier, label: Self.tagLabel(Int(tagID), detection: detection, event: event.row, settings: settings), corners: projectedCorners, severity: severity))
                         }
                         if worldVisible, let camera = projection {
                             Self.addTagHeight(detection, event: event.row, activeFloor: state.floor, segment: frame.segment,
@@ -372,7 +372,7 @@ final class RecordingPlaybackTimeline {
         let points = camera.polygon(vertices)
         if points.count >= 3 { polygons.append(.init(id: id, points: points, label: nil, style: "base")) }
     }
-    private static func tagLabel(_ id: Int, detection: [String: Any], settings: [String: Any]) -> String {
+    private static func tagLabel(_ id: Int, detection: [String: Any], event: [String: Any], settings: [String: Any]) -> String {
         let imperial = flag(settings["showImperialHeight"]) ?? true
         var rows = ["#\(id)"]
         if let recorded = detection["floorHeight"] as? [String: Any], flag(recorded["available"]) == true,
@@ -385,6 +385,19 @@ final class RecordingPlaybackTimeline {
             let threshold = number(settings["distanceDeltaThresholdMeters"]) ?? 0.15
             if let delta = number(ranges["distanceDeltaMeters"]), delta > threshold { rows.append("LiDAR Δ \(height(delta, imperial: imperial))") }
         }
+        let orientation = detection["gravityOrientation"] as? [String: Any] ?? [:]
+        let contextMatches = ["frameId", "segmentId"].allSatisfy { key in
+            guard let raw = orientation[key] else { return true }
+            guard let recorded = identifier(raw), let source = identifier(event[key]) else { return false }
+            return recorded == source
+        }
+        let tilt = flag(orientation["available"]) == true && contextMatches
+            ? number(orientation["tiltFromVerticalDegrees"]).flatMap { (0...90).contains($0) ? $0 : nil } : nil
+        let twist = tilt == nil ? nil
+            : number(orientation["twistDegrees"]).flatMap { (-180...180).contains($0) ? $0 : nil }
+        let tiltText = tilt.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        let twistText = twist.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        rows.append("Tilt \(tiltText) · Twist \(twistText)")
         return rows.joined(separator: "\n")
     }
     private static func height(_ meters: Double, imperial: Bool) -> String {

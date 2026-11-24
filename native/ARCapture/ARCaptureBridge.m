@@ -21,6 +21,7 @@ RCT_EXTERN_METHOD(setPreviewMode:(NSString *)mode resolver:(RCTPromiseResolveBlo
 RCT_EXTERN_METHOD(setDisplayZoom:(double)zoom resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(listSessions:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(exportSession:(NSString *)sessionId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(deleteSession:(NSString *)sessionId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 @end
 
 @interface RCT_EXTERN_MODULE(ARCaptureViewManager, RCTViewManager)

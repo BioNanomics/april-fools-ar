@@ -14,8 +14,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+export type TagSizeMode = 'auto' | 'ftc' | 'frc' | 'custom';
+
 export type DebugSettings = {
   tagSizeMeters: number;
+  tagSizeMode?: TagSizeMode;
+  competitionYear?: number;
   maxDistanceMeters: number;
   maxPlaneAngleDegrees: number;
   warningDepthDifferenceMeters: number;
@@ -30,6 +34,8 @@ export type DebugSettings = {
 
 export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   tagSizeMeters: 0.1651,
+  tagSizeMode: 'auto',
+  competitionYear: 0,
   maxDistanceMeters: 5,
   maxPlaneAngleDegrees: 60,
   warningDepthDifferenceMeters: 0.1,
@@ -44,6 +50,8 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
 type SettingsKey = Exclude<
   keyof DebugSettings,
   | 'tagSizeSource'
+  | 'tagSizeMode'
+  | 'competitionYear'
   | 'showPoseAxes'
   | 'showImperialHeight'
   | 'levelFloorWithGravity'
@@ -99,6 +107,96 @@ const fields: {
 ];
 
 type Draft = Record<SettingsKey, string>;
+
+const FRC_TAG_SIZE_METERS = 0.1651;
+const tagSizeOptions: { mode: TagSizeMode; label: string }[] = [
+  { mode: 'auto', label: 'Auto (LiDAR)' },
+  { mode: 'ftc', label: 'FTC' },
+  { mode: 'frc', label: 'FRC' },
+  { mode: 'custom', label: 'Custom width' },
+];
+
+type FieldSeason = {
+  year: number;
+  game: string;
+  referenceSizeMeters: number;
+  sizeDescription: string;
+};
+
+const fieldSeasons: Record<'ftc' | 'frc', FieldSeason[]> = {
+  ftc: [
+    {
+      year: 2027,
+      game: 'BIOBUZZ',
+      referenceSizeMeters: 0.08255,
+      sizeDescription: '3.25-inch tags (82.55 mm).',
+    },
+    {
+      year: 2026,
+      game: 'DECODE',
+      referenceSizeMeters: 0.1651,
+      sizeDescription: '6.5-inch tags (165.1 mm).',
+    },
+    {
+      year: 2025,
+      game: 'INTO THE DEEP',
+      referenceSizeMeters: 0.1016,
+      sizeDescription: '4-inch tags (101.6 mm).',
+    },
+    {
+      year: 2024,
+      game: 'CENTERSTAGE',
+      referenceSizeMeters: 0.0508,
+      sizeDescription:
+        '2- and 5-inch tags (50.8 and 127 mm). Each tag ID uses its season size.',
+    },
+  ],
+  frc: [
+    {
+      year: 2026,
+      game: 'REBUILT',
+      referenceSizeMeters: 0.1651,
+      sizeDescription: '6.5-inch tags (165.1 mm).',
+    },
+    {
+      year: 2025,
+      game: 'REEFSCAPE',
+      referenceSizeMeters: 0.1651,
+      sizeDescription: '6.5-inch tags (165.1 mm).',
+    },
+    {
+      year: 2024,
+      game: 'CRESCENDO',
+      referenceSizeMeters: 0.1651,
+      sizeDescription: '6.5-inch tags (165.1 mm).',
+    },
+  ],
+};
+
+function seasonFor(mode: TagSizeMode, year?: number): FieldSeason | undefined {
+  if (mode !== 'ftc' && mode !== 'frc') {
+    return undefined;
+  }
+  return (
+    fieldSeasons[mode].find(season => season.year === year) ??
+    fieldSeasons[mode][0]
+  );
+}
+
+function initialTagSizeMode(settings: DebugSettings): TagSizeMode {
+  // Older settings only record width provenance. Keep an accepted measurement
+  // or manual width rather than silently enabling automatic size selection.
+  if (
+    (!settings.tagSizeMode || settings.tagSizeMode === 'auto') &&
+    (settings.tagSizeSource === 'manual' ||
+      settings.tagSizeSource === 'ar-two-point-edge' ||
+      settings.tagSizeMeters !== FRC_TAG_SIZE_METERS)
+  ) {
+    return 'custom';
+  }
+  return settings.tagSizeMode ?? 'auto';
+}
+
 const makeDraft = (settings: DebugSettings) =>
   Object.fromEntries(
     fields.map(f => [
@@ -178,6 +276,16 @@ export function DebugSettingsModal({
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialSettings));
   const [saving, setSaving] = useState(false);
   const [resetToDefaults, setResetToDefaults] = useState(false);
+  const [tagSizeMode, setTagSizeMode] = useState<TagSizeMode>(() =>
+    initialTagSizeMode(initialSettings),
+  );
+  const [competitionYear, setCompetitionYear] = useState(
+    () =>
+      seasonFor(
+        initialTagSizeMode(initialSettings),
+        initialSettings.competitionYear,
+      )?.year ?? 0,
+  );
   const [showPoseAxes, setShowPoseAxes] = useState(
     initialSettings.showPoseAxes ?? false,
   );
@@ -191,6 +299,13 @@ export function DebugSettingsModal({
     if (visible) {
       setDraft(makeDraft(initialSettings));
       setResetToDefaults(false);
+      setTagSizeMode(initialTagSizeMode(initialSettings));
+      setCompetitionYear(
+        seasonFor(
+          initialTagSizeMode(initialSettings),
+          initialSettings.competitionYear,
+        )?.year ?? 0,
+      );
       setShowPoseAxes(initialSettings.showPoseAxes ?? false);
       setShowImperialHeight(initialSettings.showImperialHeight ?? true);
       setLevelFloorWithGravity(initialSettings.levelFloorWithGravity ?? false);
@@ -199,18 +314,43 @@ export function DebugSettingsModal({
   if (!visible) {
     return null;
   }
+  const selectedSeason = seasonFor(tagSizeMode, competitionYear);
+  const selectFieldType = (mode: TagSizeMode) => {
+    setTagSizeMode(mode);
+    const season = seasonFor(
+      mode,
+      mode === tagSizeMode ? competitionYear : undefined,
+    );
+    setCompetitionYear(season?.year ?? 0);
+    if (mode !== 'custom') {
+      setDraft(previous => ({
+        ...previous,
+        tagSizeMeters: String(
+          (season?.referenceSizeMeters ?? FRC_TAG_SIZE_METERS) * 1000,
+        ),
+      }));
+    }
+  };
   const save = async () => {
     try {
       const values = parseDebugSettings(draft);
       values.showPoseAxes = showPoseAxes;
       values.showImperialHeight = showImperialHeight;
       values.levelFloorWithGravity = levelFloorWithGravity;
+      values.tagSizeMode = tagSizeMode;
+      values.competitionYear = selectedSeason?.year ?? 0;
       // Display rounding must not turn a threshold-only edit into a new tag width.
       if (
         !resetToDefaults &&
+        tagSizeMode === 'custom' &&
         draft.tagSizeMeters === makeDraft(initialSettings).tagSizeMeters
       ) {
         values.tagSizeMeters = initialSettings.tagSizeMeters;
+      }
+      if (selectedSeason) {
+        values.tagSizeMeters = selectedSeason.referenceSizeMeters;
+      } else if (tagSizeMode === 'auto') {
+        values.tagSizeMeters = FRC_TAG_SIZE_METERS;
       }
       setSaving(true);
       await onSave(values);
@@ -266,6 +406,103 @@ export function DebugSettingsModal({
               Applied to all tags and saved on this device. Correct tag width is
               required for a meaningful pose.
             </Text>
+            <View style={s.sizeSection}>
+              <Text style={s.label}>Field type</Text>
+              <View style={s.sizeOptions}>
+                {tagSizeOptions.map(option => (
+                  <Pressable
+                    key={option.mode}
+                    accessibilityRole="radio"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{
+                      checked: tagSizeMode === option.mode,
+                      disabled: saving,
+                    }}
+                    disabled={saving}
+                    onPress={() => selectFieldType(option.mode)}
+                    style={[
+                      s.sizeOption,
+                      tagSizeMode === option.mode && s.sizeOptionSelected,
+                    ]}
+                  >
+                    <Text style={s.sizeOptionText}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={s.hint}>
+                Auto uses LiDAR to match each tag's physical size. FTC and FRC
+                share tag codes, so IDs alone cannot identify the program.
+                Choose a preset or custom width when depth is unavailable.
+              </Text>
+              {selectedSeason &&
+                (tagSizeMode === 'ftc' || tagSizeMode === 'frc') && (
+                  <>
+                    <Text style={s.label}>Competition year</Text>
+                    <Text style={s.hint}>
+                      {tagSizeMode === 'ftc'
+                        ? "FTC years name the season's ending year. For example, 2027 is the 2026–27 season."
+                        : 'FRC uses the calendar year of the competition.'}
+                    </Text>
+                    <View style={s.sizeOptions}>
+                      {fieldSeasons[tagSizeMode].map(season => (
+                        <Pressable
+                          key={season.year}
+                          accessibilityRole="radio"
+                          accessibilityLabel={`${tagSizeMode.toUpperCase()} ${
+                            season.year
+                          } ${season.game}`}
+                          accessibilityState={{
+                            checked: competitionYear === season.year,
+                            disabled: saving,
+                          }}
+                          disabled={saving}
+                          onPress={() => {
+                            setCompetitionYear(season.year);
+                            setDraft(previous => ({
+                              ...previous,
+                              tagSizeMeters: String(
+                                season.referenceSizeMeters * 1000,
+                              ),
+                            }));
+                          }}
+                          style={[
+                            s.sizeOption,
+                            competitionYear === season.year &&
+                              s.sizeOptionSelected,
+                          ]}
+                        >
+                          <Text style={s.sizeOptionText}>
+                            {tagSizeMode === 'ftc'
+                              ? `${season.year - 1}–${String(
+                                  season.year,
+                                ).slice(-2)}`
+                              : season.year}{' '}
+                            · {season.game}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <Text style={s.hint}>
+                      {selectedSeason.sizeDescription} Widths exclude the outer
+                      white margin. Choose Custom width for a different print
+                      size.
+                    </Text>
+                  </>
+                )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Measure tag width with AR"
+                onPress={onMeasure}
+                disabled={saving}
+                style={s.measure}
+              >
+                <Text style={s.link}>Measure tag width with AR</Text>
+                <Text style={s.hint}>
+                  Tap two corners of one tag edge, review the estimate, then
+                  apply it as a custom width.
+                </Text>
+              </Pressable>
+            </View>
             <View style={s.toggleRow}>
               <View style={s.toggleText}>
                 <Text style={s.label}>Show pose axes</Text>
@@ -312,57 +549,53 @@ export function DebugSettingsModal({
               />
             </View>
             <View style={s.fieldGrid}>
-              {fields.map(field => (
-                <View
-                  key={field.key}
-                  style={columns ? s.fieldHalf : s.fieldFull}
-                >
-                  <Text style={s.label}>{field.label}</Text>
-                  <TextInput
-                    accessibilityLabel={field.label}
-                    value={draft[field.key]}
-                    onChangeText={value =>
-                      setDraft(previous => ({
-                        ...previous,
-                        [field.key]: value,
-                      }))
-                    }
-                    keyboardType="decimal-pad"
-                    selectTextOnFocus
-                    style={s.input}
-                  />
-                  <Text style={s.hint}>{field.hint}</Text>
-                  {field.key === 'tagSizeMeters' && (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Measure tag width with AR"
-                      onPress={onMeasure}
-                      disabled={saving}
-                      style={s.measure}
-                    >
-                      <Text style={s.link}>Measure tag width with AR</Text>
-                      <Text style={s.hint}>
-                        Tap two corners of one tag edge, review the estimate,
-                        then apply it.
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))}
+              {fields
+                .filter(
+                  field =>
+                    field.key !== 'tagSizeMeters' || tagSizeMode === 'custom',
+                )
+                .map(field => (
+                  <View
+                    key={field.key}
+                    style={columns ? s.fieldHalf : s.fieldFull}
+                  >
+                    <Text style={s.label}>{field.label}</Text>
+                    <TextInput
+                      accessibilityLabel={field.label}
+                      value={draft[field.key]}
+                      onChangeText={value => {
+                        if (field.key === 'tagSizeMeters') {
+                          setTagSizeMode('custom');
+                          setCompetitionYear(0);
+                        }
+                        setDraft(previous => ({
+                          ...previous,
+                          [field.key]: value,
+                        }));
+                      }}
+                      keyboardType="decimal-pad"
+                      selectTextOnFocus
+                      style={s.input}
+                    />
+                    <Text style={s.hint}>{field.hint}</Text>
+                  </View>
+                ))}
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Reset debug settings to FRC defaults"
+              accessibilityLabel="Reset debug settings to automatic defaults"
               onPress={() => {
                 setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS));
                 setResetToDefaults(true);
+                setTagSizeMode('auto');
+                setCompetitionYear(0);
                 setShowPoseAxes(false);
                 setShowImperialHeight(true);
                 setLevelFloorWithGravity(false);
               }}
               disabled={saving}
             >
-              <Text style={s.link}>Reset to FRC defaults</Text>
+              <Text style={s.link}>Reset to automatic defaults</Text>
             </Pressable>
           </ScrollView>
           <View style={s.actions}>
@@ -392,6 +625,19 @@ export function DebugSettingsModal({
 }
 
 const s = StyleSheet.create({
+  sizeSection: { gap: 8 },
+  sizeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  sizeOption: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#46627B',
+  },
+  sizeOptionSelected: { backgroundColor: '#24415A', borderColor: '#A1D18B' },
+  sizeOptionText: { color: '#F3F8FD', fontSize: 13 },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

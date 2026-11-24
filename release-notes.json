@@ -1,6 +1,35 @@
 {
   "releases": [
     {
+      "version": "0.10.0",
+      "build": "32",
+      "title": "Field and competition year detection",
+      "changes": [
+        "Choose Auto with LiDAR, FTC, FRC, or a custom tag width in detection settings.",
+        "Select the competition year to apply season-specific tag sizes, including CENTERSTAGE fields with both 2- and 5-inch tags.",
+        "Preserve measured tag widths and record each detection's applied size, field choice, and competition year."
+      ]
+    },
+    {
+      "version": "0.9.0",
+      "build": "29",
+      "title": "Gravity-relative tag angles",
+      "changes": [
+        "Show each tag's tilt from vertical and twist from upright beside its floor height and camera distance.",
+        "Compensate for phone orientation using the tag and camera poses from the same captured frame.",
+        "Preserve gravity-relative angles in recordings and playback, with unavailable readings for uncertain poses or undefined twist."
+      ]
+    },
+    {
+      "version": "0.8.2",
+      "build": "28",
+      "title": "Delete saved recordings",
+      "changes": [
+        "Delete a recording from Saved sessions after confirming removal of its video and original capture data.",
+        "Remove unfinished recordings from earlier runs, while protecting recordings that are still being captured or saved."
+      ]
+    },
+    {
       "version": "0.7.1",
       "build": "24",
       "title": "Recorded overlays during playback",

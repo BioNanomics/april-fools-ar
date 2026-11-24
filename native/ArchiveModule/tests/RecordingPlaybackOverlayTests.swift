@@ -30,10 +30,11 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
     }
 
     private func detection(frameID: String = "f0", pts: Double = 0,
-                           includePose: Bool = true, empty: Bool = false) -> [String: Any] {
+                           includePose: Bool = true, empty: Bool = false, gravityOrientation: Any? = nil) -> [String: Any] {
         var tag: [String: Any] = ["id": 5, "family": "tag36h11",
                                   "corners": [[20, 20], [80, 20], [80, 80], [20, 80]],
                                   "debug": ["severity": "good", "valid": true]]
+        tag["gravityOrientation"] = gravityOrientation
         if includePose {
             tag["pose"] = ["translation": [0, 0, 2],
                            "rotationRowMajor": [1, 0, 0, 0, 1, 0, 0, 0, 1], "tagSizeMeters": 1.2, "ambiguous": false]
@@ -94,6 +95,65 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
         let stale = try RecordingPlaybackTimeline(manifest: manifest, frames: frames, events: [detection()])
         XCTAssertTrue(try XCTUnwrap(stale.snapshot(at: 0.6)).tags.isEmpty)
         XCTAssertEqual(try XCTUnwrap(stale.snapshot(at: 0)).tags.count, 1)
+    }
+
+    func testRecordedGravityOrientationSurvivesCameraMovementAndExpiresWithItsTag() throws {
+        let orientation: [String: Any] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 12.5,
+                                          "twistDegrees": -3.2, "frameId": "f0", "segmentId": "A"]
+        let timeline = try RecordingPlaybackTimeline(manifest: manifest,
+            frames: [frame("f0", 0), frame("moved", 0.2, x: 0.2), frame("stale", 0.6), frame("next", 1, segment: "B")],
+            events: [detection(gravityOrientation: orientation)])
+        let first = try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first)
+        let moved = try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0.2)).tags.first)
+        XCTAssertTrue(first.label.contains("Tilt 12.5° · Twist -3.2°"))
+        XCTAssertEqual(moved.label, first.label, "Playback must use the recorded orientation, not the current movie camera")
+        XCTAssertNotEqual(moved.corners[0].x, first.corners[0].x)
+        XCTAssertTrue(try XCTUnwrap(timeline.snapshot(at: 0.6)).tags.isEmpty)
+        XCTAssertTrue(try XCTUnwrap(timeline.snapshot(at: 1)).tags.isEmpty)
+        XCTAssertEqual(try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first).label, first.label)
+    }
+
+    func testRecordedGravityOrientationDisplaysZeroHorizontalAndSignedValues() throws {
+        let cases: [(Double, Any, String)] = [
+            (0, 0.0, "Tilt 0.0° · Twist +0.0°"),
+            (90, NSNull(), "Tilt 90.0° · Twist —"),
+            (45, 180.0, "Tilt 45.0° · Twist +180.0°"),
+            (12.5, -180.0, "Tilt 12.5° · Twist -180.0°"),
+        ]
+        for (tilt, twist, expected) in cases {
+            let orientation: [String: Any] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": tilt, "twistDegrees": twist]
+            let timeline = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0)],
+                                                         events: [detection(gravityOrientation: orientation)])
+            XCTAssertTrue(try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first).label.contains(expected))
+        }
+    }
+
+    func testRecordedGravityOrientationRejectsMalformedLegacyAndMismatchedValues() throws {
+        func label(_ orientation: Any?) throws -> String {
+            let timeline = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0)],
+                                                         events: [detection(gravityOrientation: orientation)])
+            return try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first).label
+        }
+        let valid: [String: Any] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 12.5, "twistDegrees": 3.0]
+        for missing: Any? in [nil, NSNull(), "unavailable"] {
+            XCTAssertTrue(try label(missing).contains("Tilt — · Twist —"), "Legacy recordings must not recalculate orientation")
+        }
+        for unavailable: Any in [false, 1, "true", NSNull()] {
+            var orientation = valid; orientation["available"] = unavailable
+            XCTAssertTrue(try label(orientation).contains("Tilt — · Twist —"))
+        }
+        for tilt: Any in [true, "12.5", Double.nan, Double.infinity, -0.1, 90.1, NSNull()] {
+            var orientation = valid; orientation["tiltFromVerticalDegrees"] = tilt
+            XCTAssertTrue(try label(orientation).contains("Tilt — · Twist —"))
+        }
+        for twist: Any? in [true, "3.0", Double.nan, Double.infinity, -180.1, 180.1, NSNull(), nil] {
+            var orientation = valid; orientation["twistDegrees"] = twist
+            XCTAssertTrue(try label(orientation).contains("Tilt 12.5° · Twist —"))
+        }
+        for (key, value): (String, Any) in [("frameId", "other"), ("segmentId", "B"), ("frameId", NSNull()), ("segmentId", 1)] {
+            var orientation = valid; orientation[key] = value
+            XCTAssertTrue(try label(orientation).contains("Tilt — · Twist —"))
+        }
     }
 
     func testMeasurementsRespectClearSegmentTrackingAndBackwardSeek() throws {

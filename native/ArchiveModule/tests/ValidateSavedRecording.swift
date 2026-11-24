@@ -153,7 +153,109 @@ enum ValidateSavedRecording {
         try expect(store.descriptor(sessionID: source.lastPathComponent)["recordingReady"] as? Bool == false, "Changed movie was accepted")
         _ = try store.prepare(folderPath: source.path)
         try expect(store.descriptor(sessionID: source.lastPathComponent)["recordingReady"] as? Bool == true, "Changed movie could not be recovered")
-        print("SavedRecordingStore: reuse, relaunch, concurrency, recovery, cancellation, containment and source integrity passed")
+
+        let deleted = try clone()
+        let deletedMovie = try store.prepare(folderPath: deleted.path).url
+        let deletedReceipt = recordings.appendingPathComponent(deleted.lastPathComponent + ".json")
+        let deletedStage = recordings.appendingPathComponent(".\(deleted.lastPathComponent)-\(UUID().uuidString).pending", isDirectory: true)
+        try manager.createDirectory(at: deletedStage, withIntermediateDirectories: false)
+        try Data("partial".utf8).write(to: deletedStage.appendingPathComponent("partial.mp4"))
+        let retainedStage = recordings.appendingPathComponent(".\(source.lastPathComponent)-\(UUID().uuidString).pending", isDirectory: true)
+        try manager.createDirectory(at: retainedStage, withIntermediateDirectories: false)
+        try manager.createSymbolicLink(at: deleted.appendingPathComponent("linked-notes"), withDestinationURL: unrelated)
+        try store.delete(sessionID: deleted.lastPathComponent)
+        for url in [deleted, deletedMovie, deletedReceipt, deletedStage] {
+            try expect(!manager.fileExists(atPath: url.path), "Delete retained a session artifact: " + url.path)
+        }
+        try expect(manager.fileExists(atPath: retainedStage.path), "Delete removed a different session's staging directory")
+        try expect(try Data(contentsOf: unrelated.appendingPathComponent("notes.txt")) == unrelatedBytes, "Delete followed a nested source link")
+        try expect(store.descriptor(sessionID: deleted.lastPathComponent)["recordingReady"] as? Bool == false, "Deleted recording retained a ready descriptor")
+        try store.delete(sessionID: deleted.lastPathComponent)
+        try reject("prepare after deletion") { _ = try store.prepare(folderPath: deleted.path) }
+        try expect(try contents(source) != [:] && manager.fileExists(atPath: first.url.path), "Delete changed another saved session")
+
+        // Failed captures need no finalized/valid manifest to be discarded.
+        try store.delete(sessionID: unfinished.lastPathComponent)
+        try expect(!manager.fileExists(atPath: unfinished.path), "Unfinished source could not be deleted")
+        let corrupt = try clone()
+        try Data("not JSON".utf8).write(to: corrupt.appendingPathComponent("manifest.json"))
+        try store.delete(sessionID: corrupt.lastPathComponent)
+        try expect(!manager.fileExists(atPath: corrupt.path), "Corrupt source could not be deleted")
+        let orphanID = UUID().uuidString
+        let orphanMovie = recordings.appendingPathComponent(orphanID + ".mp4")
+        try Data("orphaned movie".utf8).write(to: orphanMovie)
+        try store.delete(sessionID: orphanID)
+        try expect(!manager.fileExists(atPath: orphanMovie.path), "Deletion retry retained an orphaned movie")
+
+        try reject("delete traversal") { try store.delete(sessionID: "../" + source.lastPathComponent) }
+        try reject("delete absolute path") { try store.delete(sessionID: source.path) }
+        try reject("delete linked source") { try store.delete(sessionID: linked.lastPathComponent) }
+        let unsafeDelete = try clone()
+        let unsafeMovie = recordings.appendingPathComponent(unsafeDelete.lastPathComponent + ".mp4")
+        try manager.createSymbolicLink(at: unsafeMovie, withDestinationURL: namedFile)
+        try reject("delete linked movie") { try store.delete(sessionID: unsafeDelete.lastPathComponent) }
+        try expect(manager.fileExists(atPath: unsafeDelete.path), "Unsafe delete removed the source before validating its artifacts")
+        try expect(try Data(contentsOf: namedFile) == unrelatedBytes, "Delete followed a movie link")
+        try manager.removeItem(at: unsafeMovie)
+        let unsafeStage = recordings.appendingPathComponent(".\(unsafeDelete.lastPathComponent)-\(UUID().uuidString).pending")
+        try manager.createSymbolicLink(at: unsafeStage, withDestinationURL: unrelated)
+        try reject("delete linked stage") { try store.delete(sessionID: unsafeDelete.lastPathComponent) }
+        try expect(manager.fileExists(atPath: unsafeDelete.path), "Unsafe stage cleanup removed the source")
+        try manager.removeItem(at: unsafeStage)
+        try store.delete(sessionID: unsafeDelete.lastPathComponent)
+        let replacedRoot = recordings.deletingLastPathComponent().appendingPathComponent("delete-root", isDirectory: true)
+        try manager.createDirectory(at: replacedRoot, withIntermediateDirectories: false)
+        let replacedStore = SavedRecordingStore(sessionsRoot: root, recordingsRoot: replacedRoot)
+        try manager.removeItem(at: replacedRoot)
+        try manager.createSymbolicLink(at: replacedRoot, withDestinationURL: recordings)
+        try reject("delete linked recording root") { try replacedStore.delete(sessionID: source.lastPathComponent) }
+        try expect(manager.fileExists(atPath: source.path) && manager.fileExists(atPath: first.url.path), "Linked-root deletion changed a saved session")
+        try manager.removeItem(at: replacedRoot)
+
+        // A second store has its own NSLock; the publication file lock must
+        // still hold deletion until an in-flight save has finished.
+        let racing = try clone()
+        let publisherEntered = DispatchSemaphore(value: 0)
+        let resumePublisher = DispatchSemaphore(value: 0)
+        defer { resumePublisher.signal() }
+        let deletionStarted = DispatchSemaphore(value: 0)
+        let deletionCompleted = DispatchSemaphore(value: 0)
+        let operations = ConcurrentOperations()
+        let racingGroup = DispatchGroup()
+        racingGroup.enter()
+        DispatchQueue.global().async {
+            defer { racingGroup.leave() }
+            do {
+                var checks = 0
+                _ = try store.prepare(folderPath: racing.path) {
+                    checks += 1
+                    if checks == 2 {
+                        publisherEntered.signal()
+                        return resumePublisher.wait(timeout: .now() + 10) != .success
+                    }
+                    return false
+                }
+                operations.record(.success(()))
+            } catch { operations.record(.failure(error)) }
+        }
+        try expect(publisherEntered.wait(timeout: .now() + 10) == .success, "Concurrent publisher did not acquire its lock")
+        racingGroup.enter()
+        DispatchQueue.global().async {
+            defer { racingGroup.leave(); deletionCompleted.signal() }
+            deletionStarted.signal()
+            do { try relaunched.delete(sessionID: racing.lastPathComponent); operations.record(.success(())) }
+            catch { operations.record(.failure(error)) }
+        }
+        try expect(deletionStarted.wait(timeout: .now() + 5) == .success, "Concurrent deletion did not start")
+        try expect(deletionCompleted.wait(timeout: .now() + 0.15) == .timedOut, "Deletion did not wait for publication")
+        resumePublisher.signal()
+        try expect(racingGroup.wait(timeout: .now() + 20) == .success, "Concurrent save/delete did not complete")
+        try expect(operations.values.count == 2, "Concurrent save/delete omitted a result")
+        for result in operations.values { try result.get() }
+        try expect(!manager.fileExists(atPath: racing.path), "Concurrent publisher restored the deleted source")
+        try expect(!manager.fileExists(atPath: recordings.appendingPathComponent(racing.lastPathComponent + ".mp4").path), "Concurrent publisher restored the deleted movie")
+        try expect(!manager.fileExists(atPath: recordings.appendingPathComponent(racing.lastPathComponent + ".json").path), "Concurrent publisher restored the deleted receipt")
+        print("SavedRecordingStore: reuse, relaunch, concurrency, recovery, cancellation, containment, source integrity and deletion passed")
     }
 
     private static func contents(_ directory: URL) throws -> [String: Data] {
@@ -191,4 +293,11 @@ private final class ConcurrentResults: @unchecked Sendable {
     private var results: [Result<SessionMP4Writer.Result, Error>] = []
     var values: [Result<SessionMP4Writer.Result, Error>] { lock.lock(); defer { lock.unlock() }; return results }
     func record(_ result: Result<SessionMP4Writer.Result, Error>) { lock.lock(); results.append(result); lock.unlock() }
+}
+
+private final class ConcurrentOperations: @unchecked Sendable {
+    private let lock = NSLock()
+    private var results: [Result<Void, Error>] = []
+    var values: [Result<Void, Error>] { lock.lock(); defer { lock.unlock() }; return results }
+    func record(_ result: Result<Void, Error>) { lock.lock(); results.append(result); lock.unlock() }
 }

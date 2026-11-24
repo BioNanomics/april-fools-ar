@@ -1,6 +1,14 @@
 # AprilTag debug screen
 
-The debug screen compares two estimates from the same AR camera frame: the pose solved from the tag corners and configured tag width, and ARKit's scene-depth sample at the tag center. Agreement is a useful diagnostic; it does not establish surveyed field accuracy.
+The debug screen compares two estimates from the same AR camera frame: the pose solved from the tag corners and applied physical tag width, and ARKit's scene-depth sample at the tag center. In Auto size mode, LiDAR also selects the tag width, so agreement is partly a consequence of that selection. It does not independently validate the tag dimensions or establish surveyed field accuracy.
+
+## Gravity-relative tag angles
+
+Each tag card shows **Tilt** and **Twist**, also available under **Details → Gravity**. Tilt measures how far the printed plane departs from vertical: 0° is vertical and 90° is horizontal. Twist measures rotation of the printed square from upright within its plane; positive values are clockwise when looking at the printed front. A horizontal tag has no gravity-defined upright direction, so its twist is unavailable.
+
+These angles combine the detected tag rotation with the phone's orientation from the same captured AR frame. Turning or tilting the phone therefore does not change the estimated orientation of a stationary tag. They require normal tracking and a current, resolved pose that passes the range, viewing-angle and decoder/reprojection checks. A floor or LiDAR sample is not required. Missing or invalid angles show **—**, separately from a valid 0°.
+
+The **Cam roll / pitch / yaw** diagnostics remain camera-relative. Gravity-relative tilt and twist do not establish the tag's heading on the field. Existing tag-center height uses the same source-frame camera transform and the confirmed floor, preferring accepted LiDAR depth and retaining the labeled tag-pose fallback when depth is unavailable. Changing the floor affects that height reference, not the gravity-relative angles.
 
 ## Using it
 
@@ -26,7 +34,9 @@ Open **Settings** to edit:
 
 | Setting | Initial value |
 | --- | --- |
-| Physical tag width | 165.1 mm / 6.5 inches |
+| Field type | Auto (LiDAR) for new settings; FTC, FRC, or Custom width |
+| FTC competition year | Defaults to 2026–27 BIOBUZZ when FTC is selected |
+| FRC competition year | Defaults to 2026 REBUILT when FRC is selected |
 | Maximum range | 5 m |
 | Maximum plane incidence angle | 60° |
 | Distance delta display threshold | 15 cm |
@@ -35,7 +45,34 @@ Open **Settings** to edit:
 | Depth mismatch rejection | 15 cm |
 | Maximum corner reprojection RMS | 3 pixels |
 
-Tag width is the distance between the detection corners at the black/white border, not the outside of the paper. This is the size definition used by [the upstream pose estimator](https://github.com/AprilRobotics/apriltag#pose-estimation). The FRC default follows [WPILib's tag description](https://docs.wpilib.org/en/stable/docs/software/vision-processing/apriltag/apriltag-intro.html).
+Tag width is the distance between the detection corners at the black/white border, not the outside of the paper. This is the size definition used by [the upstream pose estimator](https://github.com/AprilRobotics/apriltag#pose-estimation). FTC sizes vary by season:
+
+| Physical black-border width | Official use |
+| --- | --- |
+| 50.8 mm / 2 inches | [FTC CENTERSTAGE small tags](https://firstinspires.blob.core.windows.net/ftc/2023-24/apriltag-us-letter.pdf) |
+| 82.55 mm / 3.25 inches | [FTC BIOBUZZ individual tags, Figure 9-15](https://ftc-resources.firstinspires.org/ftc/game/manual-09) |
+| 101.6 mm / 4 inches | [FTC INTO THE DEEP](https://ftc-resources.firstinspires.org/ftc/archive/2025/game/apriltag-us) |
+| 127 mm / 5 inches | [FTC CENTERSTAGE large tags](https://firstinspires.blob.core.windows.net/ftc/2023-24/apriltag-us-letter.pdf) |
+| 152.4 mm / 6 inches | [FTC sample tags 585/586](https://ftc-docs.firstinspires.org/en/latest/apriltag/vision_portal/apriltag_metadata/apriltag-metadata.html) |
+| 165.1 mm / 6.5 inches | [FRC](https://docs.wpilib.org/en/stable/docs/software/vision-processing/apriltag/apriltag-intro.html) and [FTC DECODE](https://ftc-resources.firstinspires.org/ftc/archive/2026/field/apriltag-us) |
+
+Choose **FTC** or **FRC** under **Field type**, then select **Competition year** to use a known season without relying on LiDAR to choose size. FTC displays the full season span and stores its ending year; FRC stores the calendar year. These selections are saved on the device.
+
+| Field and competition year | Applied black-border width |
+| --- | --- |
+| FTC 2023–24 CENTERSTAGE (stored as 2024) | 2 inches for IDs 1–6, 8 and 9; 5 inches for IDs 7 and 10 |
+| FTC 2024–25 INTO THE DEEP (2025) | 4 inches |
+| FTC 2025–26 DECODE (2026) | 6.5 inches |
+| FTC 2026–27 BIOBUZZ (2027) | 3.25 inches |
+| FRC 2024 CRESCENDO, 2025 REEFSCAPE, 2026 REBUILT | 6.5 inches |
+
+CENTERSTAGE's backdrop tags are all 2 inches, as documented in the [official backdrop print](https://www.firstinspires.org/sites/default/files/uploads/resource_library/ftc/apriltags-backdrop.pdf); its audience-side size map comes from the [official audience print](https://firstinspires.blob.core.windows.net/ftc/2023-24/apriltag-us-letter.pdf). A CENTERSTAGE ID outside its known map leaves the pose unavailable and prompts for matching field/year settings or a custom width. Single-size seasons apply their nominal size under the operator's explicit field selection. This selection supplies context; it does not prove that a print belongs to that competition. FRC 2023 is not offered because its [official tags use the 16h5 family](https://firstfrc.blob.core.windows.net/frc2023/Manual/HTML/2023FRCGameManual.htm), while this detector supports tag36h11.
+
+**Auto (LiDAR)** considers the six supported widths separately for each detection. It requires normal tracking, a usable unambiguous corner pose and the same frame's high-confidence center LiDAR depth (confidence category 2). It estimates physical width from the ratio between LiDAR depth and the reference pose's optical Z, then accepts a unique standard width within 10%; the nearby 6- and 6.5-inch sizes use a tighter 3% tolerance to avoid confusing sample prints with field tags. Without those inputs or a unique match, the ID and outline remain visible while the scaled pose is unavailable. Auto identifies a nominal physical width, and leaves competition year unknown. Select an explicit field/year or custom measured width when Auto cannot resolve it.
+
+On upgrade, the former untouched FRC default becomes Auto; existing manual/AR widths become custom. Once saved, an explicit field/year is retained. Choose **Custom width** to enter a measured print size; accepting an AR edge measurement also selects Custom width.
+
+FTC and FRC share the `tag36h11` family and overlapping IDs. An ID does not encode a physical size or competition, and 6.5-inch tags are shared by FRC and FTC DECODE. Auto identifies a supported physical width; it cannot establish competition identity from a shared size. A rescaled practice print may require a custom width.
 
 You can type a measured width or choose **Measure tag width with AR**. For an AR estimate, tap two adjacent boundary corners on one physical tag edge. Review the resulting distance and press **Use width** to apply it. Cancel leaves the configured width unchanged. The estimate comes from the existing AR/LiDAR endpoint measurements, not from a pose already scaled by the configured width. It remains sensitive to tap placement, depth resolution and tracking error, so a carefully measured physical width is preferable when available.
 
@@ -56,6 +93,6 @@ You can type a measured width or choose **Measure tag width with AR**. For an AR
 
 The camera is configured for 30 Hz. Detection and pose estimation use one worker with one frame in flight; a busy worker drops incoming work instead of queuing old frames. The prior fixed 8 Hz analysis throttle is removed. The native overlay/panel uses current results directly; React Native receives only bounded status updates and manages settings. Actual analysis rate, latency and result age are shown rather than assuming that the device always achieves 30 analyses per second.
 
-Each analyzed frame's event retains the calibration, tag width/settings, optical pose, quality diagnostics and synchronized depth samples. Changing settings invalidates results computed under the old settings. Accepted AR width estimates retain the endpoint and frame provenance. Original RGB, numeric depth/confidence and AR camera metadata continue to be recorded for later review.
+Each analyzed frame's event retains the calibration, field type, competition year, size settings, per-detection width resolution, optical pose, quality diagnostics and synchronized depth samples. The applied width belongs to each detection's pose; in Auto and mixed-size seasons the settings width is only the reference scale used before resolution. Changing settings invalidates results computed under the old settings. Accepted AR width estimates retain the endpoint and frame provenance. Original RGB, numeric depth/confidence and AR camera metadata continue to be recorded for later review.
 
-The iPhone test should include a centered tag, an off-axis tag, a steeply angled tag, increasing distance, unavailable/low-confidence depth, and both sides of the mismatch thresholds. It should also check sustained actual analysis rate, stale-value clearing, size changes, repeated tag appearance/disappearance and export readability. These checks do not replace the later independent accuracy evaluation.
+The iPhone test should include known FTC and FRC widths in the same view, a centered tag, an off-axis tag, a steeply angled tag, increasing distance, unavailable/low-confidence depth, unsupported print sizes, and both sides of the mismatch thresholds with an explicit width. It should also check sustained actual analysis rate, stale-value clearing, size changes, repeated tag appearance/disappearance and export readability. Automatic size selection still requires physical-camera validation; these checks do not replace the later independent accuracy evaluation.

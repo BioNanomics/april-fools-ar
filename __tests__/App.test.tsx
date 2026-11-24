@@ -5,6 +5,7 @@ import {
   NativeModules,
   Share,
   TextInput,
+  type AlertButton,
 } from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import App from '../App';
@@ -27,6 +28,7 @@ jest.mock('react-native', () => {
     stopSession: jest.fn(),
     listSessions: jest.fn().mockResolvedValue([]),
     exportSession: jest.fn(),
+    deleteSession: jest.fn(),
     clearMeasurements: jest.fn(),
     setSpatialMode: jest.fn(),
     completeFloorSetup: jest.fn(),
@@ -54,6 +56,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   engine.listSessions.mockResolvedValue([]);
   engine.exportSession.mockReset();
+  engine.deleteSession.mockReset().mockResolvedValue(undefined);
   NativeModules.ArchiveModule.archiveSession.mockReset();
   NativeModules.ArchiveModule.previewSession.mockReset();
   engine.completeFloorSetup.mockReset();
@@ -179,6 +182,339 @@ async function openSavedSessions() {
   await act(async () => tab!.props.onPress());
 }
 
+function deletionButtons(alert: jest.SpyInstance) {
+  const call = alert.mock.calls
+    .filter(([title]) => title === 'Delete recording?')
+    .pop();
+  expect(call).toBeDefined();
+  const buttons = call![2] as AlertButton[];
+  const cancel = buttons.find(button => button.style === 'cancel');
+  const confirm = buttons.find(button => button.style === 'destructive');
+  expect(cancel?.text).toBe('Cancel');
+  expect(confirm?.text).toBe('Delete');
+  return { cancel: cancel!, confirm: confirm! };
+}
+
+test('explains permanent deletion and cancels without removing the recording', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Delete recording North field' })
+      .props.onPress(),
+  );
+  expect(engine.deleteSession).not.toHaveBeenCalled();
+  const confirmation = alert.mock.calls[0];
+  expect(confirmation[0]).toBe('Delete recording?');
+  expect(confirmation[1]).toContain('North field');
+  expect(confirmation[1]).toMatch(/permanent|cannot be undone/i);
+  expect(confirmation[1]).toMatch(/video|MP4/i);
+  expect(confirmation[1]).toMatch(/original|capture data/i);
+  const { cancel } = deletionButtons(alert);
+  for (const action of ['Play', 'Share', 'Delete']) {
+    const button = tree.root.findByProps({
+      accessibilityLabel: `${action} recording North field`,
+    });
+    expect(button.props.disabled).toBe(true);
+    expect(button.props.accessibilityState.disabled).toBe(true);
+    await act(async () => button.props.onPress());
+  }
+  expect(alert).toHaveBeenCalledTimes(1);
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  await act(async () => cancel.onPress?.());
+  expect(engine.deleteSession).not.toHaveBeenCalled();
+  for (const action of ['Play', 'Share', 'Delete']) {
+    expect(
+      tree.root.findByProps({
+        accessibilityLabel: `${action} recording North field`,
+      }).props.disabled,
+    ).toBe(false);
+  }
+});
+
+test('releases the action lock when Android dismisses deletion without confirmation', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  const remove = () =>
+    tree.root.findByProps({
+      accessibilityLabel: 'Delete recording North field',
+    });
+  await act(async () => remove().props.onPress());
+  const options = alert.mock.calls[0][3] as NonNullable<
+    Parameters<typeof Alert.alert>[3]
+  >;
+  expect(options.cancelable).toBe(true);
+  await act(async () => options.onDismiss?.());
+  expect(engine.deleteSession).not.toHaveBeenCalled();
+  for (const action of ['Play', 'Share', 'Delete']) {
+    expect(
+      tree.root.findByProps({
+        accessibilityLabel: `${action} recording North field`,
+      }).props.disabled,
+    ).toBe(false);
+  }
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Refresh saved sessions' })
+      .props.disabled,
+  ).toBe(false);
+  await act(async () => remove().props.onPress());
+  expect(alert).toHaveBeenCalledTimes(2);
+  await act(async () => deletionButtons(alert).cancel.onPress?.());
+});
+
+test('retains the action lock when Android dismisses a confirmed deletion alert', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  let finish!: () => void;
+  engine.deleteSession.mockImplementation(
+    () =>
+      new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+  );
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Delete recording North field' })
+      .props.onPress(),
+  );
+  const options = alert.mock.calls[0][3] as NonNullable<
+    Parameters<typeof Alert.alert>[3]
+  >;
+  await act(async () => {
+    deletionButtons(alert).confirm.onPress?.();
+  });
+  await act(async () => options.onDismiss?.());
+  expect(engine.deleteSession).toHaveBeenCalledTimes(1);
+  for (const action of ['Play', 'Share', 'Delete']) {
+    const button = tree.root.findByProps({
+      accessibilityLabel: `${action} recording North field`,
+    });
+    expect(button.props.disabled).toBe(true);
+    await act(async () => button.props.onPress());
+  }
+  const refresh = tree.root.findByProps({
+    accessibilityLabel: 'Refresh saved sessions',
+  });
+  expect(refresh.props.disabled).toBe(true);
+  await act(async () => refresh.props.onPress());
+  expect(engine.listSessions).toHaveBeenCalledTimes(1);
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledTimes(1);
+  expect(
+    tree.root.findAllByProps({ children: 'Deleting recording…' }),
+  ).not.toHaveLength(0);
+  await act(async () => finish());
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Refresh saved sessions' })
+      .props.disabled,
+  ).toBe(false);
+});
+
+test('deletes only the confirmed session and removes its card after success', async () => {
+  const otherSession = { ...savedSession, id: 'session-2', name: 'South field' };
+  engine.listSessions
+    .mockResolvedValueOnce([savedSession, otherSession])
+    .mockResolvedValue([otherSession]);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Delete recording North field' })
+      .props.onPress(),
+  );
+  expect(engine.deleteSession).not.toHaveBeenCalled();
+  await act(async () => deletionButtons(alert).confirm.onPress?.());
+  expect(engine.deleteSession).toHaveBeenCalledTimes(1);
+  expect(engine.deleteSession).toHaveBeenCalledWith('session-1');
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Delete recording North field',
+    }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Delete recording South field',
+    }).props.disabled,
+  ).toBe(false);
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+});
+
+test('ignores a pending refresh that returns the deleted recording after deletion completes', async () => {
+  const otherSession = { ...savedSession, id: 'session-2', name: 'South field' };
+  let completeRefresh!: (sessions: (typeof savedSession)[]) => void;
+  engine.listSessions
+    .mockResolvedValueOnce([savedSession, otherSession])
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          completeRefresh = resolve;
+        }),
+    );
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () => {
+    tree.root
+      .findByProps({ accessibilityLabel: 'Refresh saved sessions' })
+      .props.onPress();
+  });
+  expect(engine.listSessions).toHaveBeenCalledTimes(2);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Delete recording North field' })
+      .props.onPress(),
+  );
+  await act(async () => deletionButtons(alert).confirm.onPress?.());
+  expect(engine.deleteSession).toHaveBeenCalledWith('session-1');
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Delete recording North field',
+    }),
+  ).toHaveLength(0);
+  await act(async () => completeRefresh([savedSession, otherSession]));
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Delete recording North field',
+    }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Delete recording South field',
+    }).props.disabled,
+  ).toBe(false);
+});
+
+test('preserves the session on deletion failure and permits retry', async () => {
+  engine.listSessions
+    .mockResolvedValueOnce([savedSession])
+    .mockResolvedValue([]);
+  engine.deleteSession
+    .mockRejectedValueOnce(new Error('Unable to remove recording'))
+    .mockResolvedValueOnce(undefined);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  const remove = () =>
+    tree.root.findByProps({
+      accessibilityLabel: 'Delete recording North field',
+    });
+  await act(async () => remove().props.onPress());
+  await act(async () => deletionButtons(alert).confirm.onPress?.());
+  expect(alert).toHaveBeenCalledWith(
+    'Delete recording',
+    'Unable to remove recording',
+  );
+  expect(remove().props.disabled).toBe(false);
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Play recording North field' })
+      .props.disabled,
+  ).toBe(false);
+  await act(async () => remove().props.onPress());
+  await act(async () => deletionButtons(alert).confirm.onPress?.());
+  expect(engine.deleteSession).toHaveBeenCalledTimes(2);
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Delete recording North field',
+    }),
+  ).toHaveLength(0);
+});
+
+test('allows an old unfinished recording to be deleted without trying to export it', async () => {
+  engine.listSessions
+    .mockResolvedValueOnce([{ ...savedSession, finalized: false }])
+    .mockResolvedValue([]);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  const remove = tree.root.findByProps({
+    accessibilityLabel: 'Delete recording North field',
+  });
+  expect(remove.props.disabled).toBe(false);
+  await act(async () => remove.props.onPress());
+  await act(async () => deletionButtons(alert).confirm.onPress?.());
+  expect(engine.deleteSession).toHaveBeenCalledWith('session-1');
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+});
+
+test.each([
+  { recording: true, finalizing: false },
+  { recording: false, finalizing: true },
+])('protects the current session while %j', async captureStatus => {
+  engine.listSessions.mockResolvedValue([{ ...savedSession, finalized: false }]);
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      ...captureStatus,
+      sessionId: savedSession.id,
+      tracking: 'normal',
+    });
+  });
+  const remove = tree.root.findByProps({
+    accessibilityLabel: 'Delete recording North field',
+  });
+  expect(remove.props.disabled).toBe(true);
+  expect(remove.props.accessibilityState.disabled).toBe(true);
+  await act(async () => remove.props.onPress());
+  expect(engine.deleteSession).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
+});
+
+test('locks saved-session actions and reports progress until deletion finishes', async () => {
+  const otherSession = { ...savedSession, id: 'session-2', name: 'South field' };
+  engine.listSessions
+    .mockResolvedValueOnce([savedSession, otherSession])
+    .mockResolvedValue([otherSession]);
+  let finish!: () => void;
+  engine.deleteSession.mockImplementation(
+    () =>
+      new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+  );
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Delete recording North field' })
+      .props.onPress(),
+  );
+  await act(async () => {
+    deletionButtons(alert).confirm.onPress?.();
+  });
+  expect(engine.deleteSession).toHaveBeenCalledTimes(1);
+  expect(
+    tree.root.findAllByProps({ children: 'Deleting recording…' }),
+  ).not.toHaveLength(0);
+  for (const name of ['North field', 'South field']) {
+    for (const action of ['Play', 'Share', 'Delete']) {
+      const button = tree.root.findByProps({
+        accessibilityLabel: `${action} recording ${name}`,
+      });
+      expect(button.props.disabled).toBe(true);
+      await act(async () => button.props.onPress());
+    }
+  }
+  expect(engine.deleteSession).toHaveBeenCalledTimes(1);
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  await act(async () => {
+    DeviceEventEmitter.emit('url', { url: 'aprilfoolsar://capture/start' });
+    jest.advanceTimersByTime(1200);
+  });
+  expect(engine.startSession).not.toHaveBeenCalled();
+  await act(async () => finish());
+  expect(
+    tree.root.findAllByProps({ children: 'Deleting recording…' }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Delete recording South field',
+    }).props.disabled,
+  ).toBe(false);
+});
+
 test('plays the validated saved session in the native player', async () => {
   engine.listSessions.mockResolvedValue([savedSession]);
   engine.exportSession.mockResolvedValue({
@@ -258,9 +594,7 @@ test('does not open a recording that is no longer finalized', async () => {
 });
 
 test('disables Play and Share for unfinished saved recordings', async () => {
-  engine.listSessions.mockResolvedValue([
-    { ...savedSession, finalized: false },
-  ]);
+  engine.listSessions.mockResolvedValue([{ ...savedSession, finalized: false }]);
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   await openSavedSessions();
   for (const action of ['Play', 'Share']) {
@@ -301,7 +635,7 @@ test('keeps saved-session controls disabled until the player is dismissed', asyn
   expect(
     tree.root.findAllByProps({ children: 'Opening recording…' }),
   ).not.toHaveLength(0);
-  for (const action of ['Play', 'Share']) {
+  for (const action of ['Play', 'Share', 'Delete']) {
     expect(
       tree.root.findByProps({
         accessibilityLabel: `${action} recording North field`,
@@ -536,6 +870,11 @@ test('debug settings convert displayed millimeters and centimeters to native met
       .findByProps({ accessibilityLabel: 'Debug settings' })
       .props.onPress(),
   );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Custom width' })
+      .props.onPress(),
+  );
   await act(async () => {
     tree.root
       .findByProps({ accessibilityLabel: 'Tag width (mm)' })
@@ -558,6 +897,7 @@ test('debug settings convert displayed millimeters and centimeters to native met
   expect(engine.setDebugSettings).toHaveBeenCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: 0.2,
+    tagSizeMode: 'custom',
     warningDepthDifferenceMeters: 0.08,
     rejectDepthDifferenceMeters: 0.12,
     distanceDeltaThresholdMeters: 0.215,
@@ -628,6 +968,7 @@ test('threshold-only edits preserve the full precision of an AR-measured width',
   engine.getDebugSettings.mockResolvedValue({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     tagSizeSource: 'ar-two-point-edge',
   });
   await act(async () => {
@@ -654,11 +995,12 @@ test('threshold-only edits preserve the full precision of an AR-measured width',
   expect(engine.setDebugSettings).toHaveBeenCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     maxDistanceMeters: 6,
   });
 });
 
-test('reset to FRC defaults replaces a measured width even when both display the same', async () => {
+test('reset to automatic defaults replaces a measured width even when both display the same', async () => {
   engine.getDebugSettings.mockResolvedValue({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: 0.16510000001,
@@ -680,7 +1022,7 @@ test('reset to FRC defaults replaces a measured width even when both display the
   await act(async () =>
     tree.root
       .findByProps({
-        accessibilityLabel: 'Reset debug settings to FRC defaults',
+        accessibilityLabel: 'Reset debug settings to automatic defaults',
       })
       .props.onPress(),
   );
@@ -697,6 +1039,7 @@ test('pose axes switch is opt-in and saves without rounding the measured tag wid
   engine.getDebugSettings.mockResolvedValue({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     tagSizeSource: 'ar-two-point-edge',
   });
   await act(async () => {
@@ -721,6 +1064,7 @@ test('pose axes switch is opt-in and saves without rounding the measured tag wid
   expect(engine.setDebugSettings).toHaveBeenCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     showPoseAxes: true,
   });
 });
@@ -1037,6 +1381,7 @@ test('English height units default on for legacy settings, cancel locally, and p
   const legacy = {
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: preciseWidth,
+    tagSizeMode: 'custom' as const,
     tagSizeSource: 'ar-two-point-edge',
   };
   delete legacy.showImperialHeight;
@@ -1089,6 +1434,7 @@ test('English height units default on for legacy settings, cancel locally, and p
   expect(engine.setDebugSettings).toHaveBeenLastCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: preciseWidth,
+    tagSizeMode: 'custom' as const,
     showImperialHeight: false,
   });
   expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm');

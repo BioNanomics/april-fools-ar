@@ -2,7 +2,7 @@
 
 Planning review: November 23, 2026. Scope: FTC and FRC, covering 2026 and 2027 seasons. This document specifies future work; it does not implement the feature or change milestone status.
 
-Build a versioned, offline field package that the phone and robot both consume. Keep the geometry and estimation in the existing portable C++ core, with format adapters for WPILib and the FTC SDK. The phone should draw expected tag locations in the room after field registration and save a list of the tags actually seen during each walk, including their published positions and any separately estimated positions.
+Build a versioned, offline field package that the phone and robot both consume. YAML is the default for our committed field specifications, normalized database/app storage and field-definition display; all tools we maintain must also support JSON. Keep the geometry and estimation in the existing portable C++ core, with format adapters for WPILib and the FTC SDK. The phone should draw expected tag locations in the room after field registration and save a list of the tags actually seen during each walk, including their published positions and any separately estimated positions.
 
 ## 1. Season and program scope
 
@@ -69,19 +69,29 @@ WPILib alpha-8 also includes [FTC DECODE imagery](https://github.com/wpilibsuite
 
 ## 3. Shared field-package contract
 
-Start with small, versioned JSON files and an in-memory ID index; a database server is unnecessary. Make the published reference immutable and keep observed/candidate geometry separate.
+Start with small, versioned YAML files and an in-memory ID index; a database server is unnecessary. Commit our field definitions as `.yaml`. Accept both YAML and JSON on import, validate them against the same logical schema, and convert accepted input into our normalized YAML representation. Make the published reference immutable and keep observed/candidate geometry separate.
 
 Proposed package contents:
 
 | Artifact | Required meaning |
 | --- | --- |
-| `manifest.json` | Schema version; program; explicit season start/end; game; field variant; package ID/revision; source URLs, versions and SHA-256 hashes; license attribution; frame definitions; units; asset references and capability status. |
-| `tags.json` | Physical tag records keyed by family/ID within this package: name, detected edge in meters, tag-frame convention, placement type, optional reference pose and provenance, localization eligibility, parent/cluster identity. |
-| `clusters.json` when applicable | Named targets with member IDs, each member's rigid transform into the cluster frame, aiming origin and orientation, motion semantics and optional valid field placement. Aiming origin and printed tag center are separate. |
-| Original source files | Exact imported WPILib JSON or extracted FTC metadata plus source artifact hash; reproducible import instructions. |
+| `manifest.yaml` | Schema version; program; explicit season start/end; game; field variant; package ID/revision; source URLs, versions and SHA-256 hashes; license attribution; frame definitions; units; asset references and capability status. |
+| `tags.yaml` | Physical tag records keyed by family/ID within this package: name, detected edge in meters, tag-frame convention, placement type, optional reference pose and provenance, localization eligibility, parent/cluster identity. |
+| `clusters.yaml` when applicable | Named targets with member IDs, each member's rigid transform into the cluster frame, aiming origin and orientation, motion semantics and optional valid field placement. Aiming origin and printed tag center are separate. |
+| Source provenance | Original source format, URL/revision and byte hash; reproducible conversion instructions. Any retained original bytes are labeled source evidence, while the working field definition is YAML. |
 | Optional map/assets | Image, crop corners, units and explicit image-to-field transform; later geometry/force presets with their own provenance. |
 
-Use meters, radians and explicitly ordered quaternion `[w,x,y,z]` in normalized files. Keep source bytes and source frame definitions alongside normalized values. Use double precision in geometry. Matrices passed through AFSC remain column-major `T_destination_source`.
+Use meters, radians and explicitly ordered quaternion `[w,x,y,z]` in normalized files. Retain source frame definitions and provenance alongside normalized values. Use double precision in geometry. Matrices passed through AFSC remain column-major `T_destination_source`.
+
+### YAML default and JSON compatibility
+
+All field-definition tools we maintain—importers, validators, editors, phone loaders, robot adapters, replay utilities and viewers—must accept YAML and JSON with equivalent meaning. Default saves/exports and human-readable display to YAML, with explicit JSON import/export available. This is a serialization choice around one data model; keep format conversion outside the numerical core.
+
+Persist normalized field definitions as UTF-8 YAML on app disk and, if a database is used, as YAML document text with schema/package identity and hashes. Indexed metadata or tag lookups may be derived from it. Show field definitions as formatted YAML in the UI and debugging views. Convert upstream JSON at ingestion; generate the required JSON when exchanging data with external consumers such as WPILib or PhotonVision. Their native readers do not gain YAML support automatically.
+
+Specify a portable YAML 1.2 subset with string mapping keys, explicit scalar types, sequences and mappings. Reject duplicate keys, nonfinite geometry, custom executable tags, aliases/merge keys and excessive nesting/size. Quote season labels and other ambiguous text. Choose compatible parser/serializer dependencies for Swift, C++ and Android/Java, including licenses and target packaging. Define stable output ordering and numeric precision for reproducible YAML, with separate hashes for source bytes and normalized package bytes. Round-trip YAML and JSON through each maintained tool and compare semantic geometry and identities, including null/false/zero distinctions.
+
+Field-definition serialization has its own contract; existing capture JSONL and MP4 metadata remain source observation/container formats. A YAML field-package snapshot and YAML summaries can travel as ordinary sidecars inside that container.
 
 Distinguish at least `fixedField`, `movable`, `clusterMember`, and `unknown` placement semantics, with a separate `localizationEligible` flag. A cluster member's global pose is derived only when its parent's field pose is valid. Every pose declares its frame; unavailable global poses are null with a reason.
 
@@ -153,14 +163,14 @@ Fixed-tag estimates may aggregate qualified views within valid registrations. Mo
 
 ## 6. Persistence and robot interoperability
 
-Snapshot the exact field package into each recording. Record field selection and registration creation/update/invalidation events, observation references and settings/core versions. Add a versioned `field-walk-summary.json` and CSV for convenient review; retain raw `events.jsonl` as evidence. Include new sidecars in the existing file inventory and MP4 TAR transport. Update playback timelines and seeking explicitly; transport inclusion alone does not draw field overlays. Older recordings without registration may acquire nominal positions from an explicitly selected layout, but must not acquire invented historical measured poses.
+Snapshot the exact normalized YAML field package into each recording. Record field selection and registration creation/update/invalidation events, observation references and settings/core versions. Add a versioned `field-walk-summary.yaml`, with JSON and CSV export available for review; retain raw `events.jsonl` as evidence. Include new sidecars in the existing file inventory and MP4 TAR transport. Update playback timelines and seeking explicitly; transport inclusion alone does not draw field overlays. Older recordings without registration may acquire nominal positions from an explicitly selected layout, but must not acquire invented historical measured poses.
 
 | Consumer | Planned adapter |
 | --- | --- |
-| iOS | Swift parses validated package data and passes neutral structs to the C ABI. Native capture/rendering remains in Swift; React Native receives bounded summaries and commands. |
-| FRC 2026 / compatible PhotonVision | Import/export legacy `AprilTagFieldLayout` JSON for fixed poses, plus our manifest for family/size/provenance. Round-trip through the actual Java/C++ readers. [Pinned legacy reader](https://github.com/wpilibsuite/allwpilib/blob/v2026.2.2/apriltag/src/main/java/edu/wpi/first/apriltag/AprilTagFieldLayout.java), [PhotonVision MultiTag](https://docs.photonvision.org/en/v2026.3.2/docs/apriltag-pipelines/multitag.html). |
-| Existing FRC 2027 alpha-8 consumers | Add integrated Fields-format adapter: Java `Fields.<entry>.loadField()` / `Field.loadFromFile(Path)`; C++ `wpi::fields::GetField(...)` / `Field(path)`. Its serializer produces the integrated format, so legacy export must be explicit. [Java Field](https://github.com/wpilibsuite/allwpilib/blob/v2027.0.0-alpha-8/fields/src/main/java/org/wpilib/fields/Field.java), [C++ Field](https://github.com/wpilibsuite/allwpilib/blob/v2027.0.0-alpha-8/fields/src/main/native/include/wpi/fields/Field.hpp). |
-| FTC Android robot | Build an SDK-version-specific `AprilTagLibrary`/cluster adapter from the same package. The reviewed SDK has no native field-layout JSON reader; our adapter must load the package and populate SDK Builders. Integrate camera input through VisionPortal; convert SDK raw/FTC poses deliberately, or use matching corners and intrinsics in the shared pose solver. Keep camera ownership with the SDK. |
+| iOS | Swift loads YAML by default or JSON into the validated model and passes neutral structs to the C ABI. Save/display field definitions as YAML. Native capture/rendering remains in Swift; React Native receives bounded summaries and commands. |
+| FRC 2026 / compatible PhotonVision | Our adapter loads YAML/default or JSON, and imports/exports legacy `AprilTagFieldLayout` JSON for fixed poses, plus our YAML manifest for family/size/provenance. Round-trip generated JSON through the actual Java/C++ readers. [Pinned legacy reader](https://github.com/wpilibsuite/allwpilib/blob/v2026.2.2/apriltag/src/main/java/edu/wpi/first/apriltag/AprilTagFieldLayout.java), [PhotonVision MultiTag](https://docs.photonvision.org/en/v2026.3.2/docs/apriltag-pipelines/multitag.html). |
+| Existing FRC 2027 alpha-8 consumers | Add a YAML/default and JSON loader around the integrated Fields adapter. Generate compatible JSON or construct library objects before using native APIs: Java `Fields.<entry>.loadField()` / `Field.loadFromFile(Path)`; C++ `wpi::fields::GetField(...)` / `Field(path)`. Native serialization produces integrated JSON, so conversion to our YAML and export to legacy JSON must be explicit. [Java Field](https://github.com/wpilibsuite/allwpilib/blob/v2027.0.0-alpha-8/fields/src/main/java/org/wpilib/fields/Field.java), [C++ Field](https://github.com/wpilibsuite/allwpilib/blob/v2027.0.0-alpha-8/fields/src/main/native/include/wpi/fields/Field.hpp). |
+| FTC Android robot | Build an SDK-version-specific `AprilTagLibrary`/cluster adapter from the same YAML/default or JSON input. The reviewed SDK has no native field-layout YAML/JSON reader; our loader must populate SDK Builders. Integrate camera input through VisionPortal; convert SDK raw/FTC poses deliberately, or use matching corners and intrinsics in the shared pose solver. Keep camera ownership with the SDK. |
 | Desktop replay | Load the same package/core and original source observations; reproduce summaries and registration decisions without rewriting the recording. |
 
 Extend the C ABI and JNI bindings additively for neutral tag geometry, transforms, registration results and observation summaries. Preserve existing +Y-up floor APIs; add explicit field-frame operations instead of changing their meaning. Keep platform parsers/framework types outside the numerical core.
@@ -175,19 +185,19 @@ Never export moving/unknown targets as fixed WPILib poses. Keep any later calibr
 
 All items below are proposed, unchecked work. The existing [M0 field-data/review gate and later roadmap](PLAN.md) remain in effect. This plan overlaps M1/M3, later candidate export in M5 and optional camera visualization in M7/M8; agree on the bounded implementation slice after that review.
 
-1. **FD.1 — Pin sources and define packages.** Import FRC 2026 welded/AndyMark and FTC 2025–2026/2026–2027 metadata into proposed fixtures. Record source hashes, family/size, frame basis, static/dynamic eligibility and cluster geometry. Keep FRC 2027 unavailable until published. Resolve redistribution attribution before bundling assets.
-   - Completion: reviewed source inventory; known tag counts/poses/sizes match sources; placeholder SDK coordinates cannot become valid anchors; image-only entries cannot pass as tag layouts.
+1. **FD.1 — Pin sources and define packages.** Import FRC 2026 welded/AndyMark and FTC 2025–2026/2026–2027 metadata into normalized YAML fixtures. Define YAML/default and JSON input/output support, source-to-YAML conversion, and YAML storage/display. Record source hashes, family/size, frame basis, static/dynamic eligibility and cluster geometry. Keep FRC 2027 unavailable until published. Resolve redistribution attribution before bundling assets.
+   - Completion: reviewed source inventory; known tag counts/poses/sizes match sources; YAML/JSON semantic round trips preserve those values; placeholder SDK coordinates cannot become valid anchors; image-only entries cannot pass as tag layouts.
 
 2. **FD.2 — Specify and verify shared geometry.** Add versioned models/adapters and portable field operations, preserving the existing ABI contracts. Define exact WPILib/FTC tag/camera/robot basis conversions and quaternion handling. Detect IDs first, then apply per-tag metric sizes.
    - Completion: independently calculated head-on, translated, rotated and inverse/composition cases agree across C++, Swift and JNI. Cover matrix order, tag normals/corner order, inches/meters and FTC/FRC origins. Include mixed sizes and invalid/missing metadata.
 
-3. **FD.3 — Deliver the saved-walk inventory.** Derive unique tag rows and nominal positions from native observations and selected packages. Add cluster/member semantics, unknown IDs, timestamps, evidence links and saved JSON/CSV summaries. Integrate package snapshots with export/extraction.
+3. **FD.3 — Deliver the saved-walk inventory.** Derive unique tag rows and nominal positions from native observations and selected packages. Add cluster/member semantics, unknown IDs, timestamps, evidence links and YAML summaries with JSON/CSV exports. Integrate YAML package snapshots with export/extraction and field-definition display.
    - Completion: replaying a saved walk produces the same summary; repeated UI updates do not inflate counts; rejected poses still preserve seen-ID evidence; partially observed clusters do not fabricate seen members; resets preserve history without merging incompatible coordinates.
 
 4. **FD.4 — Add provisional registration and expected AR tags.** Implement native alignment state, fixed-reference registration and expected plane/ID rendering using existing projection. Recheck multi-tag agreement and drift. Support timestamped moving-target overlays when geometry is available.
    - Completion: independent geometry/replay cases exercise predicted placements, zoom/orientation, stale source jobs, tracking loss, resets, layout changes and out-of-view persistence. A moving/anchor-dependent target cannot receive an independent placement pass. Check accessible native controls in simulator before physical validation.
 
-5. **FD.5 — Prove robot interoperability.** Run identical package/observation fixtures through the existing FRC C++ and Java consumers and a new FTC Android sample. Round-trip FRC legacy/integrated exports through actual readers; verify FTC package conversion through our adapter and SDK singleton/cluster Builders. Verify camera mounting and clock conventions.
+5. **FD.5 — Prove robot interoperability.** Run identical YAML and JSON package/observation fixtures through the existing FRC C++ and Java consumers and a new FTC Android sample. Round-trip FRC legacy/integrated JSON exports through actual readers; verify FTC package conversion through our adapter and SDK singleton/cluster Builders. Verify camera mounting and clock conventions.
    - Completion: matching geometry and explicit unsupported states across platforms; real target builds and ABI inspection. Demonstrate FTC member-inspection behavior separately from normal cluster aiming. Cross-compilation alone is not hardware localization evidence.
 
 6. **FD.6 — Validate a real field walk and review results.** After simulator/offline checks, use a short physical session for camera/AR behavior and independent position checks. Revisit controls to quantify drift; include both FRC fixed tags and FTC moving/cluster cases where available. Set accuracy/coverage thresholds from the intended use and independent evidence before making pass/fail claims.

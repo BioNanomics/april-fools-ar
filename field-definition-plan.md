@@ -21,12 +21,13 @@ The first end-to-end fixed-field example should be FRC 2026. Include FTC DECODE 
 
 ### This application
 
-Reviewed the current working tree, including existing in-progress changes, against base commit `3fff60893f27da487f2de198661d9ea20daa3256`.
+The original review used the working tree, including existing in-progress changes, against base commit `3fff60893f27da487f2de198661d9ea20daa3256`. This plan also incorporates the field/year and Auto sizing merged into [main at `5f46165ff300034ed1ffbdde3701103d252d007f`](https://github.com/BioNanomics/april-fools-ar/commit/5f46165ff300034ed1ffbdde3701103d252d007f).
 
 | Existing component | Reuse | Work still needed |
 | --- | --- | --- |
 | [Portable spatial core](native/SpatialCore/README.md), [architecture decision](docs/decisions/003-shared-spatial-core.md) | C++17 behind C ABI; Swift, C++, Java/JNI and Android consumers; geometry, pose calculations and projection. | Field definitions, explicit field frames, registration, field-relative estimates and observation summaries. |
-| [AprilTag core](native/AprilTag/README.md), `AFTagCore.h/.c` | Actual `tag36h11` detector, ordered corners, metric pose, ambiguity and reprojection diagnostics. `AFTagCoreEstimatePoseFromCorners` can solve each detection independently. | Resolve each tag's size from the selected package. Current calibrated detection applies one global size, default 0.1651 m, to the entire frame. |
+| [AprilTag core](native/AprilTag/README.md), `AFTagCore.h/.c` | Actual `tag36h11` detector, ordered corners, metric pose, ambiguity and reprojection diagnostics. The current pipeline solves at a reference size and then resolves/rescales each detection; the corner solver also remains available. | Move the existing per-detection size policy into the shared core and source its catalog from YAML; add package membership and conflict handling. |
+| [Current sizing implementation](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/native/ARCapture/TagDebugMath.swift#L11), [settings UI](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/DebugSettingsModal.tsx#L112) | `TagFieldCatalog`, Auto/FTC/FRC/Custom modes, field/year presets, per-ID mixed-size mapping, LiDAR inference, settings migration and recorded resolution evidence. | Replace duplicated Swift/TypeScript size tables with shared YAML-backed data and preserve current behavior across phone/robot adapters. These are size definitions, not field poses. |
 | [AR coordinator](native/ARCapture/ARCaptureCoordinator.swift) | Source-frame camera pose/intrinsics, bounded asynchronous detection, native event recording, tracking and coordinate-segment lifetime. | Attach field identity and registration to the matching source observation; maintain walk state independently of short-lived live outlines. |
 | [Projection adapter](native/ARCapture/SpatialProjection.swift), [world overlay](native/ARCapture/SpatialMeasurementOverlayView.swift) | Project world points, segments and polygons with clipping, orientation and preview zoom. | Draw expected tag planes/IDs/normals from field geometry; no full field mesh is necessary for this first overlay. |
 | [Observed tag overlay](native/ARCapture/AprilTagOverlayView.swift) | Current image-space detection outlines and selection. | Keep their meaning distinct from predicted field placements. They currently expire after 0.4 seconds. |
@@ -34,6 +35,34 @@ Reviewed the current working tree, including existing in-progress changes, again
 | [Robot examples](robot/README.md), [Android binding](bindings/android/README.md) | Shared numerical code and packaging foundations. | Real FRC/FTC field consumers and camera adapters. Existing examples do not implement robot localization. |
 
 Use raw detections for estimation and records. The current `TagReadoutFilter.swift` smooths presentation copies; its outputs must not become registration inputs or measurement evidence.
+
+### Existing Auto size logic to preserve and reuse
+
+Auto means **physical-width inference**, separate from selecting a field package. A tag's family/ID or inferred size does not identify its competition, season, variant, field origin or surveyed position. In particular, FRC and FTC DECODE share the 0.1651 m size. Keep these as separate concepts in the app and the data contract. [Current recorded contract](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/docs/capture-format.md#L52).
+
+The existing modes are `auto`, `ftc`, `frc` and `custom`. Fresh settings use Auto with year `0`; explicit FTC defaults to ending-year 2027 and FRC to calendar-year 2026. The catalog also supports FTC ending-years 2024–2026 and FRC 2024–2025. Preserve those older **size-only** presets without treating them as complete field-layout packages or requiring their full geometry in this initial scope. CENTERSTAGE maps IDs 7/10 to 0.127 m and IDs 1–6/8/9 to 0.0508 m; other IDs leave metric pose unavailable. Other explicit, single-size seasons apply the selected size even to practice IDs, so size selection alone is not field-membership validation. [Catalog and settings](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/native/ARCapture/TagDebugMath.swift#L11).
+
+For each observation, `TagDebugMath.resolveTagSize` uses the matching source frame:
+
+```text
+estimatedEdge = referenceEdge × centerLiDAR_Z / referencePose_Z
+scale = selectedNominalEdge / referenceEdge
+```
+
+In Auto mode, resolution requires normal tracking, confidence-category-2 center LiDAR, positive finite depth, an unambiguous reference pose, positive decision margin, zero corrected bits and passing configured reprojection/incidence/range gates. Explicit preset/custom sizing does not require those Auto inputs; downstream pose usability has its own gates. A neighboring depth sample does not replace an unusable center. Accept exactly one matching standard:
+
+| Nominal edge | Current relative tolerance |
+| --- | --- |
+| 0.0508, 0.08255, 0.1016, 0.127 m | 10% for each candidate |
+| 0.1524, 0.1651 m | 3% for each candidate, keeping 6-inch sample and 6.5-inch field prints distinct |
+
+Retain the continuous estimate as evidence and apply the selected nominal width. If resolution fails, preserve the ID/corners and explicit unavailable reason, without a metric pose or silent fallback to the reference width. Selection is per observation, so the same ID can be observed at different physical sizes. [Resolver](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/native/ARCapture/TagDebugMath.swift#L211).
+
+Reuse `rescaledPose`: translation/range and candidate translation separation scale linearly; object-space pose errors scale by `scale²`; rotation, pixel reprojection, error ratio, ambiguity and angular quantities retain their meaning. Resolution currently runs before quality, ranges, gravity and floor-height enrichment. Preserve that ordering and metric consistency when extracting the calculation into AFSC, rather than implementing a second sizing algorithm. [Rescaling](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/native/ARCapture/TagDebugMath.swift#L296), [capture integration](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/native/ARCapture/ARCaptureCoordinator.swift#L825).
+
+Preserve `tagSizeResolution` status/source/reason, mode and explicit year or null, selected width, estimated edge, reference width, matching-frame depth/confidence and applied tolerance. The authoritative applied scale is `pose.tagSizeMeters`/`pose.tagSizeSource`; `debugSettings.tagSizeMeters` is a reference scale in Auto/mixed-size modes. Keep Apply/Cancel behavior, full custom-width precision, manual/AR overrides and legacy migration: untouched old FRC defaults become Auto, while manual/AR widths remain Custom. Historical observations retain their original scale and evidence. [Settings regression tests](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/__tests__/TagSizeSettings.test.tsx), [native regression tests](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/native/ARCapture/tests/TagDebugMathTests.swift#L34).
+
+LiDAR chose the scale in Auto, so subsequent pose-versus-LiDAR agreement is correlated evidence and cannot independently validate that size. The existing [validation record](https://github.com/BioNanomics/april-fools-ar/blob/5f46165ff300034ed1ffbdde3701103d252d007f/docs/validation/M0-field-year-tag-sizes.md) reports automated checks and physical installation/settings display; physical Auto-size accuracy and physical native accessibility remain pending. This reuse does not complete the YAML, field-registration or walk-inventory milestones.
 
 ### Refinery ForceField
 
@@ -78,6 +107,7 @@ Proposed package contents:
 | `manifest.yaml` | Schema version; program; explicit season start/end; game; field variant; package ID/revision; source URLs, versions and SHA-256 hashes; license attribution; frame definitions; units; asset references and capability status. |
 | `tags.yaml` | Physical tag records keyed by family/ID within this package: name, detected edge in meters, tag-frame convention, placement type, optional reference pose and provenance, localization eligibility, parent/cluster identity. |
 | `clusters.yaml` when applicable | Named targets with member IDs, each member's rigid transform into the cluster frame, aiming origin and orientation, motion semantics and optional valid field placement. Aiming origin and printed tag center are separate. |
+| Shared `size-standards.yaml` | YAML-backed catalog of nominal widths, source references, explicit season/per-ID size rules and Auto candidate tolerances. Generate or load matching Swift/TypeScript/C++/Java data from this source; size-only catalog entries need not have field poses. |
 | Source provenance | Original source format, URL/revision and byte hash; reproducible conversion instructions. Any retained original bytes are labeled source evidence, while the working field definition is YAML. |
 | Optional map/assets | Image, crop corners, units and explicit image-to-field transform; later geometry/force presets with their own provenance. |
 
@@ -94,6 +124,10 @@ Specify a portable YAML 1.2 subset with string mapping keys, explicit scalar typ
 Field-definition serialization has its own contract; existing capture JSONL and MP4 metadata remain source observation/container formats. A YAML field-package snapshot and YAML summaries can travel as ordinary sidecars inside that container.
 
 Distinguish at least `fixedField`, `movable`, `clusterMember`, and `unknown` placement semantics, with a separate `localizationEligible` flag. A cluster member's global pose is derived only when its parent's field pose is valid. Every pose declares its frame; unavailable global poses are null with a reason.
+
+Keep selected field-package identity independent of size-selection mode and its legacy `competitionYear` setting. Auto/Custom year `0` means no season inferred by sizing; it must neither select a package nor erase one explicitly selected for the walk. Preserve that legacy setting at adapter boundaries and use explicit unavailable identity in normalized records. A practice ID can have a usable metric pose under an explicit single-size preset while remaining unknown to the selected field layout, with no invented nominal field position.
+
+Use package sizes for expected tag geometry and the recorded per-detection resolution for observed geometry. Preserve the explicit mode's sizing policy; manual/AR overrides stay in session/observation state and do not rewrite published YAML. Record any discrepancy between applied/estimated width and the reference size visibly as an assumption/conflict. Do not silently replace one with the other or certify placement from it; changing a sizing policy invalidates affected live results/registration until rechecked. An inferred nominal width supplies no additional field-membership or localization eligibility.
 
 Keep each program's official field convention as a named frame, with adapters into shared math. FRC keeps the fixed blue-origin, +Z-up WPILib frame. FTC keeps its official centered field frame and SDK orientation convention: origin on the mat's top surface, +Y away from the red wall, +X to the right when looking inward from that wall, +Z up. Preserve the season's alliance/audience orientation explicitly. Do not move FTC's origin to a blue corner implicitly. Store any common display-frame transform explicitly. Preserve the AR world as a separate +Y-up frame. [WPILib coordinates](https://docs.wpilib.org/en/stable/docs/software/advanced-controls/geometry/coordinate-systems.html), [FTC field coordinates](https://ftc-docs.firstinspires.org/en/latest/game_specific_resources/field_coordinate_system/field-coordinate-system.html).
 
@@ -153,7 +187,7 @@ Each unique physical tag row should contain:
 - **Observed position:** latest or reviewed estimate, frame/segment/registration identity, timestamp and quality/rejection status; null when unavailable.
 - **Difference from reference:** translation/orientation residual only when a valid independent comparison exists.
 
-Keep summary counts separate from sufficient observation diversity. An undetected tag is “not seen,” not proven absent. Unknown IDs retain evidence with no invented size or nominal position. Mixed sizes use detect-once/corner-solve-per-tag; absent size preserves ID/corners but prevents metric pose.
+Keep summary counts separate from sufficient observation diversity. An undetected tag is “not seen,” not proven absent. Unknown layout IDs retain available per-observation sizing/pose evidence with no invented nominal position. Reuse the existing detect-once/reference-pose/per-detection resolution path for mixed sizes; absent resolved size preserves ID/corners but prevents metric pose. An unknown layout ID and an unresolved physical size are distinct states.
 
 FTC SDK 12 requires special handling: normal BIOBUZZ output is one cluster detection, with no public per-member ID/corner evidence. A partial cluster detection must not mark all its tags seen. [Cluster documentation](https://ftc-docs.firstinspires.org/en/latest/tech_tips/tech-tips/tech-tip-apriltag-clusters/tech-tip-apriltag-clusters.html), [Vision source artifact](https://repo.maven.apache.org/maven2/org/firstinspires/ftc/Vision/12.0.0/Vision-12.0.0-sources.jar).
 
@@ -174,6 +208,8 @@ Snapshot the exact normalized YAML field package into each recording. Record fie
 | Desktop replay | Load the same package/core and original source observations; reproduce summaries and registration decisions without rewriting the recording. |
 
 Extend the C ABI and JNI bindings additively for neutral tag geometry, transforms, registration results and observation summaries. Preserve existing +Y-up floor APIs; add explicit field-frame operations instead of changing their meaning. Keep platform parsers/framework types outside the numerical core.
+
+Extract the current Swift size resolver/rescaler into this boundary and drive its catalog from YAML. Depth is optional sensor input, with source confidence/availability semantics supplied by each adapter rather than inferred from an unrelated robot confidence score. A robot without suitable depth retains explicit preset/package/custom sizing; Auto reports unavailable when its inputs cannot be supplied. Do not substitute a reference size for an unresolved Auto result. Run the same size-policy fixtures across Swift, C++ and Java, including same-ID size changes and 6/6.5-inch separation.
 
 The existing Android AAR is a starting point, not verified FTC integration: it has `minSdk=24`, `compileSdk=35`, Java 11 and `arm64-v8a`/`x86_64` builds, while FTC has its own toolchain and runtime ABI requirements. Pin the target Robot Controller SDK/hardware, verify minimum Android/API requirements, add `armeabi-v7a` if required, resolve native-library/STL conflicts, and validate packaging with a real FTC sample. Reuse SDK detections where possible to avoid duplicate camera processing and bundled AprilTag implementations. [Local Android build](bindings/android/build.gradle.kts), [FTC build configuration](https://github.com/FIRST-Tech-Challenge/FtcRobotController/blob/master/build.common.gradle).
 
@@ -217,6 +253,7 @@ For each checked item, record its commit/PR, exact validation command or procedu
 - [ ] **FD.1.8 — Import FTC DECODE.** Preserve IDs 20–24 and explicit fixed-target versus Obelisk eligibility. Verify sizes, source units and unavailable global poses without promoting SDK placeholders to anchors.
 - [ ] **FD.1.9 — Import FTC BIOBUZZ.** Preserve all four named clusters, member IDs/sizes and local transforms. Verify moving-target eligibility, aiming origins and unavailable fixed field positions.
 - [ ] **FD.1.10 — Make imports reproducible.** Record pinned downloads/artifact hashes and extraction/conversion commands. Regenerate the packages and compare normalized output; document attribution before bundling assets. List FRC 2027 as unavailable rather than adding invented geometry.
+- [ ] **FD.1.11 — Reuse the existing size catalog.** Extract `TagFieldCatalog` presets/per-ID rules and `resolveTagSize` candidate widths/tolerances into the shared YAML catalog. Generate/load matching UI/native constants, preserve older size-only presets and verify that a size match never selects a field package or proves ID membership.
 - [ ] **FD.1.G — Exit demonstration.** From a clean checkout, run the documented imports and validator; load equivalent YAML/JSON and show the same catalog. Invalid fixtures fail with useful errors. Reviewer confirms source comparisons and anchor semantics; save the commands/results in the milestone evidence file.
 
 ### FD.2 — Implement portable tag lookup and geometry
@@ -229,8 +266,9 @@ For each checked item, record its commit/PR, exact validation command or procedu
 - [ ] **FD.2.4 — Implement rigid transform helpers.** Compose/invert transforms and convert named quaternion/matrix representations. Reject invalid rotations/nonfinite inputs. Check against FD.2.3 rather than generating expected results with the helper under test.
 - [ ] **FD.2.5 — Implement ARKit/optical and WPILib conversions.** Exercise the camera-axis conversion and the distinct tag-basis conversion separately; verify expected centers, printed-up vectors and normals.
 - [ ] **FD.2.6 — Implement FTC conversions.** Preserve FTC's centered field frame; distinguish raw optical pose, `ftcPose`, cluster frame and tag frame. Verify inch-to-meter conversion and explicit member/aiming-origin transforms.
-- [ ] **FD.2.7 — Resolve pose size per detection.** Detect IDs/corners once and call the existing corner solver with each tag's size. Cover mixed sizes, unresolved pose candidates and unknown-size ID-only observations.
+- [ ] **FD.2.7 — Reuse per-detection resolution/rescaling.** Port the existing `resolveTagSize`/`rescaledPose` behavior into AFSC with optional matching-frame depth. Preserve unique-match tolerances, explicit-mode rules, metric error scaling and ID-only rejection behavior. Run mixed-size, same-ID/different-size and boundary fixtures against the existing Swift results and independently calculated scale cases.
 - [ ] **FD.2.8 — Connect Swift and JNI bindings.** Send the same fixtures through C++, Swift and Java/JNI. Run the appropriate existing spatial-core checks and confirm the established +Y-up floor APIs retain their meaning.
+- [ ] **FD.2.9 — Preserve settings and evidence compatibility.** Bridge Auto/FTC/FRC/Custom, legacy year semantics, Apply/Cancel and precise manual/AR overrides into the YAML-backed model. Preserve per-detection `tagSizeResolution` and applied scale; test missing/weak center depth, zero/multiple matches, invalid source tracking and unchanged historical observations.
 - [ ] **FD.2.G — Exit demonstration.** Load one FRC and one FTC YAML/JSON fixture through the bindings and compare lookup, transform and per-tag pose results within a reviewer-documented numerical tolerance. Record rejected cases and ABI compatibility results.
 
 ### FD.3 — Ship the saved-walk tag list
@@ -246,6 +284,7 @@ For each checked item, record its commit/PR, exact validation command or procedu
 - [ ] **FD.3.7 — Save and reopen summaries.** Write versioned `field-walk-summary.yaml`; reopen saved sessions and offer JSON/CSV export. Preserve per-segment evidence and keep moving-target positions timestamped.
 - [ ] **FD.3.8 — Extend transport and replay.** Include YAML packages/summaries in the inventory/MP4 export, restore them byte-for-byte through extraction, and reproduce the summary from original events. Older recordings retain explicit missing package/registration state.
 - [ ] **FD.3.9 — Verify walk edge cases.** Exercise empty/failed analysis, repeated/late results, unknown IDs, rejected metric poses, recording restarts, segment resets and partial clusters. Demonstrate that UI throttling and missing LiDAR do not change the seen list.
+- [ ] **FD.3.10 — Separate size and layout identity.** Persist/display per-observation size resolution alongside the pinned field package. Test Auto preview with no package, Auto/Custom with an explicitly chosen walk package, practice IDs with valid sizes but unknown field positions, and observed/reference size conflicts. Auto/Custom year `0` must not clear the walk's package selection.
 - [ ] **FD.3.G — Exit demonstration.** Select each supported package, replay a saved walk, then save/export/reopen it. Compare IDs, nominal positions, counts, hashes and evidence references. The list works with no field registration and no depth stream; measured positions are honestly unavailable.
 
 ### FD.4 — Place expected tags in AR
@@ -262,6 +301,7 @@ For each checked item, record its commit/PR, exact validation command or procedu
 - [ ] **FD.4.8 — Add independent comparison status.** Track which tags contributed to initialization and realignment. Exclude the tag under inspection from its registration chain, or label the comparison assumed/unresolved. Demonstrate that a planted moved tag cannot certify itself.
 - [ ] **FD.4.9 — Handle moving-target observations.** Display fresh tag/cluster estimates with timestamps in the camera/AR frame, or the field frame only with independent registration. Expire old placements and never feed them into fixed-anchor registration.
 - [ ] **FD.4.10 — Save and replay overlay state.** Record registration changes with effective source times and reconstruct them during playback, pause and seek. Verify resets, stale jobs and unavailable historical registration using the simulator/replay harness.
+- [ ] **FD.4.11 — Carry sizing assumptions into registration.** Use each source observation's applied scale and provenance; invalidate affected state when sizing policy changes. Show size/reference conflicts as assumed/unresolved and verify that Auto-derived LiDAR agreement does not count as an independent size or placement check.
 - [ ] **FD.4.G — Exit demonstration.** Run independent geometry and recorded-walk cases through alignment, expected rendering, tracking loss/recovery and playback. Reviewer checks the comparison/anchor behavior; the evidence labels simulator/replay results separately from physical accuracy.
 
 ### FD.5 — Prove phone/robot compatibility
@@ -278,6 +318,7 @@ For each checked item, record its commit/PR, exact validation command or procedu
 - [ ] **FD.5.8 — Ingest fresh FTC observations.** Preserve acquisition time, frame/calibration identity and raw/converted pose conventions. Re-reading a previous SDK result must not increment the walk inventory or refresh stale geometry.
 - [ ] **FD.5.9 — Demonstrate member inspection.** Verify a member-only SDK inspection mode separately from cluster aiming. If it cannot supply required evidence, leave this task pending and split a custom VisionProcessor implementation into reviewed subtasks. Cluster-only detections retain unknown individual-member visibility.
 - [ ] **FD.5.10 — Build target consumers and compare parity.** Produce the actual FRC C++/Java and FTC artifacts, inspect ABI/dependencies and run supported fixtures on appropriate host/emulator/target harnesses. Record compilation and execution separately; cross-compilation is not proof of hardware localization.
+- [ ] **FD.5.11 — Verify size-policy parity and depth capability.** Run the extracted Auto resolver and explicit preset/package/custom cases in phone/C++/Java adapters. With no suitable depth, explicit sizing still works and Auto returns an identified unavailable result; confidence categories from different sensors are not silently treated as ARKit confidence 2.
 - [ ] **FD.5.G — Exit demonstration.** Load identical YAML/JSON packages in all three consumers, reproduce supported reference outputs and inspect the native format conversions. Record unavailable capabilities explicitly; all required software tasks must pass before this gate closes. Physical camera/localization acceptance remains in FD.6.
 
 ### FD.6 — Validate physical walks and report limits
@@ -291,6 +332,7 @@ For each checked item, record its commit/PR, exact validation command or procedu
 - [ ] **FD.6.5 — Tester: capture moving/cluster cases.** Observe BIOBUZZ target movement and partial visibility. Check per-member versus cluster-only evidence, timestamps and unavailable global position without independent registration. Keep this task pending if the necessary field/hardware is unavailable.
 - [ ] **FD.6.6 — Reproduce and compare.** Verify exported hashes/extraction, replay the original observations and compare coverage, independent position/orientation differences and drift to the predetermined criteria. Produce separate FRC/FTC and phone/robot results with missing/rejected data visible.
 - [ ] **FD.6.7 — Review and fix findings.** Attach the report and exact reproduction steps to focused repair tasks. The reviewer checks claims against evidence; rerun affected checks after repairs. Reserve fresh acceptance data if earlier results were used to tune the implementation.
+- [ ] **FD.6.8 — Validate Auto sizes independently.** Extend the existing pending Auto-size checks with independently measured prints, mixed sizes, 6/6.5-inch cases, varying views/ranges and weak/missing depth. Compare inferred/applied widths to the physical measurements separately from LiDAR agreement; retain manual/custom fallback and the native accessibility follow-up until verified.
 - [ ] **FD.6.G — Exit demonstration.** Required physical cases and repairs pass with reviewed limitations, readable exports and verified device release. Record user review. Partial software/physical slices may be reported as complete individually; pending required cases prevent an overall accuracy claim.
 
 ### FD.7 — Add FRC 2027; track optional visuals separately

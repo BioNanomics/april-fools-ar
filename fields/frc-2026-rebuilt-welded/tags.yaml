@@ -1,0 +1,546 @@
+"schemaVersion": 1
+"tags":
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,11.8779798,7.4247756,0.889,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [11.8779798,7.4247756,0.889]
+    "id": 1
+    "localizationEligible": true
+    "name": "Tag 1"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [11.8779798,7.4247756,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.0000000000000002,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,-1.0000000000000002,0.0,0.0,11.9154194,4.638039999999999,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [7.850462293418875e-17,-7.850462293418875e-17,0.7071067811865476,-0.7071067811865475]
+      "translation": [11.9154194,4.638039999999999,1.12395]
+    "id": 2
+    "localizationEligible": true
+    "name": "Tag 2"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.7071067811865476,0.0,0.0,0.7071067811865476]
+      "translation": [11.9154194,4.638039999999999,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,11.3118646,4.3902376,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [11.3118646,4.3902376,1.12395]
+    "id": 3
+    "localizationEligible": true
+    "name": "Tag 3"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [11.3118646,4.3902376,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,11.3118646,4.0346376,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [11.3118646,4.0346376,1.12395]
+    "id": 4
+    "localizationEligible": true
+    "name": "Tag 4"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [11.3118646,4.0346376,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [1.0,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,1.0,0.0,0.0,11.9154194,3.4312351999999997,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.7071067811865476,-0.7071067811865475,7.850462293418875e-17,-7.850462293418875e-17]
+      "translation": [11.9154194,3.4312351999999997,1.12395]
+    "id": 5
+    "localizationEligible": true
+    "name": "Tag 5"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [-0.7071067811865475,-0.0,0.0,0.7071067811865476]
+      "translation": [11.9154194,3.4312351999999997,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,11.8779798,0.6444996,0.889,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [11.8779798,0.6444996,0.889]
+    "id": 6
+    "localizationEligible": true
+    "name": "Tag 6"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [11.8779798,0.6444996,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,11.9528844,0.6444996,0.889,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [11.9528844,0.6444996,0.889]
+    "id": 7
+    "localizationEligible": true
+    "name": "Tag 7"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [11.9528844,0.6444996,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [1.0,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,1.0,0.0,0.0,12.2710194,3.4312351999999997,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.7071067811865476,-0.7071067811865475,7.850462293418875e-17,-7.850462293418875e-17]
+      "translation": [12.2710194,3.4312351999999997,1.12395]
+    "id": 8
+    "localizationEligible": true
+    "name": "Tag 8"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [-0.7071067811865475,-0.0,0.0,0.7071067811865476]
+      "translation": [12.2710194,3.4312351999999997,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,12.519177399999998,3.6790375999999996,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [12.519177399999998,3.6790375999999996,1.12395]
+    "id": 9
+    "localizationEligible": true
+    "name": "Tag 9"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [12.519177399999998,3.6790375999999996,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,12.519177399999998,4.0346376,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [12.519177399999998,4.0346376,1.12395]
+    "id": 10
+    "localizationEligible": true
+    "name": "Tag 10"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [12.519177399999998,4.0346376,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.0000000000000002,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,-1.0000000000000002,0.0,0.0,12.2710194,4.638039999999999,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [7.850462293418875e-17,-7.850462293418875e-17,0.7071067811865476,-0.7071067811865475]
+      "translation": [12.2710194,4.638039999999999,1.12395]
+    "id": 11
+    "localizationEligible": true
+    "name": "Tag 11"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.7071067811865476,0.0,0.0,0.7071067811865476]
+      "translation": [12.2710194,4.638039999999999,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,11.9528844,7.4247756,0.889,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [11.9528844,7.4247756,0.889]
+    "id": 12
+    "localizationEligible": true
+    "name": "Tag 12"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [11.9528844,7.4247756,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,16.5333172,7.4033126,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [16.5333172,7.4033126,0.55245]
+    "id": 13
+    "localizationEligible": true
+    "name": "Tag 13"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [16.5333172,7.4033126,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,16.5333172,6.9715126,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [16.5333172,6.9715126,0.55245]
+    "id": 14
+    "localizationEligible": true
+    "name": "Tag 14"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [16.5333172,6.9715126,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,16.5329616,4.3235626,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [16.5329616,4.3235626,0.55245]
+    "id": 15
+    "localizationEligible": true
+    "name": "Tag 15"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [16.5329616,4.3235626,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,16.5329616,3.8917626,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [16.5329616,3.8917626,0.55245]
+    "id": 16
+    "localizationEligible": true
+    "name": "Tag 16"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [16.5329616,3.8917626,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,4.6630844,0.6444996,0.889,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [4.6630844,0.6444996,0.889]
+    "id": 17
+    "localizationEligible": true
+    "name": "Tag 17"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [4.6630844,0.6444996,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [1.0,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,1.0,0.0,0.0,4.6256194,3.4312351999999997,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.7071067811865476,-0.7071067811865475,7.850462293418875e-17,-7.850462293418875e-17]
+      "translation": [4.6256194,3.4312351999999997,1.12395]
+    "id": 18
+    "localizationEligible": true
+    "name": "Tag 18"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [-0.7071067811865475,-0.0,0.0,0.7071067811865476]
+      "translation": [4.6256194,3.4312351999999997,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,5.229174199999999,3.6790375999999996,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [5.229174199999999,3.6790375999999996,1.12395]
+    "id": 19
+    "localizationEligible": true
+    "name": "Tag 19"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [5.229174199999999,3.6790375999999996,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,5.229174199999999,4.0346376,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [5.229174199999999,4.0346376,1.12395]
+    "id": 20
+    "localizationEligible": true
+    "name": "Tag 20"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [5.229174199999999,4.0346376,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.0000000000000002,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,-1.0000000000000002,0.0,0.0,4.6256194,4.638039999999999,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [7.850462293418875e-17,-7.850462293418875e-17,0.7071067811865476,-0.7071067811865475]
+      "translation": [4.6256194,4.638039999999999,1.12395]
+    "id": 21
+    "localizationEligible": true
+    "name": "Tag 21"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.7071067811865476,0.0,0.0,0.7071067811865476]
+      "translation": [4.6256194,4.638039999999999,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,4.6630844,7.4247756,0.889,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [4.6630844,7.4247756,0.889]
+    "id": 22
+    "localizationEligible": true
+    "name": "Tag 22"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [4.6630844,7.4247756,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,4.5881798,7.4247756,0.889,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [4.5881798,7.4247756,0.889]
+    "id": 23
+    "localizationEligible": true
+    "name": "Tag 23"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [4.5881798,7.4247756,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.0000000000000002,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,-1.0000000000000002,0.0,0.0,4.2700194,4.638039999999999,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [7.850462293418875e-17,-7.850462293418875e-17,0.7071067811865476,-0.7071067811865475]
+      "translation": [4.2700194,4.638039999999999,1.12395]
+    "id": 24
+    "localizationEligible": true
+    "name": "Tag 24"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.7071067811865476,0.0,0.0,0.7071067811865476]
+      "translation": [4.2700194,4.638039999999999,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,4.0218614,4.3902376,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [4.0218614,4.3902376,1.12395]
+    "id": 25
+    "localizationEligible": true
+    "name": "Tag 25"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [4.0218614,4.3902376,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,4.0218614,4.0346376,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [4.0218614,4.0346376,1.12395]
+    "id": 26
+    "localizationEligible": true
+    "name": "Tag 26"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [4.0218614,4.0346376,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 1.12395
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [1.0,-2.220446049250313e-16,0.0,0.0,0.0,0.0,-1.0,0.0,2.220446049250313e-16,1.0,0.0,0.0,4.2700194,3.4312351999999997,1.12395,1.0]
+    "fieldPose":
+      "quaternion": [0.7071067811865476,-0.7071067811865475,7.850462293418875e-17,-7.850462293418875e-17]
+      "translation": [4.2700194,3.4312351999999997,1.12395]
+    "id": 27
+    "localizationEligible": true
+    "name": "Tag 27"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [-0.7071067811865475,-0.0,0.0,0.7071067811865476]
+      "translation": [4.2700194,3.4312351999999997,1.12395]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.889
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-1.2246467991473532e-16,-1.0,0.0,0.0,0.0,0.0,-1.0,0.0,1.0,-1.2246467991473532e-16,0.0,0.0,4.5881798,0.6444996,0.889,1.0]
+    "fieldPose":
+      "quaternion": [0.5,-0.5,0.5,-0.5000000000000001]
+      "translation": [4.5881798,0.6444996,0.889]
+    "id": 28
+    "localizationEligible": true
+    "name": "Tag 28"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [6.123233995736766e-17,0.0,0.0,1.0]
+      "translation": [4.5881798,0.6444996,0.889]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,0.0077469999999999995,0.6659626,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [0.0077469999999999995,0.6659626,0.55245]
+    "id": 29
+    "localizationEligible": true
+    "name": "Tag 29"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [0.0077469999999999995,0.6659626,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,0.0077469999999999995,1.0977626,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [0.0077469999999999995,1.0977626,0.55245]
+    "id": 30
+    "localizationEligible": true
+    "name": "Tag 30"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [0.0077469999999999995,1.0977626,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,0.0080772,3.7457125999999996,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [0.0080772,3.7457125999999996,0.55245]
+    "id": 31
+    "localizationEligible": true
+    "name": "Tag 31"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [0.0080772,3.7457125999999996,0.55245]
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.55245
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.0,1.0,0.0,0.0,0.0,0.0,-1.0,0.0,-1.0,0.0,0.0,0.0,0.0080772,4.1775126,0.55245,1.0]
+    "fieldPose":
+      "quaternion": [-0.5,0.5,0.5,-0.5]
+      "translation": [0.0080772,4.1775126,0.55245]
+    "id": 32
+    "localizationEligible": true
+    "name": "Tag 32"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [1.0,0.0,0.0,0.0]
+      "translation": [0.0080772,4.1775126,0.55245]

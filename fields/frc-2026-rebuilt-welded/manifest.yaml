@@ -1,0 +1,22 @@
+"angleUnit": "radian"
+"competitionYear": 2026
+"coordinateFrame": "wpilib-blue-z-up"
+"fieldLengthMeters": 16.541
+"fieldWidthMeters": 8.069
+"floorElevationMeters": 0.0
+"game": "REBUILT"
+"id": "frc-2026-rebuilt-welded"
+"lengthUnit": "meter"
+"name": "FRC 2026 REBUILT · welded"
+"program": "frc"
+"schemaVersion": 1
+"seasonEndYear": 2026
+"seasonStartYear": 2026
+"source":
+  "revision": "v2026.2.2"
+  "sha256": "315f71b1cfd7291a656f99fb4a8762d4fe4a31019a9784ec674119c0ea727f5a"
+  "sourceLengthUnit": "meter"
+  "sourceTagFrame": "wpilib-x-out-y-right-z-up"
+  "url": "https://raw.githubusercontent.com/wpilibsuite/allwpilib/v2026.2.2/apriltag/src/main/native/resources/edu/wpi/first/apriltag/2026-rebuilt-welded.json"
+"tagFrame": "detector-x-right-y-down-z-in"
+"variant": "welded"

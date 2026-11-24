@@ -8,33 +8,51 @@ enum TagDebugError: LocalizedError {
     var errorDescription: String? { if case .invalid(let text) = self { return text }; return nil }
 }
 
+// BEGIN GENERATED FIELD SIZE CATALOG — edit fields/size-standards.yaml instead.
 enum TagFieldCatalog {
-    // FTC uses the season's ending year; FRC uses its calendar year.
+    struct Preset {
+        let mode: String
+        let year: Int
+        let reference: Double
+        let game: String
+        let requiresKnownID: Bool
+        let widths: [Int: Double]
+    }
+    static let presets: [Preset] = [
+        Preset(mode: "ftc", year: 2024, reference: 0.0508, game: "CENTERSTAGE", requiresKnownID: true, widths: [1: 0.0508, 2: 0.0508, 3: 0.0508, 4: 0.0508, 5: 0.0508, 6: 0.0508, 7: 0.127, 8: 0.0508, 9: 0.0508, 10: 0.127]),
+        Preset(mode: "ftc", year: 2025, reference: 0.1016, game: "INTO THE DEEP", requiresKnownID: false, widths: [:]),
+        Preset(mode: "ftc", year: 2026, reference: 0.1651, game: "DECODE", requiresKnownID: false, widths: [:]),
+        Preset(mode: "ftc", year: 2027, reference: 0.08255, game: "BIOBUZZ", requiresKnownID: false, widths: [:]),
+        Preset(mode: "frc", year: 2024, reference: 0.1651, game: "CRESCENDO", requiresKnownID: false, widths: [:]),
+        Preset(mode: "frc", year: 2025, reference: 0.1651, game: "REEFSCAPE", requiresKnownID: false, widths: [:]),
+        Preset(mode: "frc", year: 2026, reference: 0.1651, game: "REBUILT", requiresKnownID: false, widths: [:]),
+    ]
+    static let autoStandards: [(edge: Double, label: String, tolerance: Double)] = [
+        (0.0508, "FTC 2 in", 0.1),
+        (0.08255, "FTC BIOBUZZ 3.25 in", 0.1),
+        (0.1016, "FTC 4 in", 0.1),
+        (0.127, "FTC 5 in", 0.1),
+        (0.1524, "FTC sample 6 in", 0.03),
+        (0.1651, "FRC / FTC 6.5 in", 0.03),
+    ]
+    static func defaultYear(mode: String) -> Int { mode == "ftc" ? 2027 : (mode == "frc" ? 2026 : 0) }
     static func referenceWidth(mode: String, year: Int) -> Double? {
-        if mode == "ftc" {
-            return [2024: 0.0508, 2025: 0.1016, 2026: 0.1651, 2027: 0.08255][year]
-        }
-        if mode == "frc", (2024...2026).contains(year) { return 0.1651 }
-        return nil
+        presets.first { $0.mode == mode && $0.year == year }?.reference
     }
     static func width(mode: String, year: Int, tagID: Int?) -> Double? {
-        if mode == "ftc", year == 2024 {
-            guard let tagID else { return nil }
-            if [7, 10].contains(tagID) { return 0.127 }
-            return [1, 2, 3, 4, 5, 6, 8, 9].contains(tagID) ? 0.0508 : nil
-        }
-        return referenceWidth(mode: mode, year: year)
+        guard let preset = presets.first(where: { $0.mode == mode && $0.year == year }) else { return nil }
+        if preset.requiresKnownID { return tagID.flatMap { preset.widths[$0] } }
+        return preset.reference
     }
     static func label(mode: String, year: Int) -> String {
-        let games = mode == "ftc" ? [2024: "CENTERSTAGE", 2025: "INTO THE DEEP", 2026: "DECODE", 2027: "BIOBUZZ"] :
-            [2024: "CRESCENDO", 2025: "REEFSCAPE", 2026: "REBUILT"]
-        return "\(mode.uppercased()) \(games[year] ?? "") \(year)"
+        "\(mode.uppercased()) \(presets.first { $0.mode == mode && $0.year == year }?.game ?? "") \(year)"
     }
 }
+// END GENERATED FIELD SIZE CATALOG
 
 struct TagDebugSettings: Codable, Equatable {
-    static let frcTagSizeMeters = 0.1651
-    static let ftcTagSizeMeters = 0.08255 // BIOBUZZ black-border width, 3.25 inches.
+    static let frcTagSizeMeters = TagFieldCatalog.referenceWidth(mode: "frc", year: TagFieldCatalog.defaultYear(mode: "frc"))!
+    static let ftcTagSizeMeters = TagFieldCatalog.referenceWidth(mode: "ftc", year: TagFieldCatalog.defaultYear(mode: "ftc"))!
     var tagSizeMeters = frcTagSizeMeters
     var tagSizeMode = "auto"
     var competitionYear = 0
@@ -76,7 +94,7 @@ struct TagDebugSettings: Codable, Equatable {
             tagSizeMode = "custom"
         }
         competitionYear = try values.decodeIfPresent(Int.self, forKey: .competitionYear)
-            ?? (tagSizeMode == "ftc" ? 2027 : (tagSizeMode == "frc" ? 2026 : 0))
+            ?? TagFieldCatalog.defaultYear(mode: tagSizeMode)
         showPoseAxes = try values.decodeIfPresent(Bool.self, forKey: .showPoseAxes) ?? false
         showImperialHeight = try values.decodeIfPresent(Bool.self, forKey: .showImperialHeight) ?? true
         levelFloorWithGravity = try values.decodeIfPresent(Bool.self, forKey: .levelFloorWithGravity) ?? false
@@ -142,7 +160,7 @@ struct TagDebugSettings: Codable, Equatable {
         }
         if let mode = requestedMode {
             result.tagSizeMode = mode
-            result.competitionYear = mode == tagSizeMode ? competitionYear : (mode == "ftc" ? 2027 : (mode == "frc" ? 2026 : 0))
+            result.competitionYear = mode == tagSizeMode ? competitionYear : TagFieldCatalog.defaultYear(mode: mode)
             if mode == "custom", tagSizeMode != "custom" { result.tagSizeSource = "manual" }
         }
         if let year = requestedYear { result.competitionYear = year }
@@ -227,6 +245,12 @@ enum TagDebugMath {
                     "reason": "Tag ID is not in the selected season's size map; choose the matching field/year or a custom width in Settings."]
                 return result
             }
+            var explicit = AFSCSizeInput()
+            explicit.selected_edge_m = coreOptional(width)
+            explicit.reference_edge_m = number((detection["pose"] as? [String: Any])?["tagSizeMeters"]) ?? 0
+            guard afsc_field_resolve_size(&explicit).selected != 0 else {
+                result.removeValue(forKey: "pose"); return result
+            }
             if let pose = detection["pose"] as? [String: Any] {
                 if let scaled = rescaledPose(pose, width: width, source: settings.tagSizeSource) { result["pose"] = scaled }
                 else { result.removeValue(forKey: "pose") }
@@ -249,44 +273,49 @@ enum TagDebugMath {
             result["tagSizeResolution"] = evidence
             return result
         }
-        guard tracking == "normal" else { return unavailable("Auto size needs normal AR tracking; choose a tag width in Settings.") }
-        guard depth.centerConfidence == 2, let lidarZ = depth.centerDepthMeters, lidarZ.isFinite,
-              lidarZ > 0, lidarZ <= settings.maxDistanceMeters else {
-            return unavailable("Auto size needs high-confidence LiDAR at the tag center; choose a tag width in Settings.")
+        var input = AFSCSizeInput()
+        input.automatic = 1
+        input.tracking_usable = tracking == "normal" ? 1 : 0
+        let pose = detection["pose"] as? [String: Any] ?? [:]
+        input.reference_edge_m = number(pose["tagSizeMeters"]) ?? 0
+        input.pose = corePoseObservation(detection)
+        input.depth = coreDepthObservation(depth: depth.centerDepthMeters, confidence: depth.centerConfidence.map(Double.init))
+        input.settings = coreMeasurementSettings(settings)
+        let standards = TagFieldCatalog.autoStandards.map {
+            AFSCSizeStandard(edge_m: $0.edge, relative_tolerance: $0.tolerance)
         }
-        guard var pose = detection["pose"] as? [String: Any],
-              let translation = numbers(pose["translation"], count: 3), translation[2] > 0,
-              let referenceWidth = number(pose["tagSizeMeters"]), referenceWidth > 0,
-              pose["ambiguous"] as? Bool == false,
-              let rms = number(pose["reprojectionRMSEPixels"]), rms >= 0, rms <= settings.maxReprojectionErrorPixels,
-              let angle = number(pose["planeAngleDegrees"]), angle >= 0, angle <= settings.maxPlaneAngleDegrees,
-              let margin = number(detection["decisionMargin"]), margin > 0,
-              number(detection["hamming"]) == 0 else {
-            return unavailable("Auto size needs a reliable, unambiguous tag pose; choose a tag width in Settings.")
+        let resolution = standards.withUnsafeBufferPointer { buffer -> AFSCSizeResolution in
+            input.standards = buffer.baseAddress; input.standard_count = buffer.count
+            return afsc_field_resolve_size(&input)
         }
-        let estimate = referenceWidth * lidarZ / translation[2]
-        guard estimate.isFinite, estimate > 0 else { return unavailable("Physical tag width could not be estimated.") }
-        evidence["estimatedEdgeMeters"] = estimate
-        evidence["referenceTagSizeMeters"] = referenceWidth
-        // FTC season widths; 6.5 inches is also used by FTC DECODE, so it is shared.
-        // Six-inch FTC sample prints need a separate candidate. Tighten the two
-        // nearby large sizes so a 6-inch print cannot silently become 6.5 inches.
-        let standards: [(Double, String, Double)] = [(0.0508, "FTC 2 in", 0.10), (0.08255, "FTC BIOBUZZ 3.25 in", 0.10),
-            (0.1016, "FTC 4 in", 0.10), (0.127, "FTC 5 in", 0.10),
-            (0.1524, "FTC sample 6 in", 0.03), (0.1651, "FRC / FTC 6.5 in", 0.03)]
-        let matches = standards.filter { abs(estimate - $0.0) / $0.0 <= $0.2 + 1e-12 }
-        guard matches.count == 1, let (width, label, tolerance) = matches.first else {
-            return unavailable("Tag width does not uniquely match a standard size; enter or measure it in Settings.")
+        if let estimate = coreValue(resolution.estimated_edge_m) {
+            evidence["estimatedEdgeMeters"] = estimate
+            evidence["referenceTagSizeMeters"] = input.reference_edge_m
         }
-        // A uniform object scale leaves rotation, pixel residuals, pose-error ratio,
-        // and ambiguity unchanged. All metric pose fields must use the same scale.
-        guard let scaled = rescaledPose(pose, width: width, source: "sceneDepth-standard-match"),
-              let range = number(scaled["rangeMeters"]), range <= settings.maxDistanceMeters else {
+        guard resolution.selected != 0, let width = coreValue(resolution.edge_m),
+              let tolerance = coreValue(resolution.relative_tolerance),
+              TagFieldCatalog.autoStandards.indices.contains(Int(resolution.standard_index)) else {
+            switch resolution.reason {
+            case AFSC_SIZE_TRACKING_UNAVAILABLE:
+                return unavailable("Auto size needs normal AR tracking; choose a tag width in Settings.")
+            case AFSC_SIZE_DEPTH_UNAVAILABLE:
+                return unavailable("Auto size needs high-confidence LiDAR at the tag center; choose a tag width in Settings.")
+            case AFSC_SIZE_POSE_UNAVAILABLE:
+                return unavailable("Auto size needs a reliable, unambiguous tag pose; choose a tag width in Settings.")
+            case AFSC_SIZE_NO_UNIQUE_MATCH:
+                return unavailable("Tag width does not uniquely match a standard size; enter or measure it in Settings.")
+            case AFSC_SIZE_TOO_FAR:
+                return unavailable("Tag range exceeds the configured maximum for Auto size.")
+            default:
+                return unavailable("Physical tag width could not be estimated.")
+            }
+        }
+        guard let scaled = rescaledPose(pose, width: width, source: "sceneDepth-standard-match") else {
             return unavailable("Tag range exceeds the configured maximum for Auto size.")
         }
-        pose = scaled
-        result["pose"] = pose
-        evidence["status"] = "selected"; evidence["tagSizeMeters"] = width; evidence["label"] = label
+        result["pose"] = scaled
+        evidence["status"] = "selected"; evidence["tagSizeMeters"] = width
+        evidence["label"] = TagFieldCatalog.autoStandards[Int(resolution.standard_index)].label
         evidence["relativeTolerance"] = tolerance
         evidence["reason"] = "Nominal width inferred from LiDAR; competition identity is not encoded by the tag."
         result["tagSizeResolution"] = evidence
@@ -294,21 +323,23 @@ enum TagDebugMath {
     }
 
     private static func rescaledPose(_ pose: [String: Any], width: Double, source: String) -> [String: Any]? {
-        guard let reference = number(pose["tagSizeMeters"]), reference > 0, width.isFinite, width > 0,
-              let translation = numbers(pose["translation"], count: 3), translation[2] > 0 else { return nil }
-        let scale = width / reference
-        let scaledTranslation = translation.map { $0 * scale }
-        let range = hypot(hypot(scaledTranslation[0], scaledTranslation[1]), scaledTranslation[2])
-        guard scaledTranslation.allSatisfy(\.isFinite), range.isFinite else { return nil }
+        guard let reference = number(pose["tagSizeMeters"]), reference > 0,
+              let translation = numbers(pose["translation"], count: 3) else { return nil }
+        var input = AFSCMetricPose()
+        input.translation = coreVector(translation); input.reference_edge_m = reference
+        input.pose_error_m2 = coreOptional(number(pose["poseError"]))
+        input.second_pose_error_m2 = coreOptional(number(pose["secondPoseError"]))
+        input.candidate_translation_separation_m = coreOptional(number(pose["candidateTranslationSeparationMeters"]))
+        let scaled = afsc_field_rescale_metric_pose(&input, width)
+        guard scaled.available != 0 else { return nil }
         var result = pose
-        result["translation"] = scaledTranslation; result["rangeMeters"] = range
-        for key in ["poseError", "secondPoseError"] {
-            if let value = number(pose[key]) { result[key] = value * scale * scale }
+        result["translation"] = [scaled.translation.x, scaled.translation.y, scaled.translation.z]
+        result["rangeMeters"] = scaled.range_m
+        for (key, value) in [("poseError", scaled.pose_error_m2), ("secondPoseError", scaled.second_pose_error_m2),
+                             ("candidateTranslationSeparationMeters", scaled.candidate_translation_separation_m)] {
+            if let metric = coreValue(value) { result[key] = metric }
         }
-        if let separation = number(pose["candidateTranslationSeparationMeters"]) {
-            result["candidateTranslationSeparationMeters"] = separation * scale
-        }
-        result["tagSizeMeters"] = width; result["tagSizeSource"] = source
+        result["tagSizeMeters"] = scaled.edge_m; result["tagSizeSource"] = source
         return result
     }
 

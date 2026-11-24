@@ -48,6 +48,16 @@ final class RecordingPlaybackTimeline {
         let time: Double, ordinal: Int
         let row: [String: Any]
     }
+    private struct ExpectedFieldTag {
+        let id: Int
+        let size: Double
+        let fieldFromTag: simd_float4x4
+    }
+    private struct FieldRegistration {
+        let worldFromField: simd_float4x4
+        let segment: String
+        let time: Double
+    }
     private struct State {
         var segment = ""
         var floor: [String: Any]?
@@ -57,12 +67,18 @@ final class RecordingPlaybackTimeline {
         var tracking: String?
         var trackingTime = -Double.infinity
         var detectionBoundary = -Double.infinity
+        var fieldPackageID: String?
+        var fieldPackageHash: String?
+        var fieldRegistration: FieldRegistration?
+        var fieldMessage: String?
     }
     private let origin: Double
     private let frames: [Frame]
     private let mutations: [Event]
     private let checkpoints: [State]
     private let detections: [String: [Event]]
+    private let expectedFieldTags: [ExpectedFieldTag]
+    private let fieldFrameBoundaries: [Double]
     private static let stride = 64
     private static let metadataLimit = 16 * 1024 * 1024
     private static let recordLimit = 100_000
@@ -86,6 +102,18 @@ final class RecordingPlaybackTimeline {
                   number(expected["bytes"]) == Double(data.count), let sha = expected["sha256"] as? String,
                   sha == hash(data) else { throw TimelineError.invalid("\(name) does not match the saved capture") }
         }
+        if let field = manifest["fieldDefinition"], !(field is NSNull) {
+            guard let fieldDescriptor = field as? [String: Any], let expectedHash = fieldDescriptor["packageSha256"] as? String else {
+                throw TimelineError.invalid("invalid field-definition integrity metadata")
+            }
+            let name = "field-definition.yaml", data = try readMetadata(name, directory: descriptor)
+            let matches = inventory.filter { $0["path"] as? String == name }
+            guard matches.count == 1, let entry = matches.first,
+                  number(entry["bytes"]) == Double(data.count), entry["sha256"] as? String == hash(data),
+                  expectedHash == hash(data) else {
+                throw TimelineError.invalid("field-definition.yaml does not match the saved field package")
+            }
+        }
         return try Self.init(manifest: manifest, frames: records(frameData), events: records(eventData))
     }
 
@@ -95,6 +123,7 @@ final class RecordingPlaybackTimeline {
             throw TimelineError.invalid("missing finalized capture clock or too many records")
         }
         self.origin = origin
+        self.expectedFieldTags = try Self.fieldTags(manifest)
         let accepted: [Frame] = frames.enumerated().compactMap { ordinal, row in
             guard Self.flag(row["videoAppended"]) == true,
                   let time = Self.number(row["videoPTSSeconds"]), time >= 0,
@@ -106,10 +135,16 @@ final class RecordingPlaybackTimeline {
         }.sorted { $0.time == $1.time ? $0.ordinal < $1.ordinal : $0.time < $1.time }
         guard !accepted.isEmpty else { throw TimelineError.invalid("no indexed video frames") }
         self.frames = accepted
+        var boundary = -Double.infinity
+        self.fieldFrameBoundaries = accepted.map { frame in
+            if frame.tracking != "normal" { boundary = frame.time }
+            return boundary
+        }
         var mutations = [Event](), groups = [String: [Event]](), previousTime = -Double.infinity
         let names: Set<String> = ["segment", "measurementsAtStart", "floorConfirmed", "floorReferenceChanged",
             "measurementCompleted", "measurementPoint", "measurementsCleared", "measurementsInvalidated",
-            "trackingChanged", "debugSettingsAtStart", "settingsChanged"]
+            "trackingChanged", "debugSettingsAtStart", "settingsChanged", "fieldWalkStarted",
+            "fieldRegistrationChanged", "fieldRegistrationInvalidated", "fieldAnchorWarning"]
         for (ordinal, row) in events.enumerated() {
             guard let type = row["type"] as? String, let timestamp = Self.number(row["timestamp"]) else { continue }
             let time = timestamp - origin
@@ -129,6 +164,10 @@ final class RecordingPlaybackTimeline {
         self.detections = groups
         var state = State()
         state.segment = accepted[0].segment
+        if let field = manifest["fieldDefinition"] as? [String: Any] {
+            state.fieldPackageID = Self.identifier(field["id"])
+            state.fieldPackageHash = field["packageSha256"] as? String
+        }
         state.settings = (manifest["aprilTagConfiguration"] as? [String: Any])?["debugSettingsAtStart"] as? [String: Any] ?? [:]
         var checkpoints = [state]
         for (index, event) in mutations.enumerated() {
@@ -157,6 +196,25 @@ final class RecordingPlaybackTimeline {
         let worldVisible = sameSegment && tracking == "normal" && projection != nil
         let imperial = Self.flag(state.settings["showImperialHeight"]) ?? true
         if worldVisible, let camera = projection {
+            if let registration = state.fieldRegistration, registration.segment == frame.segment,
+               registration.time > fieldFrameBoundaries[frameCount - 1] + 1e-7 {
+                for tag in expectedFieldTags {
+                    let worldFromTag = registration.worldFromField * tag.fieldFromTag
+                    let half = Float(tag.size / 2)
+                    let corners: [SIMD4<Float>] = [SIMD4(-half, half, 0, 1), SIMD4(half, half, 0, 1),
+                                                    SIMD4(half, -half, 0, 1), SIMD4(-half, -half, 0, 1)]
+                    let world = corners.map { local -> SIMD3<Float> in
+                        let point = worldFromTag * local
+                        return SIMD3(point.x, point.y, point.z)
+                    }
+                    guard world.allSatisfy(Self.finite) else { continue }
+                    let projected = camera.polygon(world)
+                    if projected.count >= 3 {
+                        polygons.append(.init(id: "field.expected.\(tag.id)", points: projected,
+                                              label: "Expected #\(tag.id)", style: "fieldExpected"))
+                    }
+                }
+            }
             if let floor = state.floor, Self.identifier(floor["segmentId"]) == frame.segment,
                let boundary = Self.points(floor["boundaryWorldMeters"]), boundary.count >= 3 {
                 let projected = camera.polygon(boundary)
@@ -234,7 +292,7 @@ final class RecordingPlaybackTimeline {
         if !sameSegment { message = "Recorded tracking changed; spatial overlays are hidden." }
         else if tracking != "normal" { message = "Recorded tracking is limited; spatial overlays are hidden." }
         else if projection == nil { message = "Recorded camera geometry is unavailable." }
-        else { message = nil }
+        else { message = state.fieldMessage }
         return RecordingPlaybackSnapshot(imageSize: frame.size, frameID: frame.id, segmentID: frame.segment,
                                          tags: tags, lines: lines, polygons: polygons, message: message)
     }
@@ -246,12 +304,14 @@ final class RecordingPlaybackTimeline {
             if let segment, segment != state.segment {
                 state.segment = segment; state.floor = nil; state.measurements = []; state.pending = []
                 state.tracking = nil; state.trackingTime = -.infinity
+                state.fieldRegistration = nil; state.fieldMessage = nil
                 state.detectionBoundary = max(state.detectionBoundary, event.time)
             }
             return
         }
         if type == "measurementsInvalidated" {
             state.floor = nil; state.measurements = []; state.pending = []
+            state.fieldRegistration = nil
             state.detectionBoundary = max(state.detectionBoundary, event.time)
             if let next = identifier(row["newSegmentId"]) { state.segment = next }
             return
@@ -260,16 +320,41 @@ final class RecordingPlaybackTimeline {
             if let settings = row["settings"] as? [String: Any] { state.settings = settings }
             if type == "settingsChanged" {
                 state.pending = []; state.detectionBoundary = max(state.detectionBoundary, event.time)
+                state.fieldRegistration = nil
             }
             return
         }
         if let segment, segment != state.segment { return }
         switch type {
+        case "fieldWalkStarted", "fieldRegistrationChanged", "fieldRegistrationInvalidated", "fieldAnchorWarning":
+            guard state.fieldPackageID != nil else { return }
+            guard identifier(row["packageId"]) == state.fieldPackageID,
+                  identifier(row["packageSha256"]) == state.fieldPackageHash else {
+                state.fieldRegistration = nil
+                state.fieldMessage = "Recorded field identity changed; expected placements are hidden."
+                return
+            }
+            let field = row["field"] as? [String: Any] ?? [:]
+            state.fieldMessage = field["reason"] as? String ?? row["reason"] as? String
+            if type == "fieldAnchorWarning" { return } // Warnings never rekey field geometry.
+            if type == "fieldRegistrationInvalidated" {
+                state.fieldRegistration = nil
+                return
+            }
+            guard let alignment = field["alignment"] as? String,
+                  ["provisional", "checked", "degraded", "unverified"].contains(alignment),
+                  let sourceSegment = identifier(field["segmentId"]), sourceSegment == state.segment,
+                  let transform = rigidMatrix(field["worldFromFieldColumnMajor"]) else {
+                state.fieldRegistration = nil
+                return
+            }
+            state.fieldRegistration = FieldRegistration(worldFromField: transform, segment: sourceSegment, time: event.time)
         case "measurementsAtStart":
             state.floor = row["floor"] as? [String: Any]
             state.measurements = Array((row["measurements"] as? [[String: Any]] ?? []).suffix(50)); state.pending = []
         case "floorConfirmed", "floorReferenceChanged":
             state.floor = row["floor"] as? [String: Any]; state.pending = []
+            state.fieldRegistration = nil
             state.detectionBoundary = max(state.detectionBoundary, event.time)
         case "measurementCompleted":
             guard let measurement = row["measurement"] as? [String: Any], let id = identifier(measurement["id"]) else { return }
@@ -285,10 +370,53 @@ final class RecordingPlaybackTimeline {
         case "trackingChanged":
             state.tracking = row["tracking"] as? String; state.trackingTime = event.time
             if state.tracking != "normal" {
+                state.fieldRegistration = nil
                 state.pending = []; state.detectionBoundary = max(state.detectionBoundary, event.time)
             }
         default: break
         }
+    }
+
+    /// The recording pins raw detector-tag transforms. No current catalog or live
+    /// setting may reinterpret a historical field package during playback.
+    private static func fieldTags(_ manifest: [String: Any]) throws -> [ExpectedFieldTag] {
+        guard let raw = manifest["fieldDefinition"], !(raw is NSNull) else { return [] }
+        guard let descriptor = raw as? [String: Any], let id = identifier(descriptor["id"]),
+              let sha = descriptor["packageSha256"] as? String, sha.count == 64,
+              sha.allSatisfy({ "0123456789abcdef".contains($0) }),
+              let definition = descriptor["definition"] as? [String: Any],
+              identifier(definition["id"]) == id,
+              let rows = definition["tags"] as? [[String: Any]], rows.count <= 256 else {
+            throw TimelineError.invalid("invalid pinned field definition")
+        }
+        var result = [ExpectedFieldTag](), identities = Set<Int>()
+        for row in rows {
+            guard let value = number(row["id"]), value.rounded() == value, (0...65535).contains(value),
+                  row["family"] as? String == "tag36h11", let size = number(row["poseSizeMeters"]),
+                  size > 0, size <= 5, let placement = row["placement"] as? String,
+                  ["fixedField", "movable", "clusterMember", "unknown"].contains(placement),
+                  identities.insert(Int(value)).inserted else { throw TimelineError.invalid("invalid recorded field tag") }
+            guard let rawTransform = row["fieldFromTagColumnMajor"], !(rawTransform is NSNull) else { continue }
+            guard placement == "fixedField", let transform = rigidMatrix(rawTransform) else {
+                throw TimelineError.invalid("invalid fixed field-tag placement")
+            }
+            result.append(ExpectedFieldTag(id: Int(value), size: size, fieldFromTag: transform))
+        }
+        return result
+    }
+    private static func rigidMatrix(_ raw: Any?) -> simd_float4x4? {
+        guard let values = numbers(raw, count: 16) else { return nil }
+        var result = matrix_identity_float4x4
+        for column in 0..<4 { for row in 0..<4 { result[column][row] = Float(values[column*4+row]) } }
+        guard (0..<4).allSatisfy({ c in (0..<4).allSatisfy { result[c][$0].isFinite } }),
+              abs(result[0][3]) < 1e-5, abs(result[1][3]) < 1e-5, abs(result[2][3]) < 1e-5,
+              abs(result[3][3]-1) < 1e-5 else { return nil }
+        let axes = (0..<3).map { c in SIMD3(result[c].x, result[c].y, result[c].z) }
+        guard axes.allSatisfy({ abs(simd_length($0)-1) < 1e-4 }),
+              abs(simd_dot(axes[0],axes[1])) < 1e-4, abs(simd_dot(axes[0],axes[2])) < 1e-4,
+              abs(simd_dot(axes[1],axes[2])) < 1e-4,
+              simd_dot(simd_cross(axes[0],axes[1]),axes[2]) > 0.999 else { return nil }
+        return result
     }
 
     private static func usablePose(_ detection: [String: Any]) -> [String: Any]? {

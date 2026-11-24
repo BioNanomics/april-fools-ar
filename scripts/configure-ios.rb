@@ -22,6 +22,12 @@ stamp_phase.input_paths = ['$(SRCROOT)/../scripts/stamp-build-info.sh', '$(SRCRO
                            '$(SRCROOT)/../LICENSE', '$(SRCROOT)/../THIRD_PARTY_NOTICES.md']
 stamp_phase.output_paths = ['$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildInfo.json']
 stamp_phase.always_out_of_date = '1'
+field_phase = target.shell_script_build_phases.find { |phase| phase.name == 'Bundle field definitions' }
+field_phase ||= target.new_shell_script_build_phase('Bundle field definitions')
+field_phase.shell_script = "set -e\nruby \"$SRCROOT/../scripts/field-definitions/generate_sizes.rb\" --check\nruby \"$SRCROOT/../scripts/field-definitions/field_tool.rb\" bundle --output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FieldDefinitions\""
+field_phase.input_paths = ['$(SRCROOT)/../fields/catalog.yaml', '$(SRCROOT)/../fields/size-standards.yaml', '$(SRCROOT)/../scripts/field-definitions/field_tool.rb']
+field_phase.output_paths = ['$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FieldDefinitions/catalog.json']
+field_phase.always_out_of_date = '1'
 notes = project.main_group.files.find { |file| file.path == '../release-notes.json' } || project.main_group.new_file('../release-notes.json')
 target.resources_build_phase.add_file_reference(notes, true)
 native = project.main_group.groups.find { |group| group.name == 'Native' }

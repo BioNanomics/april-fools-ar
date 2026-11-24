@@ -54,6 +54,10 @@ The user explicitly authorized this implementation on November 22, 2026, includi
 
 Implementation evidence and remaining limits: [SC validation](docs/validation/SC-shared-core.md). No new Kalman filter or sensor-fusion policy is part of this extraction.
 
+## Authorized field-definition delivery — FD.1–FD.4
+
+On November 24, 2026 the user explicitly authorized development through FD.4, followed by a signed phone installation for their testing. This is a bounded exception to the remaining M0 review sequencing, like the shared-core extraction above; it does not mark the M0 field-data/review or FD.6 physical-accuracy gates complete. The [field-definition checklist](field-definition-plan.md) and its FD.1–FD.4 validation records track the implemented YAML catalog, portable calculations, saved-walk inventory, first-anchor checks and recorded/live AR overlays. FD.5 robot consumers and FD.7 future-season/visualization expansion remain deferred.
+
 ## Later roadmap awaiting the Milestone 0 review
 
 The remaining sections are retained for reference only. Their task IDs, order, scope, dependencies, and estimates are provisional and will be revised together after M0.10/M0.G. They are not permission to begin a synthetic-test phase, VisionCamera investigation, or other later milestone before the real-phone/field-data gate is complete.

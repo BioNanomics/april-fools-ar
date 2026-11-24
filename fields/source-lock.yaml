@@ -1,0 +1,16 @@
+"schemaVersion": 1
+"files":
+  -
+    "file": "2026-rebuilt-welded.json"
+    "sha256": "315f71b1cfd7291a656f99fb4a8762d4fe4a31019a9784ec674119c0ea727f5a"
+    "url": "https://raw.githubusercontent.com/wpilibsuite/allwpilib/v2026.2.2/apriltag/src/main/native/resources/edu/wpi/first/apriltag/2026-rebuilt-welded.json"
+  -
+    "file": "2026-rebuilt-andymark.json"
+    "sha256": "9b44d503e056e8303b6cee7ec65b0cf770cbea2e475516c03b95f8fcfdee49ca"
+    "url": "https://raw.githubusercontent.com/wpilibsuite/allwpilib/v2026.2.2/apriltag/src/main/native/resources/edu/wpi/first/apriltag/2026-rebuilt-andymark.json"
+  -
+    "file": "AprilTagGameDatabase.java"
+    "sha256": "ec457c7536f4f69855c0f51d2a48297428f3f103b11c89dd3b893c647d5a568f"
+    "url": "https://repo.maven.apache.org/maven2/org/firstinspires/ftc/Vision/12.0.0/Vision-12.0.0-sources.jar"
+"ftcArtifactSha256": "756294f8307da88b85a73c5a804dbc20f65dd60af97534ed3dea8f38e528aba8"
+"ftcExtraction": "unzip -p Vision-12.0.0-sources.jar org/firstinspires/ftc/vision/apriltag/AprilTagGameDatabase.java"

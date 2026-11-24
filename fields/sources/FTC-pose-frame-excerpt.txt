@@ -1,0 +1,63 @@
+    private AprilTagPoseRaw doClusterSolve(TagClusterNotebook n, PoseSolver solver)
+    {
+        final int CORNERS_PER_TAG = 4;
+
+        Point[] imagePts = new Point[n.detections.size() * CORNERS_PER_TAG];
+        Point3[] idealProjectionPts = new Point3[imagePts.length];
+
+        for (int tag = 0; tag < n.detections.size(); tag++)
+        {
+            PreliminaryTagDetection det = n.detections.get(tag);
+            AprilTagClusterMemberMetadata metadata = n.cluster.getMemberMetadata(det.id);
+
+            double tagsize = outputUnitsLength.fromUnit(n.cluster.distanceUnit, metadata.tagsize);
+            double offsetX = outputUnitsLength.fromUnit(n.cluster.distanceUnit, metadata.positionInClusterPlane.get(0));
+            double offsetY = outputUnitsLength.fromUnit(n.cluster.distanceUnit, metadata.positionInClusterPlane.get(1));
+            double offsetZ = outputUnitsLength.fromUnit(n.cluster.distanceUnit, metadata.positionInClusterPlane.get(2));
+
+            imagePts[tag * CORNERS_PER_TAG    ] = det.corners[0];
+            imagePts[tag * CORNERS_PER_TAG + 1] = det.corners[1];
+            imagePts[tag * CORNERS_PER_TAG + 2] = det.corners[2];
+            imagePts[tag * CORNERS_PER_TAG + 3] = det.corners[3];
+
+            idealProjectionPts[tag * CORNERS_PER_TAG    ] = new Point3(-tagsize/2 + offsetX,  tagsize/2 + offsetY, offsetZ);
+            idealProjectionPts[tag * CORNERS_PER_TAG + 1] = new Point3( tagsize/2 + offsetX,  tagsize/2 + offsetY, offsetZ);
+            idealProjectionPts[tag * CORNERS_PER_TAG + 2] = new Point3( tagsize/2 + offsetX, -tagsize/2 + offsetY, offsetZ);
+            idealProjectionPts[tag * CORNERS_PER_TAG + 3] = new Point3(-tagsize/2 + offsetX, -tagsize/2 + offsetY, offsetZ);
+        }
+
+        Pose opencvPose = poseFromNGrt4Pts(imagePts, idealProjectionPts, cameraMatrix, solver.code);
+
+        // Build rotation matrix
+        Mat R = new Mat(3, 3, CvType.CV_32F);
+        Calib3d.Rodrigues(opencvPose.rvec, R);
+        float[] tmp2 = new float[9];
+    private Pose3D computeRobotPose(AprilTagPoseRaw rawPose, VectorF fieldPosition, Quaternion fieldOrientation, long acquisitionTime)
+    {
+        // Compute transformation matrix of tag pose in field reference frame
+        float tagInFieldX = fieldPosition.get(0);
+        float tagInFieldY = fieldPosition.get(1);
+        float tagInFieldZ = fieldPosition.get(2);
+        OpenGLMatrix tagInFieldR = new OpenGLMatrix(fieldOrientation.toMatrix());
+        OpenGLMatrix tagInFieldFrame = OpenGLMatrix.identityMatrix()
+                .translated(tagInFieldX, tagInFieldY, tagInFieldZ)
+                .multiplied(tagInFieldR);
+
+        // Compute transformation matrix of camera pose in tag reference frame
+        float tagInCameraX = (float) DistanceUnit.INCH.fromUnit(outputUnitsLength, rawPose.x);
+        float tagInCameraY = (float) DistanceUnit.INCH.fromUnit(outputUnitsLength, rawPose.y);
+        float tagInCameraZ = (float) DistanceUnit.INCH.fromUnit(outputUnitsLength, rawPose.z);
+        OpenGLMatrix tagInCameraR = new OpenGLMatrix((rawPose.R));
+        OpenGLMatrix cameraInTagFrame = OpenGLMatrix.identityMatrix()
+                .translated(tagInCameraX, tagInCameraY, tagInCameraZ)
+                .multiplied(tagInCameraR)
+                .inverted();
+
+        // Compute transformation matrix of robot pose in field frame
+        OpenGLMatrix robotInFieldFrame =
+                tagInFieldFrame
+                .multiplied(cameraInTagFrame)
+                .multiplied(robotInCameraFrame);
+
+        // Extract robot location
+        VectorF robotInFieldTranslation = robotInFieldFrame.getTranslation();

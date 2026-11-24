@@ -1,0 +1,86 @@
+"clusters":
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "red-scoring"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 30
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 31
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 32
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 33
+    "name": "RED SCORING"
+    "placement": "movable"
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "red-audience"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 34
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 35
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 36
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 37
+    "name": "RED AUDIENCE"
+    "placement": "movable"
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "blue-audience"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 38
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 39
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 40
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 41
+    "name": "BLUE AUDIENCE"
+    "placement": "movable"
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "blue-scoring"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 42
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 43
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 44
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 45
+    "name": "BLUE SCORING"
+    "placement": "movable"
+"schemaVersion": 1

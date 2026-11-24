@@ -1,0 +1,75 @@
+"schemaVersion": 1
+"tags":
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.7493
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-0.8095290402856494,0.5870798352304355,0.0,0.0,0.0,0.0,-1.0,0.0,-0.5870798352304355,-0.8095290402856494,0.0,0.0,-1.48266658,-1.4133194999999998,0.7493,1.0]
+    "fieldPose":
+      "quaternion": [-0.2182148939201622,0.2182148939201622,0.6725936812603969,-0.6725936812603969]
+      "translation": [-1.48266658,-1.4133194999999998,0.7493]
+    "id": 20
+    "localizationEligible": true
+    "name": "BlueTarget"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.2182149,-0.2182149,-0.6725937,0.6725937]
+      "translation": [-58.3727,-55.6425,29.5]
+  -
+    "clusterId": null
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 21
+    "localizationEligible": false
+    "name": "Obelisk_GPP"
+    "placement": "movable"
+    "poseSizeMeters": 0.1651
+    "sourcePose": null
+  -
+    "clusterId": null
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 22
+    "localizationEligible": false
+    "name": "Obelisk_PGP"
+    "placement": "movable"
+    "poseSizeMeters": 0.1651
+    "sourcePose": null
+  -
+    "clusterId": null
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 23
+    "localizationEligible": false
+    "name": "Obelisk_PPG"
+    "placement": "movable"
+    "poseSizeMeters": 0.1651
+    "sourcePose": null
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.7493
+    "expectedTiltRadians": 4.163336342344337e-17
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.8095290402856494,0.5870798352304355,0.0,0.0,0.0,4.163336342344337e-17,-1.0,0.0,-0.5870798352304355,0.8095290402856494,4.163336342344337e-17,0.0,-1.48266658,1.4133194999999998,0.7493,1.0]
+    "fieldPose":
+      "quaternion": [0.6725936812603969,-0.6725936812603969,-0.2182148939201622,0.2182148939201622]
+      "translation": [-1.48266658,1.4133194999999998,0.7493]
+    "id": 24
+    "localizationEligible": true
+    "name": "RedTarget"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.6725937,-0.6725937,-0.2182149,0.2182149]
+      "translation": [-58.3727,55.6425,29.5]

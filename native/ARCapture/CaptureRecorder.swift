@@ -14,6 +14,7 @@ final class CaptureRecorder {
     let folder: URL
     private let initialDebugSettings: TagDebugSettings
     private let initialTagSizeEvidence: [String: Any]?
+    private let initialFieldDefinition: FieldDefinition?
     private let initialApplication: [String: Any]
     private let queue = DispatchQueue(label: "AprilFoolsAR.capture.disk", qos: .utility)
     private let slots = DispatchSemaphore(value: 3)
@@ -51,14 +52,16 @@ final class CaptureRecorder {
             .appendingPathComponent("AprilFoolsAR/sessions", isDirectory: true)
     }
 
-    init(name: String, debugSettings: TagDebugSettings = .load(), application: [String: Any] = AppBuildInfo.application) throws {
+    init(name: String, debugSettings: TagDebugSettings = .load(), application: [String: Any] = AppBuildInfo.application, fieldDefinition: FieldDefinition? = nil) throws {
         self.name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160))
         initialDebugSettings = debugSettings
         initialTagSizeEvidence = debugSettings.matchingTagSizeEvidence()
+        initialFieldDefinition = fieldDefinition
         initialApplication = application
         folder = Self.root.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("frames"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("depth"), withIntermediateDirectories: true)
+        if let fieldDefinition { try Data(fieldDefinition.yaml.utf8).write(to: folder.appendingPathComponent("field-definition.yaml"), options: .atomic) }
         let framesURL = folder.appendingPathComponent("frames.jsonl")
         let eventsURL = folder.appendingPathComponent("events.jsonl")
         FileManager.default.createFile(atPath: framesURL.path, contents: nil)
@@ -67,6 +70,13 @@ final class CaptureRecorder {
         eventsFile = try FileHandle(forWritingTo: eventsURL)
         try writeManifest(finalized: false)
         writeEvent(["type": "recordingStarted", "wallTime": Self.iso(createdAt), "application": initialApplication])
+    }
+
+    func writeFieldSummary(_ summary: [String: Any]) {
+        queue.async { [self] in
+            do { try Data(FieldTextCodec.yaml(summary).utf8).write(to: folder.appendingPathComponent("field-walk-summary.yaml"), options: .atomic) }
+            catch { recordError("Field summary: " + error.localizedDescription) }
+        }
     }
 
     func append(frame: ARFrame, metadata: [String: Any]) -> Bool {
@@ -294,6 +304,10 @@ final class CaptureRecorder {
     private func writeManifest(finalized: Bool) throws {
         var manifest = sessionRecord()
         manifest["schemaVersion"] = 1
+        if let field = initialFieldDefinition {
+            manifest["fieldDefinition"] = ["id": field.id, "packageSha256": field.hash, "path": "field-definition.yaml", "definition": field.raw]
+            manifest["fieldWalkSummaryPath"] = "field-walk-summary.yaml"
+        }
         manifest["application"] = initialApplication
         manifest["calculationCore"] = SpatialCoreInfo.dictionary(application: initialApplication)
         manifest["device"] = ["model": UIDevice.current.model, "hardwareIdentifier": Self.hardwareIdentifier(), "systemVersion": UIDevice.current.systemVersion]

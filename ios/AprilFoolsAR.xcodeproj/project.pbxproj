@@ -35,6 +35,7 @@
 		493E2B21D726B34BB0493700 /* image_u8x4.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E3A4C79448974334F594FA9 /* image_u8x4.c */; };
 		49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */; };
 		4F14051DCE23E152A6ED7597 /* LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = EA83DAE678B40D531BAF2FFD /* LICENSE.md */; };
+		50B4567814FDA2B8A4C537AE /* FieldTextCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98EFF00BBB8C0C29F0ED6EA4 /* FieldTextCodec.swift */; };
 		5C2DF5D875E29B27A0A4A838 /* SessionMP4Writer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA622697B4AA163505CE0A1 /* SessionMP4Writer.swift */; };
 		5DDFA3666B7B838AA2F47CF0 /* ArchiveModuleBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E6DDB04829654A3469E2AA17 /* ArchiveModuleBridge.m */; };
 		5F59B54D8B242E409BEC4A6E /* ARCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */; };
@@ -56,12 +57,14 @@
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		82775D5EF40CCB131F9FAC96 /* TagDebugMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */; };
 		86C00913574A035160C49D75 /* matd.c in Sources */ = {isa = PBXBuildFile; fileRef = 78764DD7E780CABC9B355826 /* matd.c */; };
+		A1F63622C42A35C4EA9D66F2 /* fields.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B39EEE6DE4D81A82F329537E /* fields.cpp */; };
 		A84767D4F2E0B14D74949C83 /* measurements.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 48700406B409929D15EF2E3F /* measurements.cpp */; };
 		AC9E75D7FF47342FF702995C /* zmaxheap.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E44803935F6579A749699F8 /* zmaxheap.c */; };
 		AFB7866EAFC1D0922D8652A6 /* getopt.c in Sources */ = {isa = PBXBuildFile; fileRef = 5DF00A1907A26462253BD5F7 /* getopt.c */; };
 		B00D8DF342D0024D8567A150 /* unionfind.c in Sources */ = {isa = PBXBuildFile; fileRef = 7F8DD804A45F21BC7D954794 /* unionfind.c */; };
 		B29F69AB46FBD16EFC019A73 /* image_u8.c in Sources */ = {isa = PBXBuildFile; fileRef = F65F24E17F0D91A4485AC78B /* image_u8.c */; };
 		BB27464AB65284AF3500CFE1 /* pthreads_cross.c in Sources */ = {isa = PBXBuildFile; fileRef = 2597B3319AD2D1C5517C152B /* pthreads_cross.c */; };
+		C09C4007BEBB825C250E7D95 /* FieldDefinitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0EA1229B2B7E9A8C1A00B99 /* FieldDefinitions.swift */; };
 		CA9D8486E41D82AF33B6601A /* apriltag_pose.c in Sources */ = {isa = PBXBuildFile; fileRef = F8E33A9E46C7BB1561A197FD /* apriltag_pose.c */; };
 		CF00F5589ADEF5F3FD483A3B /* homography.c in Sources */ = {isa = PBXBuildFile; fileRef = 78CED63F155DCD2DD5BCCAC8 /* homography.c */; };
 		D1D2FA6D793879C11F03BF1F /* apriltag.c in Sources */ = {isa = PBXBuildFile; fileRef = E58DC96727684DC98AB58CE2 /* apriltag.c */; };
@@ -70,6 +73,7 @@
 		D67D403D684BB61E9B6F4FA1 /* pjpeg-idct.c in Sources */ = {isa = PBXBuildFile; fileRef = 65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */; };
 		DA27C35703607F1813578B2B /* pjpeg.c in Sources */ = {isa = PBXBuildFile; fileRef = D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */; };
 		DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */; };
+		DFE0A03165A7CBEEB0F72392 /* FieldOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C84E1B9B3EDD7BAD903A0D3 /* FieldOverlayView.swift */; };
 		E25CDE140876A1CCDA05B580 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = 9959BA1C7D343658916BEE71 /* NOTICE.md */; };
 		E3745BA9CBBD387DC7A94A7E /* release-notes.json in Resources */ = {isa = PBXBuildFile; fileRef = 3FD063604D0BCFCE34FDDB80 /* release-notes.json */; };
 		E5447352652A80E035CB8F29 /* workerpool.c in Sources */ = {isa = PBXBuildFile; fileRef = AF54B392AF6AF22FF9C87B16 /* workerpool.c */; };
@@ -124,9 +128,13 @@
 		86ABD46FF465A30DB753B623 /* TagCameraRanges.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagCameraRanges.swift; path = ARCapture/TagCameraRanges.swift; sourceTree = "<group>"; };
 		8B743D7F395310A75BDE0593 /* string_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = string_util.c; path = common/string_util.c; sourceTree = "<group>"; };
 		8BC5DD7F4573C54B2588BEBB /* TagDebugMath.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagDebugMath.swift; path = ARCapture/TagDebugMath.swift; sourceTree = "<group>"; };
+		8C84E1B9B3EDD7BAD903A0D3 /* FieldOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FieldOverlayView.swift; path = ARCapture/FieldOverlayView.swift; sourceTree = "<group>"; };
+		98EFF00BBB8C0C29F0ED6EA4 /* FieldTextCodec.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FieldTextCodec.swift; path = ARCapture/FieldTextCodec.swift; sourceTree = "<group>"; };
 		9959BA1C7D343658916BEE71 /* NOTICE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = NOTICE.md; sourceTree = "<group>"; };
+		A0EA1229B2B7E9A8C1A00B99 /* FieldDefinitions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FieldDefinitions.swift; path = ARCapture/FieldDefinitions.swift; sourceTree = "<group>"; };
 		A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FloorPlaneFit.swift; path = ARCapture/FloorPlaneFit.swift; sourceTree = "<group>"; };
 		AF54B392AF6AF22FF9C87B16 /* workerpool.c */ = {isa = PBXFileReference; includeInIndex = 1; name = workerpool.c; path = common/workerpool.c; sourceTree = "<group>"; };
+		B39EEE6DE4D81A82F329537E /* fields.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = fields.cpp; path = SpatialCore/src/fields.cpp; sourceTree = "<group>"; };
 		BC9AB4B7CE616FF1D8B634D3 /* SpatialMeasurementOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpatialMeasurementOverlayView.swift; path = ARCapture/SpatialMeasurementOverlayView.swift; sourceTree = "<group>"; };
 		BFE5AB4C89A6209CDF6E8F3E /* pam.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pam.c; path = common/pam.c; sourceTree = "<group>"; };
 		C163298A0F6DC8A250C20E13 /* time_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = time_util.c; path = common/time_util.c; sourceTree = "<group>"; };
@@ -227,6 +235,10 @@
 				2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */,
 				66981AB7881E49092B514059 /* RecordingPlaybackOverlayView.swift */,
 				CA37155F0B3202487D32839D /* RecordingPlaybackTimeline.swift */,
+				A0EA1229B2B7E9A8C1A00B99 /* FieldDefinitions.swift */,
+				8C84E1B9B3EDD7BAD903A0D3 /* FieldOverlayView.swift */,
+				98EFF00BBB8C0C29F0ED6EA4 /* FieldTextCodec.swift */,
+				B39EEE6DE4D81A82F329537E /* fields.cpp */,
 			);
 			name = Native;
 			path = ../native;
@@ -323,6 +335,7 @@
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
 				7FAFC1E0E9E1549DD5923002 /* Stamp app build metadata */,
+				0DBCB18EF24EC7F4B6AF6D99 /* Bundle field definitions */,
 			);
 			buildRules = (
 			);
@@ -416,6 +429,29 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-AprilFoolsAR/Pods-AprilFoolsAR-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		0DBCB18EF24EC7F4B6AF6D99 /* Bundle field definitions */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../fields/catalog.yaml",
+				"$(SRCROOT)/../fields/size-standards.yaml",
+				"$(SRCROOT)/../scripts/field-definitions/field_tool.rb",
+			);
+			name = "Bundle field definitions";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FieldDefinitions/catalog.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nruby \"$SRCROOT/../scripts/field-definitions/generate_sizes.rb\" --check\nruby \"$SRCROOT/../scripts/field-definitions/field_tool.rb\" bundle --output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/FieldDefinitions\"";
 		};
 		7FAFC1E0E9E1549DD5923002 /* Stamp app build metadata */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -551,6 +587,10 @@
 				D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */,
 				EF5BA93AAA6D2A4E15907A2A /* RecordingPlaybackOverlayView.swift in Sources */,
 				27F0E25F88387DE1E9D35F9B /* RecordingPlaybackTimeline.swift in Sources */,
+				C09C4007BEBB825C250E7D95 /* FieldDefinitions.swift in Sources */,
+				DFE0A03165A7CBEEB0F72392 /* FieldOverlayView.swift in Sources */,
+				50B4567814FDA2B8A4C537AE /* FieldTextCodec.swift in Sources */,
+				A1F63622C42A35C4EA9D66F2 /* fields.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -565,7 +605,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 34;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -580,7 +620,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.0;
+				MARKETING_VERSION = 0.11.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -605,7 +645,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 34;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -619,7 +659,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.0;
+				MARKETING_VERSION = 0.11.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -710,7 +750,7 @@
 					"-DRCT_REMOVE_LEGACY_ARCH=1",
 				);
 				PODFILE_DIR = "$(SRCROOT)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../../Users/horner/prj/april-fools-ar/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				USE_HERMES = true;
@@ -784,7 +824,7 @@
 					"-DRCT_REMOVE_LEGACY_ARCH=1",
 				);
 				PODFILE_DIR = "$(SRCROOT)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../../Users/horner/prj/april-fools-ar/node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;

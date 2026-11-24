@@ -1,0 +1,22 @@
+"angleUnit": "radian"
+"competitionYear": 2026
+"coordinateFrame": "wpilib-blue-z-up"
+"fieldLengthMeters": 16.518
+"fieldWidthMeters": 8.043
+"floorElevationMeters": 0.0
+"game": "REBUILT"
+"id": "frc-2026-rebuilt-andymark"
+"lengthUnit": "meter"
+"name": "FRC 2026 REBUILT · andymark"
+"program": "frc"
+"schemaVersion": 1
+"seasonEndYear": 2026
+"seasonStartYear": 2026
+"source":
+  "revision": "v2026.2.2"
+  "sha256": "9b44d503e056e8303b6cee7ec65b0cf770cbea2e475516c03b95f8fcfdee49ca"
+  "sourceLengthUnit": "meter"
+  "sourceTagFrame": "wpilib-x-out-y-right-z-up"
+  "url": "https://raw.githubusercontent.com/wpilibsuite/allwpilib/v2026.2.2/apriltag/src/main/native/resources/edu/wpi/first/apriltag/2026-rebuilt-andymark.json"
+"tagFrame": "detector-x-right-y-down-z-in"
+"variant": "andymark"

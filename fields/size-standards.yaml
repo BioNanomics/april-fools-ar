@@ -1,0 +1,113 @@
+"auto":
+  "candidates":
+    -
+      "label": "FTC 2 in"
+      "poseSizeMeters": 0.0508
+      "relativeTolerance": 0.1
+    -
+      "label": "FTC BIOBUZZ 3.25 in"
+      "poseSizeMeters": 0.08255
+      "relativeTolerance": 0.1
+    -
+      "label": "FTC 4 in"
+      "poseSizeMeters": 0.1016
+      "relativeTolerance": 0.1
+    -
+      "label": "FTC 5 in"
+      "poseSizeMeters": 0.127
+      "relativeTolerance": 0.1
+    -
+      "label": "FTC sample 6 in"
+      "poseSizeMeters": 0.1524
+      "relativeTolerance": 0.03
+    -
+      "label": "FRC / FTC 6.5 in"
+      "poseSizeMeters": 0.1651
+      "relativeTolerance": 0.03
+  "minimumCenterConfidence": 2
+  "source": "sceneDepth-standard-match"
+"defaultFieldYears":
+  "frc": 2026
+  "ftc": 2027
+"family": "tag36h11"
+"presets":
+  -
+    "competitionYear": 2024
+    "label": "CENTERSTAGE"
+    "mode": "ftc"
+    "referenceSizeMeters": 0.0508
+    "requireKnownID": true
+    "tagSizes":
+      -
+        "id": 1
+        "poseSizeMeters": 0.0508
+      -
+        "id": 2
+        "poseSizeMeters": 0.0508
+      -
+        "id": 3
+        "poseSizeMeters": 0.0508
+      -
+        "id": 4
+        "poseSizeMeters": 0.0508
+      -
+        "id": 5
+        "poseSizeMeters": 0.0508
+      -
+        "id": 6
+        "poseSizeMeters": 0.0508
+      -
+        "id": 7
+        "poseSizeMeters": 0.127
+      -
+        "id": 8
+        "poseSizeMeters": 0.0508
+      -
+        "id": 9
+        "poseSizeMeters": 0.0508
+      -
+        "id": 10
+        "poseSizeMeters": 0.127
+  -
+    "competitionYear": 2025
+    "label": "INTO THE DEEP"
+    "mode": "ftc"
+    "referenceSizeMeters": 0.1016
+    "requireKnownID": false
+    "tagSizes": []
+  -
+    "competitionYear": 2026
+    "label": "DECODE"
+    "mode": "ftc"
+    "referenceSizeMeters": 0.1651
+    "requireKnownID": false
+    "tagSizes": []
+  -
+    "competitionYear": 2027
+    "label": "BIOBUZZ"
+    "mode": "ftc"
+    "referenceSizeMeters": 0.08255
+    "requireKnownID": false
+    "tagSizes": []
+  -
+    "competitionYear": 2024
+    "label": "CRESCENDO"
+    "mode": "frc"
+    "referenceSizeMeters": 0.1651
+    "requireKnownID": false
+    "tagSizes": []
+  -
+    "competitionYear": 2025
+    "label": "REEFSCAPE"
+    "mode": "frc"
+    "referenceSizeMeters": 0.1651
+    "requireKnownID": false
+    "tagSizes": []
+  -
+    "competitionYear": 2026
+    "label": "REBUILT"
+    "mode": "frc"
+    "referenceSizeMeters": 0.1651
+    "requireKnownID": false
+    "tagSizes": []
+"schemaVersion": 1

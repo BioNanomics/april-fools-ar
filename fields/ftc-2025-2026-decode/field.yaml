@@ -1,0 +1,99 @@
+"angleUnit": "radian"
+"clusters": []
+"competitionYear": 2026
+"coordinateFrame": "ftc-centered-z-up"
+"fieldLengthMeters": null
+"fieldWidthMeters": null
+"floorElevationMeters": 0.0
+"game": "DECODE"
+"id": "ftc-2025-2026-decode"
+"lengthUnit": "meter"
+"name": "FTC 2025–2026 DECODE"
+"program": "ftc"
+"schemaVersion": 1
+"seasonEndYear": 2026
+"seasonStartYear": 2025
+"source":
+  "artifactSha256": "756294f8307da88b85a73c5a804dbc20f65dd60af97534ed3dea8f38e528aba8"
+  "extractedFile": "org/firstinspires/ftc/vision/apriltag/AprilTagGameDatabase.java"
+  "revision": "12.0.0"
+  "sha256": "ec457c7536f4f69855c0f51d2a48297428f3f103b11c89dd3b893c647d5a568f"
+  "sourceLengthUnit": "inch"
+  "sourceTagFrame": "detector-x-right-y-down-z-in"
+  "url": "https://repo.maven.apache.org/maven2/org/firstinspires/ftc/Vision/12.0.0/Vision-12.0.0-sources.jar"
+"tagFrame": "detector-x-right-y-down-z-in"
+"tags":
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.7493
+    "expectedTiltRadians": 0.0
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [-0.8095290402856494,0.5870798352304355,0.0,0.0,0.0,0.0,-1.0,0.0,-0.5870798352304355,-0.8095290402856494,0.0,0.0,-1.48266658,-1.4133194999999998,0.7493,1.0]
+    "fieldPose":
+      "quaternion": [-0.2182148939201622,0.2182148939201622,0.6725936812603969,-0.6725936812603969]
+      "translation": [-1.48266658,-1.4133194999999998,0.7493]
+    "id": 20
+    "localizationEligible": true
+    "name": "BlueTarget"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.2182149,-0.2182149,-0.6725937,0.6725937]
+      "translation": [-58.3727,-55.6425,29.5]
+  -
+    "clusterId": null
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 21
+    "localizationEligible": false
+    "name": "Obelisk_GPP"
+    "placement": "movable"
+    "poseSizeMeters": 0.1651
+    "sourcePose": null
+  -
+    "clusterId": null
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 22
+    "localizationEligible": false
+    "name": "Obelisk_PGP"
+    "placement": "movable"
+    "poseSizeMeters": 0.1651
+    "sourcePose": null
+  -
+    "clusterId": null
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 23
+    "localizationEligible": false
+    "name": "Obelisk_PPG"
+    "placement": "movable"
+    "poseSizeMeters": 0.1651
+    "sourcePose": null
+  -
+    "clusterId": null
+    "expectedHeightMeters": 0.7493
+    "expectedTiltRadians": 4.163336342344337e-17
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": [0.8095290402856494,0.5870798352304355,0.0,0.0,0.0,4.163336342344337e-17,-1.0,0.0,-0.5870798352304355,0.8095290402856494,4.163336342344337e-17,0.0,-1.48266658,1.4133194999999998,0.7493,1.0]
+    "fieldPose":
+      "quaternion": [0.6725936812603969,-0.6725936812603969,-0.2182148939201622,0.2182148939201622]
+      "translation": [-1.48266658,1.4133194999999998,0.7493]
+    "id": 24
+    "localizationEligible": true
+    "name": "RedTarget"
+    "placement": "fixedField"
+    "poseSizeMeters": 0.1651
+    "sourcePose":
+      "quaternion": [0.6725937,-0.6725937,-0.2182149,0.2182149]
+      "translation": [-58.3727,55.6425,29.5]
+"variant": "standard"

@@ -7,4 +7,5 @@ RCT_EXTERN_METHOD(archiveSession:(NSString *)folderPath
 RCT_EXTERN_METHOD(previewSession:(NSString *)folderPath
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(previewSessionAtTime:(NSString *)folderPath seconds:(double)seconds resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 @end

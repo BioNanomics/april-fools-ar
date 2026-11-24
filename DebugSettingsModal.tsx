@@ -13,6 +13,10 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  FIELD_SEASONS,
+  FRC_REFERENCE_SIZE_METERS,
+} from './FieldSizeCatalog.generated';
 
 export type TagSizeMode = 'auto' | 'ftc' | 'frc' | 'custom';
 
@@ -33,7 +37,7 @@ export type DebugSettings = {
 };
 
 export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
-  tagSizeMeters: 0.1651,
+  tagSizeMeters: FRC_REFERENCE_SIZE_METERS,
   tagSizeMode: 'auto',
   competitionYear: 0,
   maxDistanceMeters: 5,
@@ -108,7 +112,7 @@ const fields: {
 
 type Draft = Record<SettingsKey, string>;
 
-const FRC_TAG_SIZE_METERS = 0.1651;
+const FRC_TAG_SIZE_METERS = FRC_REFERENCE_SIZE_METERS;
 const tagSizeOptions: { mode: TagSizeMode; label: string }[] = [
   { mode: 'auto', label: 'Auto (LiDAR)' },
   { mode: 'ftc', label: 'FTC' },
@@ -123,55 +127,7 @@ type FieldSeason = {
   sizeDescription: string;
 };
 
-const fieldSeasons: Record<'ftc' | 'frc', FieldSeason[]> = {
-  ftc: [
-    {
-      year: 2027,
-      game: 'BIOBUZZ',
-      referenceSizeMeters: 0.08255,
-      sizeDescription: '3.25-inch tags (82.55 mm).',
-    },
-    {
-      year: 2026,
-      game: 'DECODE',
-      referenceSizeMeters: 0.1651,
-      sizeDescription: '6.5-inch tags (165.1 mm).',
-    },
-    {
-      year: 2025,
-      game: 'INTO THE DEEP',
-      referenceSizeMeters: 0.1016,
-      sizeDescription: '4-inch tags (101.6 mm).',
-    },
-    {
-      year: 2024,
-      game: 'CENTERSTAGE',
-      referenceSizeMeters: 0.0508,
-      sizeDescription:
-        '2- and 5-inch tags (50.8 and 127 mm). Each tag ID uses its season size.',
-    },
-  ],
-  frc: [
-    {
-      year: 2026,
-      game: 'REBUILT',
-      referenceSizeMeters: 0.1651,
-      sizeDescription: '6.5-inch tags (165.1 mm).',
-    },
-    {
-      year: 2025,
-      game: 'REEFSCAPE',
-      referenceSizeMeters: 0.1651,
-      sizeDescription: '6.5-inch tags (165.1 mm).',
-    },
-    {
-      year: 2024,
-      game: 'CRESCENDO',
-      referenceSizeMeters: 0.1651,
-      sizeDescription: '6.5-inch tags (165.1 mm).',
-    },
-  ],
-};
+const fieldSeasons: Record<'ftc' | 'frc', FieldSeason[]> = FIELD_SEASONS;
 
 function seasonFor(mode: TagSizeMode, year?: number): FieldSeason | undefined {
   if (mode !== 'ftc' && mode !== 'frc') {
@@ -473,9 +429,9 @@ export function DebugSettingsModal({
                         >
                           <Text style={s.sizeOptionText}>
                             {tagSizeMode === 'ftc'
-                              ? `${season.year - 1}–${String(
-                                  season.year,
-                                ).slice(-2)}`
+                              ? `${season.year - 1}–${String(season.year).slice(
+                                  -2,
+                                )}`
                               : season.year}{' '}
                             · {season.game}
                           </Text>

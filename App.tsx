@@ -35,6 +35,11 @@ import {
 import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
 import { formatHeight } from './HeightUnits';
 import { AboutModal, type AboutPage } from './AboutModal';
+import {
+  FieldDefinitionsPanel,
+  type FieldTag,
+  type FieldStatus,
+} from './FieldDefinitionsPanel';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const Engine = NativeModules.ARCaptureEngine;
@@ -48,6 +53,7 @@ type Measurement = {
   points?: { depthMeters?: number; confidence?: number }[];
 };
 type Status = {
+  field?: FieldStatus;
   recording?: boolean;
   finalizing?: boolean;
   sessionId?: string;
@@ -174,6 +180,12 @@ function CaptureApp() {
   const [aboutPage, setAboutPage] = useState<AboutPage>('privacy');
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldSession, setFieldSession] = useState<Session | null>(null);
+  const fieldEvidenceRef = useRef<{
+    session: Session;
+    seconds: number;
+  } | null>(null);
   const [measuringTagSize, setMeasuringTagSize] = useState(false);
   const [finishingFloor, setFinishingFloor] = useState(false);
   const [debugSettings, setDebugSettings] = useState<DebugSettings>(
@@ -309,7 +321,11 @@ function CaptureApp() {
       setBusy(false);
     }
   };
-  const openSession = async (session: Session, action: 'play' | 'share') => {
+  const openSession = async (
+    session: Session,
+    action: 'play' | 'share',
+    startSeconds?: number,
+  ) => {
     if (sessionActionRef.current || busy || status.finalizing) {
       return;
     }
@@ -330,7 +346,18 @@ function CaptureApp() {
         throw new Error('The saved recording could not be found.');
       }
       if (action === 'play') {
-        await Archive.previewSession(data.folderPath);
+        if (startSeconds != null) {
+          if (
+            !Number.isFinite(startSeconds) ||
+            startSeconds < 0 ||
+            typeof Archive.previewSessionAtTime !== 'function'
+          ) {
+            throw new Error('Recorded-time video navigation is unavailable.');
+          }
+          await Archive.previewSessionAtTime(data.folderPath, startSeconds);
+        } else {
+          await Archive.previewSession(data.folderPath);
+        }
       } else {
         const recording = await Archive.archiveSession(data.folderPath);
         await Share.share({
@@ -373,7 +400,9 @@ function CaptureApp() {
         await Engine.deleteSession(session.id);
         // Ignore a list request that started before this deletion completed.
         sessionsRefreshRef.current++;
-        setSessions(previous => previous.filter(item => item.id !== session.id));
+        setSessions(previous =>
+          previous.filter(item => item.id !== session.id),
+        );
       } catch (e) {
         Alert.alert('Delete recording', errorText(e));
       } finally {
@@ -597,6 +626,17 @@ function CaptureApp() {
           <Text style={[s.modeText, !debugEnabled && s.dark]}>Measure</Text>
         </Pressable>
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Field definitions and tags seen"
+        onPress={() => {
+          setFieldSession(null);
+          setFieldsOpen(true);
+        }}
+        hitSlop={6}
+      >
+        <Text style={s.link}>Field &amp; tags</Text>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Debug settings"
@@ -923,8 +963,36 @@ function CaptureApp() {
     </View>
   );
 
+  const fieldStatusReason =
+    status.field?.reason || status.field?.warnings?.at(-1) || '';
   const sceneTools = (
     <>
+      {status.field?.packageId && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Field alignment: ${
+            status.field.alignment || 'unaligned'
+          }. ${fieldStatusReason || status.field.label || ''}`}
+          onPress={() => {
+            setFieldSession(null);
+            setFieldsOpen(true);
+          }}
+          style={s.fieldStatus}
+        >
+          <Text style={s.fieldStatusTitle} numberOfLines={1}>
+            {status.field.label} · {status.field.alignment || 'unaligned'}
+          </Text>
+          {!!fieldStatusReason && (
+            <Text
+              style={s.fieldStatusReason}
+              numberOfLines={3}
+              accessibilityLiveRegion="polite"
+            >
+              {fieldStatusReason}
+            </Text>
+          )}
+        </Pressable>
+      )}
       {floorTiltText && (
         <Text
           style={s.floorTilt}
@@ -1294,6 +1362,24 @@ function CaptureApp() {
                 <View style={s.sessionActions}>
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel={`Field walk for ${item.name}`}
+                    disabled={Boolean(working || !item.finalized)}
+                    accessibilityState={{
+                      disabled: Boolean(working || !item.finalized),
+                    }}
+                    style={[
+                      s.sessionButton,
+                      (working || !item.finalized) && s.dim,
+                    ]}
+                    onPress={() => {
+                      setFieldSession(item);
+                      setFieldsOpen(true);
+                    }}
+                  >
+                    <Text style={s.exportText}>Tags seen</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
                     accessibilityLabel={`Play recording ${item.name}`}
                     accessibilityState={{
                       disabled: Boolean(working || !item.finalized),
@@ -1359,8 +1445,8 @@ function CaptureApp() {
                       {sessionAction.action === 'play'
                         ? 'Opening recording…'
                         : sessionAction.action === 'share'
-                          ? 'Preparing to share…'
-                          : 'Deleting recording…'}
+                        ? 'Preparing to share…'
+                        : 'Deleting recording…'}
                     </Text>
                   </View>
                 ) : !item.finalized ? (
@@ -1371,6 +1457,47 @@ function CaptureApp() {
           />
         </View>
       )}
+      <FieldDefinitionsPanel
+        visible={fieldsOpen}
+        engine={Engine}
+        recording={Boolean(status.recording || status.finalizing)}
+        field={status.field}
+        savedSession={fieldSession}
+        onClose={() => {
+          setFieldsOpen(false);
+          setFieldSession(null);
+        }}
+        onDismiss={async () => {
+          const evidence = fieldEvidenceRef.current;
+          fieldEvidenceRef.current = null;
+          if (evidence) {
+            await openSession(evidence.session, 'play', evidence.seconds);
+          }
+        }}
+        onOpenEvidence={(tag: FieldTag) => {
+          if (
+            !fieldSession ||
+            !Number.isFinite(tag.videoTimeSeconds) ||
+            tag.videoTimeSeconds == null ||
+            tag.videoTimeSeconds < 0
+          ) {
+            return;
+          }
+          fieldEvidenceRef.current = {
+            session: fieldSession,
+            seconds: tag.videoTimeSeconds,
+          };
+          setFieldsOpen(false);
+          setFieldSession(null);
+        }}
+        onChange={field => setStatus(previous => ({ ...previous, field }))}
+        onSetFloor={async () => {
+          setFieldsOpen(false);
+          setFieldSession(null);
+          await setSpatialMode('selectFloor');
+          await changeDebugMode(false);
+        }}
+      />
       <ReleaseNotesModal
         visible={releaseNotesOpen}
         info={appInfo}
@@ -1455,6 +1582,19 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
+  fieldStatus: {
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: '#071426DD',
+    marginBottom: 6,
+  },
+  fieldStatusTitle: { color: C.cyan, fontSize: 12, fontWeight: '600' },
+  fieldStatusReason: {
+    color: '#FFCB7A',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
   root: { flex: 1, backgroundColor: C.bg },
   workspace: { flex: 1, minHeight: 0 },
   workspaceWide: { flexDirection: 'row', gap: 12 },

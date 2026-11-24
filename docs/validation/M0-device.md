@@ -72,3 +72,8 @@ Version **0.3.2 (14)**, built at **18:00:13 UTC** from modified sources based on
 ## Landscape and tablet update — 2026-11-22
 
 Version **0.4.0 (15)** was installed on the physical iPad and its installed version/build verified after native simulator layout and keyboard checks. iPadOS blocked launch because the iPad was locked; launch and physical alignment checks remain pending. No capture or test runner was started, and the deployment guard returned `released` with no errors. See [landscape and tablet validation](M0-landscape-tablet.md).
+
+
+## Field and competition-year update — 2026-11-23
+
+Installed and launched **0.10.0 (32)** from clean source commit `45800a7dcb53f2f7980efbaf7008c288140c6bbd` on the iPhone. Captured the explicit FTC/year settings without applying changes. The shared device guard returned **released** after screen-sharing verification, and all owned deployment commands exited. See [field/year validation and the phone screenshot](M0-field-year-tag-sizes.md) for test results, the open physical size check and native accessibility follow-up.

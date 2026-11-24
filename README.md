@@ -40,14 +40,16 @@ Tracking, depth status and zoom controls share one compact line at the top of th
 
 1. Open **April Fools AR** and allow camera access. Use a LiDAR-capable iPhone or iPad for numeric depth recording.
 2. Wait for tracking and depth to become available. Point at a `tag36h11` AprilTag to see its ID and corner outline; live detection also runs before recording. The RGB, Depth, and Confidence controls change the preview, not the recorded sensor source.
-3. Name the session and tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
+3. Name the session and choose **Video + facts** for video, sensor samples and tag facts, or **Tag facts only** for a compact YAML walk without saved video, images or sensor buffers. Tap **Start recording**. Walk past tags and floor/structure surfaces, pausing occasionally and returning toward the starting area.
 4. In **Measure** mode, tap two visible surfaces to inspect estimated 3D distance and gravity-aligned vertical difference. Tap **Clear** to start another pair. Measurements are estimates, not surveyed truth.
 5. Use **Bookmark** to add a tag ID, reference measurement, or observation. The source image is retained with the event.
-6. Tap **Stop & save** to finish the MP4 automatically. Open **Saved sessions**, use **Play** to review the video with recorded overlays, or **Share** to send the same recording through AirDrop or Files. In the player, **Recorded overlays** switches between annotated and clean playback. Use **Delete**, then confirm, to permanently remove a session's video and original capture data from this device. Unfinished recordings from earlier runs can also be deleted.
+6. Tap **Stop & save**. **Video + facts** prepares the MP4 automatically; in **Saved sessions**, use **Play** to review its recorded overlays or **Share** to send the recording through AirDrop or Files. **Tag facts only** saves the YAML walk; use **Tags seen** to inspect it or **Share YAML** to export it. In video playback, **Recorded overlays** switches between annotated and clean views. **Delete**, followed by confirmation, permanently removes the selected session and its capture files, including unfinished recordings from earlier runs.
 
 Keep recordings short initially and check an export before the first field visit. Files stay on the phone until you explicitly share them. No server, account, BLE meter, or internet connection is needed for capture.
 
-The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage until you delete the session.
+The capacity meter shows the most restrictive remaining budget: metadata, metadata records, capture files, estimated packaged size or storage needed for saving. Video frame/event logs allow 32 MiB each; generated YAML tracks allow 64 MiB each and saved MP4s remain below 4 GiB. Recordings save automatically at 95% usage to leave finalization room. Package/storage figures are estimates. Facts-only walks keep a bounded aggregate of up to 512 distinct tags, checkpoint the summary up to once per second and use a separate 32 MiB summary budget. Expected tags not seen are listed when a field definition is selected; a walk without a definition can still discover tags.
+
+The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Video mode retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage until you delete the session. Facts-only walks offer **Share YAML** instead of video playback. **Tags seen → Share YAML** also shares the summary independently of the MP4 for video recordings, including when MP4 preparation is pending.
 
 ## Field definitions and field walks
 

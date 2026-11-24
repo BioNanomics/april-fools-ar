@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  DeviceEventEmitter,
   FlatList,
   NativeModules,
   ScrollView,
@@ -189,6 +190,69 @@ test('resizing preserves the native camera and entered recording name across pho
   expect(engine.startSession).toHaveBeenCalledWith('South field');
   expect(engine.stopSession).not.toHaveBeenCalled();
   expect(engine.clearMeasurements).not.toHaveBeenCalled();
+});
+
+test('recording mode and capacity stay in the reachable dock across phone and tablet layouts', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const camera = nativeCamera();
+  await act(async () => byLabel('Tag facts only').props.onPress());
+  for (const size of sizes) {
+    await resize(size.width, size.height, size.notchRight);
+    expect(byLabel('Tag facts only').props.accessibilityState.checked).toBe(
+      true,
+    );
+    expectWithin(
+      byLabel('Tag facts only'),
+      byTestID('capture.recordingControls'),
+    );
+    expectWithin(
+      byTestID('capture.recordingControls'),
+      byTestID('capture.thumbDock'),
+    );
+    expect(nativeCamera()).toBe(camera);
+  }
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: true,
+      recordingMode: 'facts',
+      recordingCapacity: {
+        usedBytes: 4 * 1048576,
+        limitBytes: 32 * 1048576,
+        remainingBytes: 28 * 1048576,
+        fractionUsed: 0.125,
+        limitingResource: 'Tag facts summary',
+      },
+    }),
+  );
+  for (const size of sizes) {
+    await resize(size.width, size.height, size.notchRight);
+    expectWithin(
+      byLabel('Recording capacity remaining'),
+      byTestID('capture.thumbDock'),
+    );
+    expect(
+      byLabel('Recording capacity remaining').props.accessibilityValue.now,
+    ).toBe(87);
+    expect(byLabel('Tag facts only').props.disabled).toBe(true);
+    expect(byLabel('Video + facts').props.disabled).toBe(true);
+    expectWithin(
+      byLabel('Stop and save recording'),
+      byTestID('capture.thumbDock'),
+    );
+    expect(nativeCamera()).toBe(camera);
+    expectDockPlacement(size.width, size.height);
+  }
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: false,
+      finalizing: true,
+      recordingMode: 'facts',
+    }),
+  );
+  expect(byLabel('Tag facts only').props.disabled).toBe(true);
+  expect(byLabel('Video + facts').props.disabled).toBe(true);
 });
 
 test('tag details follows the orientation-specific tool panel while recording stays reachable', async () => {

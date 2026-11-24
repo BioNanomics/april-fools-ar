@@ -176,7 +176,7 @@ struct FieldPlacement {
     let seen: Bool
 }
 
-/// Capture-queue-owned, source-frame field state. Raw observations remain in the recorder.
+/// Capture-queue-owned facts, bounded by distinct tags rather than walk duration.
 final class FieldWalkState {
     private(set) var definition: FieldDefinition?
     private(set) var alignment = "unaligned"
@@ -191,10 +191,15 @@ final class FieldWalkState {
     private var latestCandidate: (tag: FieldTagDefinition, world: simd_double4x4, check: AFSCAnchorCheck, segment: String)?
     private var entries = [String: [String: Any]]()
     private var history = [[String: Any]]()
-    private var inventory: OpaquePointer?
     private var recording = false
     private var walkID: String?
-    private var lastEventID = ""
+    private var recentEventIDs = [String]()
+    private var recentEventSet = Set<String>()
+    private var omittedTagObservations = 0
+    private var omittedRegistrationEvents = 0
+    private var observationCount = 0
+    private var walkStartedTimestamp: Double?
+    private var walkLastTimestamp: Double?
     private var eventOrdinal = 0
     private var sourceTimestamp = 0.0
     private var sourceSegment = ""
@@ -205,12 +210,17 @@ final class FieldWalkState {
     static let tiltTolerance = 5.0 * Double.pi / 180
     static let gravityTolerance = 7.0 * Double.pi / 180
     static let positionTolerance = 0.15
+    static let maximumSeenTags = 512
+    static let maximumRegistrationEvents = 128
+    private static let deduplicationWindow = 128
     var onEvent: (([String: Any]) -> Void)?
-    init() { inventory = afsc_field_walk_create(512, 100_000) }
-    deinit { afsc_field_walk_destroy(inventory) }
     func select(_ field: FieldDefinition) { definition = field; resetInventory(); invalidate("Field definition selected.") }
-    func resetInventory() { afsc_field_walk_clear(inventory); entries = [:]; history = []; warnings = []; walkID = nil; lastEventID = ""; eventOrdinal = 0; lastWarningEventTime = -.infinity }
-    func beginWalk(_ id: String, timestamp: Double = 0, segment: String? = nil) { resetInventory(); walkID = id; recording = true; emit("fieldWalkStarted", timestamp: timestamp, segment: segment ?? alignmentSegment ?? "") }
+    func resetInventory() {
+        entries = [:]; history = []; warnings = []; walkID = nil; eventOrdinal = 0; lastWarningEventTime = -.infinity
+        recentEventIDs = []; recentEventSet = []; omittedTagObservations = 0; omittedRegistrationEvents = 0; observationCount = 0
+        walkStartedTimestamp = nil; walkLastTimestamp = nil
+    }
+    func beginWalk(_ id: String, timestamp: Double = 0, segment: String? = nil) { resetInventory(); walkID = id; recording = true; walkStartedTimestamp = timestamp; walkLastTimestamp = timestamp; emit("fieldWalkStarted", timestamp: timestamp, segment: segment ?? alignmentSegment ?? "") }
     func stopWalk() { recording = false }
     func invalidate(_ why: String, segment: String? = nil, timestamp: Double = 0) {
         alignment = "unaligned"; reason = why; worldFromField = nil; anchorID = nil; alignmentSegment = nil; candidate = nil; latestCandidate = nil; manualRequested = nil; checks = [:]; floorID = nil
@@ -233,7 +243,10 @@ final class FieldWalkState {
         var event: [String: Any] = ["type": type, "timestamp": timestamp, "segmentId": segment, "fieldEventOrdinal": eventOrdinal,
             "field": registrationSnapshot, "packageId": definition?.id as Any? ?? NSNull(), "packageSha256": definition?.hash as Any? ?? NSNull()]
         event.merge(extra) { _, new in new }; onEvent?(event)
-        if recording { history.append(event); if history.count > 1000 { history.removeFirst() } }
+        if recording {
+            history.append(event)
+            if history.count > Self.maximumRegistrationEvents { history.removeFirst(); omittedRegistrationEvents += 1 }
+        }
     }
     var registrationSnapshot: [String: Any] {
         ["policyVersion": 1, "alignment": alignment, "reason": reason, "anchorId": anchorID as Any? ?? NSNull(), "segmentId": alignmentSegment as Any? ?? NSNull(),
@@ -242,8 +255,10 @@ final class FieldWalkState {
          "positionToleranceMeters": Self.positionTolerance, "accuracyValidated": false]
     }
     func process(_ detections: [[String: Any]], metadata: [String: Any], now: Double, settings: TagDebugSettings, allowRegistration: Bool = true) {
-        guard let field = definition, let frame = metadata["frameId"] as? String, let segment = metadata["segmentId"] as? String,
+        guard let frame = metadata["frameId"] as? String, !frame.isEmpty, frame.utf8.count <= 256,
+              let segment = metadata["segmentId"] as? String, !segment.isEmpty, segment.utf8.count <= 256,
               let timestamp = FieldValue.number(metadata["timestamp"]), let camera = FieldValue.matrix(metadata["cameraToWorldColumnMajor"]) else { return }
+        let field = definition
         sourceTimestamp = timestamp; sourceSegment = segment
         let normal = metadata["tracking"] as? String == "normal", fresh = now >= timestamp && now - timestamp <= 0.4
         if allowRegistration, !normal, worldFromField != nil { suspend("Tracking is unavailable; recheck alignment.", timestamp: timestamp, segment: segment) }
@@ -251,13 +266,19 @@ final class FieldWalkState {
         let nextFloorID = sourceFloor?["id"] as? String
         if allowRegistration, worldFromField != nil, alignmentSegment != segment || nextFloorID != floorID { invalidate("Coordinate segment or confirmed field floor changed.", segment: segment, timestamp: timestamp) }
         let eventID = segment + ":" + frame
-        if eventID == lastEventID { return }; lastEventID = eventID
+        if recentEventSet.contains(eventID) { return }
+        recentEventIDs.append(eventID); recentEventSet.insert(eventID)
+        if recentEventIDs.count > Self.deduplicationWindow { recentEventSet.remove(recentEventIDs.removeFirst()) }
+        if recording { walkLastTimestamp = max(walkLastTimestamp ?? timestamp, timestamp) }
+        var frameTagKeys = Set<String>()
         for detection in detections {
             guard let value = FieldValue.number(detection["id"]), value.rounded() == value, (0...65535).contains(value) else { continue }
             let id = Int(value)
             let family = detection["family"] as? String ?? "tag36h11"
-            let tag = field.tag(id, family: family)
+            guard !family.isEmpty, family.utf8.count <= 31 else { continue }
+            let tag = field?.tag(id, family: family)
             let key = family + ":" + String(id), validFamily = tag != nil
+            guard frameTagKeys.insert(key).inserted else { continue }
             let optical = FieldValue.pose(detection), pose = detection["pose"] as? [String: Any] ?? [:]
             let debug = detection["debug"] as? [String: Any] ?? [:]
             let acceptableStatus = ["valid","missingDepth"].contains(debug["status"] as? String ?? "")
@@ -275,23 +296,53 @@ final class FieldWalkState {
             let sizeConflict = tag.map { abs((appliedSize ?? $0.size) - $0.size) > max(0.00001, $0.size * 0.03) } ?? false
             if recording {
                 let accepted = usable && !sizeConflict
-                let result = family.withCString { f in segment.withCString { s in frame.withCString { r in
-                    afsc_field_walk_observe(inventory, AFSCStringView(data: f, size: family.utf8.count), Int32(id), AFSCStringView(data: s, size: segment.utf8.count), AFSCStringView(data: r, size: frame.utf8.count), timestamp, accepted ? 1 : 0)
-                } } }
-                if result == AFSC_WALK_CAPACITY { warn("Walk observation limit reached; stop and save this recording.") }
-                if result == AFSC_WALK_ADDED {
+                observationCount += 1
+                // Reserve space for every expected tag, so a crowded discovered
+                // inventory cannot label a known sighting as `notSeen`.
+                let discoveredCapacity = Self.maximumSeenTags - (field?.tags.count ?? 0)
+                let newDiscoveredTagAtCapacity = entries[key] == nil && !validFamily &&
+                    entries.values.filter { $0["expected"] as? Bool == false }.count >= discoveredCapacity
+                if newDiscoveredTagAtCapacity || (entries[key] == nil && entries.count >= Self.maximumSeenTags) {
+                    omittedTagObservations += 1
+                    warn("Tag summary capacity reached; additional unknown tags are not retained.")
+                } else {
                     var row = entries[key] ?? ["id": id, "family": family]
-                    row["name"] = tag?.name ?? "Unknown field tag"; row["frameId"] = frame; row["segmentId"] = segment
+                    row["count"] = (row["count"] as? Int ?? 0) + 1
+                    row["acceptedCount"] = (row["acceptedCount"] as? Int ?? 0) + (accepted ? 1 : 0)
+                    row["rejectedCount"] = (row["rejectedCount"] as? Int ?? 0) + (accepted ? 0 : 1)
+                    row["firstSeen"] = min(FieldValue.number(row["firstSeen"]) ?? timestamp, timestamp)
+                    row["lastSeen"] = max(FieldValue.number(row["lastSeen"]) ?? timestamp, timestamp)
+                    row["name"] = tag?.name ?? "Discovered tag"; row["frameId"] = frame; row["segmentId"] = segment
+                    row["status"] = "seen"; row["expected"] = validFamily; row["placement"] = tag?.placement ?? "unknown"
+                    row["nominalTagDefinition"] = tag?.raw as Any? ?? NSNull()
+                    row["nominalCoordinateFrame"] = field?.raw["coordinateFrame"] as Any? ?? NSNull()
                     row["nominalPosition"] = tag?.fieldFromTag.map { [$0[3].x,$0[3].y,$0[3].z] } as Any? ?? NSNull()
                     row["expectedHeightMeters"] = tag?.raw["expectedHeightMeters"] ?? NSNull()
                     row["expectedTiltDegrees"] = tag.flatMap { FieldValue.number($0.raw["expectedTiltRadians"]) }.map { $0 * 180 / .pi } as Any? ?? NSNull()
                     row["observedHeightMeters"] = observedHeight as Any? ?? NSNull(); row["observedTiltDegrees"] = orientation["tiltFromVerticalDegrees"] ?? NSNull()
-                    row["timestamp"] = timestamp; row["tagSizeResolution"] = detection["tagSizeResolution"] ?? NSNull(); row["poseSizeMeters"] = appliedSize as Any? ?? NSNull()
-                    row["reason"] = !validFamily ? "ID is unknown to this field definition." : sizeConflict ? "Applied print size differs from reference; placement is unresolved." : tag?.fieldFromTag == nil ? "Moving/unknown target has no fixed nominal position." : "Observed; placement is an estimate."
+                    row["timestamp"] = timestamp; row["poseSizeMeters"] = appliedSize as Any? ?? NSNull()
+                    row["tagSizeResolution"] = detection["tagSizeResolution"] ?? NSNull()
+                    row["poseSizeSource"] = pose["tagSizeSource"] as? String ?? "unavailable"
+                    row["reason"] = field == nil ? "No field definition selected; nominal field position is unavailable." : !validFamily ? "ID is unknown to this field definition." : sizeConflict ? "Applied print size differs from reference; placement is unresolved." : tag?.fieldFromTag == nil ? "Moving/unknown target has no fixed nominal position." : "Observed; placement is an estimate."
+                    row["quality"] = ["usable": accepted, "tracking": metadata["tracking"] as? String ?? "unavailable", "fresh": fresh,
+                        "frameAgeSeconds": now - timestamp, "poseAmbiguous": pose["ambiguous"] as? Bool ?? true,
+                        "status": debug["status"] as? String ?? "unavailable", "printSizeConflict": sizeConflict,
+                        "decisionMargin": FieldValue.number(detection["decisionMargin"]) as Any? ?? NSNull(),
+                        "hamming": FieldValue.number(detection["hamming"]) as Any? ?? NSNull(),
+                        "reprojectionRMSEPixels": FieldValue.number(pose["reprojectionRMSEPixels"]) as Any? ?? NSNull()]
+                    row["cameraRelativePosition"] = FieldValue.numbers(pose["translation"], 3) as Any? ?? NSNull()
+                    row["cameraRelativeCoordinateFrame"] = "optical-x-right-y-down-z-forward"
+                    row["observedWorldPosition"] = accepted ? worldTag.map { [$0[3].x,$0[3].y,$0[3].z] } as Any? ?? NSNull() : NSNull()
+                    row["worldCoordinateFrame"] = "ARKit-gravity-y-up; local to segmentId"
                     row["observedPosition"] = NSNull()
-                    if usable, let worldTag, let worldFromField, alignmentSegment == segment {
+                    row["observedCoordinateFrame"] = field?.raw["coordinateFrame"] as Any? ?? NSNull()
+                    row["registration"] = NSNull(); row["registrationAnchorId"] = NSNull(); row["registrationAssumption"] = NSNull()
+                    row["comparisonStatus"] = "unavailable"; row["positionDifferenceMeters"] = NSNull(); row["orientationDifferenceRadians"] = NSNull()
+                    if accepted, let worldTag, let worldFromField, alignmentSegment == segment {
                         let position = simd_inverse(worldFromField) * worldTag
                         row["observedPosition"] = [position[3].x,position[3].y,position[3].z]
+                        row["registration"] = ["alignment": alignment, "anchorId": anchorID as Any? ?? NSNull(), "segmentId": segment,
+                            "worldFromFieldColumnMajor": FieldValue.values(worldFromField), "accuracyValidated": false]
                         row["registrationAnchorId"] = anchorID as Any? ?? NSNull(); row["registrationAssumption"] = "single-tag anchor; not independent survey truth"
                         row["comparisonStatus"] = id == anchorID ? "assumed-anchor" : "independent-of-initial-anchor-only"
                         if id == anchorID { row["reason"] = "This tag is the assumed anchor and cannot certify its own field placement." }
@@ -301,10 +352,31 @@ final class FieldWalkState {
                             row["orientationDifferenceRadians"] = acos(min(1,max(-1,(delta[0].x+delta[1].y+delta[2].z-1)/2)))
                         }
                     }
+                    row["accuracyValidated"] = false
+                    // Keep the complete numeric result and its original context,
+                    // including unavailable/null values and detailed rejection
+                    // reasons. The settings/floor belong to this source event,
+                    // never the UI's later state. No image or depth files are kept.
+                    let sourceKeys = ["frameId", "segmentId", "timestamp", "family", "imageWidth", "imageHeight", "pixelFormat",
+                        "intrinsicsColumnMajor", "cameraToWorldColumnMajor", "displayTransform", "displayZoom", "previewDisplayTransform",
+                        "viewportWidth", "viewportHeight", "interfaceOrientation", "tracking", "trackingReason",
+                        "analysisSkippedFramesTotal", "targetAnalysisHz", "maxAnalysisInFlight", "recordingId", "poseEstimation",
+                        "debugSettings", "calculationCore", "fieldPackageId", "fieldPackageSha256", "floorSnapshot",
+                        "latencyMilliseconds", "analysisSucceeded", "detectorError", "fieldProcessingAgeSeconds", "fieldRegistrationAllowed"]
+                    let source = Dictionary(uniqueKeysWithValues: sourceKeys.map { ($0, metadata[$0] ?? NSNull()) })
+                    let keys = ["frameId", "segmentId", "timestamp", "observedWorldPosition", "worldCoordinateFrame",
+                        "observedPosition", "observedCoordinateFrame", "cameraRelativePosition", "cameraRelativeCoordinateFrame",
+                        "observedHeightMeters", "observedTiltDegrees", "poseSizeMeters", "poseSizeSource", "quality",
+                        "registration", "registrationAnchorId", "comparisonStatus", "accuracyValidated"]
+                    var observation = Dictionary(uniqueKeysWithValues: keys.compactMap { key in row[key].map { (key, $0) } })
+                    observation["detection"] = detection
+                    observation["source"] = source
+                    row["latestObservation"] = observation
+                    if accepted { row["latestUsableObservation"] = observation }
                     entries[key] = row
                 }
             }
-            guard let tag, validFamily, tag.localizationEligible, let reference = tag.fieldFromTag, let worldTag, usable else { continue }
+            guard let field, let tag, validFamily, tag.localizationEligible, let reference = tag.fieldFromTag, let worldTag, usable else { continue }
             var input = AFSCAnchorInput()
             input.fixed_reference = 1; input.pose_usable = usable ? 1 : 0; input.same_segment = 1
             input.floor_datum_available = observedHeight != nil && height["floorId"] as? String == nextFloorID && (height["segmentId"] as? String) == segment ? 1 : 0
@@ -367,21 +439,46 @@ final class FieldWalkState {
         return "Tag \(id) · \(definition?.label ?? "field"): expected center height \(n(c.expected_height_m,100)) cm, observed \(n(c.observed_height_m,100)) cm (±\(Int(Self.heightTolerance*100)) cm); expected tilt \(n(c.expected_tilt_rad,180 / .pi))°, observed \(n(c.observed_tilt_rad,180 / .pi))° (±5°). Gravity/printed-up difference \(n(c.gravity_difference_rad,180 / .pi))° (±7°). Not aligned from this tag. Check field/variant, floor, mounting and print size."
     }
     var status: [String: Any] {
-        var rows = [[String: Any]]()
-        for index in 0..<afsc_field_walk_count(inventory) {
-            var core = AFSCFieldWalkRow(); guard afsc_field_walk_row(inventory, index, &core) != 0 else { continue }
-            let id = Int(core.tag_id), family = core.family.map { String(cString: $0) } ?? "unknown"
-            var row = entries[family + ":" + String(id)] ?? ["id": id, "family": family]
-            row["count"] = core.observation_count; row["acceptedCount"] = core.accepted_count; row["rejectedCount"] = core.rejected_count
-            row["firstSeen"] = core.first_seen_s; row["lastSeen"] = core.last_seen_s; rows.append(row)
+        let rows = entries.values.sorted {
+            let a = FieldValue.number($0["id"]) ?? 0, b = FieldValue.number($1["id"]) ?? 0
+            return a == b ? ($0["family"] as? String ?? "") < ($1["family"] as? String ?? "") : a < b
+        }
+        let notSeen = (definition?.tags ?? []).filter { entries[$0.family + ":" + String($0.id)] == nil }.map { tag -> [String: Any] in
+            ["id": tag.id, "family": tag.family, "name": tag.name, "status": "notSeen", "expected": true,
+             "placement": tag.placement, "localizationEligible": tag.localizationEligible,
+             "nominalTagDefinition": tag.raw,
+             "nominalPosition": tag.fieldFromTag.map { [$0[3].x,$0[3].y,$0[3].z] } as Any? ?? NSNull(),
+             "nominalCoordinateFrame": definition?.raw["coordinateFrame"] as Any? ?? NSNull(),
+             "observedPosition": NSNull(), "poseSizeMeters": tag.size,
+             "reason": "Expected by the selected definition, but not observed in this walk. This does not establish physical absence."]
         }
         var value = registrationSnapshot
         value["packageId"] = definition?.id as Any? ?? NSNull(); value["label"] = definition?.label as Any? ?? NSNull()
-        value["packageSha256"] = definition?.hash as Any? ?? NSNull(); value["seenTags"] = rows.sorted { (FieldValue.number($0["id"]) ?? 0) < (FieldValue.number($1["id"]) ?? 0) }
+        value["packageSha256"] = definition?.hash as Any? ?? NSNull(); value["seenTags"] = rows
+        value["notSeenTags"] = notSeen; value["notSeenCount"] = notSeen.count
+        value["expectedSeenCount"] = rows.filter { $0["expected"] as? Bool == true }.count
+        value["discoveredCount"] = rows.filter { $0["expected"] as? Bool == false }.count
         value["seenCount"] = rows.count; value["expectedCount"] = definition?.tags.count ?? 0; value["warnings"] = warnings
+        value["inventoryCapacity"] = ["usedEntries": rows.count, "limitEntries": Self.maximumSeenTags, "observationCount": observationCount]
+        value["summaryTruncated"] = omittedTagObservations > 0 || omittedRegistrationEvents > 0
+        value["omittedTagObservationCount"] = omittedTagObservations; value["historyOmittedCount"] = omittedRegistrationEvents
         value["coordinateFrame"] = definition?.raw["coordinateFrame"] ?? NSNull(); value["walkId"] = walkID as Any? ?? NSNull(); value["recording"] = recording; value["candidateId"] = latestCandidate?.tag.id as Any? ?? NSNull(); return value
     }
-    var summary: [String: Any] { ["schemaVersion": 1, "field": status, "registrationEvents": history, "coordinateFrame": definition?.raw["coordinateFrame"] as Any? ?? NSNull(), "accuracyValidated": false] }
+    var summary: [String: Any] {
+        ["schemaVersion": 1, "summaryVersion": 2, "field": status, "registrationEvents": history,
+         "fieldDefinition": definition.map { ["id": $0.id, "label": $0.label, "packageSha256": $0.hash,
+             "source": $0.raw["source"] as Any? ?? NSNull(), "coordinateFrame": $0.raw["coordinateFrame"] as Any? ?? NSNull()] } as Any? ?? NSNull(),
+         "coordinateFrame": definition?.raw["coordinateFrame"] as Any? ?? NSNull(), "lengthUnit": "meter",
+         "clock": "ARFrame.timestamp seconds since system boot",
+         "startedTimestamp": walkStartedTimestamp as Any? ?? NSNull(), "lastTimestamp": walkLastTimestamp as Any? ?? NSNull(),
+         "durationSeconds": max(0, (walkLastTimestamp ?? 0) - (walkStartedTimestamp ?? 0)),
+         "inventoryCapacity": ["usedEntries": entries.count, "limitEntries": Self.maximumSeenTags, "observationCount": observationCount],
+         "summaryTruncated": omittedTagObservations > 0 || omittedRegistrationEvents > 0,
+         "historyOmittedCount": omittedRegistrationEvents, "omittedTagObservationCount": omittedTagObservations,
+         "retention": "Per-tag counts, latest complete numeric detection/source context and latest usable observation; at most 128 recent registration events. No complete frame history or image/depth files. Discovered tags have expected=false in field.seenTags.",
+         "notSeenMeaning": "Expected by the selected definition and not observed; physical absence is not established.",
+         "accuracyValidated": false]
+    }
     func placements() -> [FieldPlacement] {
         guard let definition, let worldFromField else { return [] }
         return definition.tags.compactMap { tag in

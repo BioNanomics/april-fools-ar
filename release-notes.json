@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "0.13.0",
+      "build": "36",
+      "title": "Walk capacity and standalone tag facts",
+      "changes": [
+        "Choose Video + facts for analysis recordings or Tag facts only for compact walks without saved video or sensor images.",
+        "See remaining recording capacity and automatically save near a limit, reserving space for the saved MP4.",
+        "Double the frame and event metadata budget to 32 MiB per file while keeping existing recordings readable.",
+        "Share a standalone YAML walk summary with discovered tags, expected tags not seen, nominal and observed positions, quality and coordinate provenance."
+      ]
+    },
+    {
       "version": "0.12.0",
       "build": "35",
       "title": "Consistent FIRST pose vocabulary and consolidated app",

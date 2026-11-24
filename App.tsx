@@ -56,9 +56,23 @@ type Measurement = {
   heightMeters?: number;
   points?: { depthMeters?: number; confidence?: number }[];
 };
+type RecordingMode = 'video' | 'facts';
+type RecordingCapacity = {
+  usedBytes: number;
+  limitBytes: number;
+  remainingBytes: number;
+  fractionUsed: number;
+  limitingResource: string;
+  estimatedSecondsRemaining?: number;
+  estimated?: boolean;
+  unit?: 'bytes' | 'records' | 'entries';
+  automaticSaveFraction?: number;
+};
 type Status = {
   field?: FieldStatus;
   recording?: boolean;
+  recordingMode?: RecordingMode;
+  recordingCapacity?: RecordingCapacity;
   finalizing?: boolean;
   sessionId?: string;
   name?: string;
@@ -123,6 +137,8 @@ type Session = {
   durationSeconds: number;
   sizeBytes: number;
   finalized: boolean;
+  recordingMode?: RecordingMode;
+  summaryReady?: boolean;
   recordingReady?: boolean;
   recordingBytes?: number;
   recordingError?: string;
@@ -144,6 +160,7 @@ const duration = (s = 0) =>
     .toString()
     .padStart(2, '0')}`;
 const fileSize = (b = 0) => `${(b / 1048576).toFixed(1)} MB`;
+const capacitySize = (b: number) => `${(b / 1048576).toFixed(1)} MiB`;
 
 function CaptureApp() {
   const inset = useSafeAreaInsets();
@@ -165,6 +182,7 @@ function CaptureApp() {
   const [tab, setTab] = useState<'capture' | 'sessions'>('capture');
   const [status, setStatus] = useState<Status>({});
   const [name, setName] = useState('Field walk');
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>('video');
   const [busy, setBusy] = useState(false);
   const [sessionAction, setSessionAction] = useState<{
     id: string;
@@ -362,14 +380,27 @@ function CaptureApp() {
     try {
       if (status.recording) {
         const saved = await Engine.stopSession();
-        if (saved?.recordingReady === false && saved.recordingError) {
+        if (
+          saved?.recordingMode !== 'facts' &&
+          saved?.recordingReady === false &&
+          saved.recordingError
+        ) {
           Alert.alert(
             'Recording saved',
             `The original recording was saved, but its MP4 is not ready yet. Tap Play or Share in Saved sessions to retry.\n\n${saved.recordingError}`,
           );
         }
       } else {
-        await Engine.startSession(name.trim() || 'Field walk');
+        if (typeof Engine.startSessionWithMode === 'function') {
+          await Engine.startSessionWithMode(
+            name.trim() || 'Field walk',
+            recordingMode,
+          );
+        } else if (recordingMode === 'video') {
+          await Engine.startSession(name.trim() || 'Field walk');
+        } else {
+          throw new Error('Update the app to record tag facts without video.');
+        }
       }
       await refresh();
     } catch (e) {
@@ -386,7 +417,13 @@ function CaptureApp() {
     if (sessionActionRef.current || busy || status.finalizing) {
       return;
     }
-    const title = action === 'play' ? 'Play recording' : 'Share recording';
+    const factsOnly = session.recordingMode === 'facts';
+    const title =
+      action === 'play'
+        ? 'Play recording'
+        : factsOnly
+        ? 'Share YAML summary'
+        : 'Share recording';
     if (!session.finalized) {
       Alert.alert(title, 'Stop and save the recording first.');
       return;
@@ -395,6 +432,20 @@ function CaptureApp() {
     setSessionAction({ id: session.id, action });
     setBusy(true);
     try {
+      if (factsOnly) {
+        if (action === 'play') {
+          throw new Error('This walk contains tag facts without video.');
+        }
+        const summary = await Engine.exportFieldWalk(session.id);
+        if (typeof summary.url !== 'string' || !summary.url) {
+          throw new Error('The saved YAML summary could not be found.');
+        }
+        await Share.share({
+          url: summary.url,
+          title: `April Fools AR tag facts — ${session.name}`,
+        });
+        return;
+      }
       const data = await Engine.exportSession(session.id);
       if (!data.finalized) {
         throw new Error('Stop and save the recording first.');
@@ -468,7 +519,11 @@ function CaptureApp() {
     };
     Alert.alert(
       'Delete recording?',
-      `Permanently delete “${session.name}” from this device? Its video and original capture data will be removed. This cannot be undone.`,
+      `Permanently delete “${session.name}” from this device? ${
+        session.recordingMode === 'facts'
+          ? 'Its tag facts and YAML summary'
+          : 'Its video and original capture data'
+      } will be removed. This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel', onPress: finish },
         { text: 'Delete', style: 'destructive', onPress: remove },
@@ -702,6 +757,10 @@ function CaptureApp() {
   const tagIDs = tags?.ids || [];
   const firstDepth = m?.points?.[0]?.depthMeters;
   const working = busy || status.finalizing;
+  const activeRecordingMode =
+    status.recording || status.finalizing
+      ? status.recordingMode || recordingMode
+      : recordingMode;
   const viewZoom = Number.isFinite(status.displayZoom)
     ? status.displayZoom!
     : 1;
@@ -1118,70 +1177,223 @@ function CaptureApp() {
                     ? ` · ${firstDepth.toFixed(3)} m depth`
                     : ''
                 }. Tap the second surface.`
+              : activeRecordingMode === 'facts'
+              ? 'Tap two surfaces. Lines stay in this AR session; Video + facts saves measurements.'
               : 'Tap two surfaces. Lines stay in this AR session; record to save them.'}
           </Text>
         </>
       )}
     </View>
   ) : null;
+  const capacity = status.recordingCapacity;
+  const capacityValid = Boolean(
+    capacity &&
+      Number.isFinite(capacity.fractionUsed) &&
+      Number.isFinite(capacity.usedBytes) &&
+      capacity.usedBytes >= 0 &&
+      Number.isFinite(capacity.limitBytes) &&
+      capacity.limitBytes > 0,
+  );
+  const capacityUsed = capacityValid
+    ? Math.max(0, Math.min(1, capacity!.fractionUsed))
+    : 0;
+  const remainingPercent = Math.max(
+    0,
+    Math.floor((1 - capacityUsed) * 100 + 1e-7),
+  );
+  const capacityAmount = (amount: number) =>
+    capacity?.unit && capacity.unit !== 'bytes'
+      ? `${Math.max(0, Math.floor(amount)).toLocaleString()} ${capacity.unit}`
+      : capacitySize(Math.max(0, amount));
+  const capacityDescription = capacityValid
+    ? `${capacity!.limitingResource}${
+        capacity!.estimated ? ' (estimate)' : ''
+      }: ${capacityAmount(capacity!.usedBytes)} of ${capacityAmount(
+        capacity!.limitBytes,
+      )}`
+    : '';
+  const automaticSavePercent =
+    Number.isFinite(capacity?.automaticSaveFraction) &&
+    capacity!.automaticSaveFraction! > 0 &&
+    capacity!.automaticSaveFraction! <= 1
+      ? Math.round(capacity!.automaticSaveFraction! * 100)
+      : undefined;
+  const automaticSaveText =
+    automaticSavePercent == null
+      ? ''
+      : `Auto-save at ${automaticSavePercent}% used.`;
   const recordingControls = (
-    <View
-      style={[s.recordRow, landscape && s.sideRecordRow]}
-      testID="capture.recordingControls"
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Edit session name"
-        accessibilityValue={{ text: name }}
-        disabled={Boolean(status.recording || working)}
-        onPress={() => setToolSheet('name')}
-        style={[
-          s.nameButton,
-          landscape && s.sideNameButton,
-          (status.recording || working) && s.dim,
-        ]}
-      >
-        <Text style={s.small} numberOfLines={1}>
-          Name
-        </Text>
-        <Text style={s.link} numberOfLines={1}>
-          {name}
-        </Text>
-      </Pressable>
-      <Pressable
-        onPress={toggle}
-        disabled={working || !Engine}
-        style={[s.record, landscape && s.sideRecord]}
-        accessibilityRole="button"
-        accessibilityLabel={
-          status.recording ? 'Stop and save recording' : 'Start recording'
-        }
-      >
-        {working ? (
-          <ActivityIndicator color={C.bg} />
-        ) : (
-          <>
-            <View style={[s.recordDot, status.recording && s.square]} />
-            <Text style={[s.recordText, landscape && s.sideRecordText]}>
-              {status.recording
-                ? landscape
-                  ? 'Stop'
-                  : 'Stop & save'
-                : 'Record'}
+    <View style={s.recordingControls} testID="capture.recordingControls">
+      <View style={s.recordingModes} testID="capture.recordingModes">
+        {(
+          [
+            ['video', 'Video + facts', 'Video, sensors + YAML'],
+            ['facts', 'Tag facts only', 'YAML · no video'],
+          ] as const
+        ).map(([mode, label, detail]) => (
+          <Pressable
+            key={mode}
+            accessibilityRole="radio"
+            accessibilityLabel={label}
+            accessibilityHint={detail}
+            accessibilityState={{
+              selected: activeRecordingMode === mode,
+              checked: activeRecordingMode === mode,
+              disabled: Boolean(status.recording || working),
+            }}
+            disabled={Boolean(status.recording || working)}
+            onPress={() => setRecordingMode(mode)}
+            style={[
+              s.recordingMode,
+              activeRecordingMode === mode && s.recordingModeSelected,
+              (status.recording || working) && s.dim,
+            ]}
+          >
+            <Text
+              style={[
+                s.recordingModeLabel,
+                activeRecordingMode === mode && s.dark,
+              ]}
+            >
+              {label}
             </Text>
-          </>
-        )}
-      </Pressable>
-      <Pressable
-        onPress={() => setNoteOpen(true)}
-        disabled={!status.recording || working}
-        accessibilityRole="button"
-        accessibilityLabel="Bookmark"
-        style={[s.bookmark, !status.recording && s.dim]}
-      >
-        <Text style={s.plus}>+</Text>
-        <Text style={s.bookmarkText}>Mark</Text>
-      </Pressable>
+            <Text
+              style={[
+                s.recordingModeDetail,
+                activeRecordingMode === mode && s.dark,
+              ]}
+            >
+              {detail}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      {status.recording && capacityValid && (
+        <View style={s.capacity} testID="capture.recordingCapacity">
+          <View
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityLabel="Recording capacity remaining"
+            accessibilityValue={{
+              min: 0,
+              max: 100,
+              now: remainingPercent,
+              text: `${remainingPercent}% remaining. ${capacityDescription}${
+                automaticSaveText ? `. ${automaticSaveText}` : ''
+              }`,
+            }}
+          >
+            <View style={s.capacityHeader}>
+              <Text
+                style={[
+                  s.capacityLabel,
+                  capacityUsed >= 0.9 && s.capacityWarning,
+                ]}
+              >
+                {remainingPercent}% remaining
+              </Text>
+              {Number.isFinite(capacity!.estimatedSecondsRemaining) &&
+                capacity!.estimatedSecondsRemaining! >= 0 && (
+                  <Text style={s.capacityDetail}>
+                    about {duration(capacity!.estimatedSecondsRemaining)} left
+                  </Text>
+                )}
+            </View>
+            <View style={s.capacityTrack}>
+              <View
+                style={[
+                  s.capacityFill,
+                  { width: `${remainingPercent}%` },
+                  capacityUsed >= 0.8 && s.capacityFillWarning,
+                ]}
+              />
+            </View>
+            <Text style={s.capacityDetail}>{capacityDescription}</Text>
+            {automaticSaveText ? (
+              <Text style={s.capacityDetail}>{automaticSaveText}</Text>
+            ) : null}
+          </View>
+          {capacityUsed >= 0.9 && (
+            <Text style={s.capacityWarning} accessibilityLiveRegion="polite">
+              {capacityUsed >= (capacity?.automaticSaveFraction ?? 1)
+                ? 'Saving automatically…'
+                : automaticSavePercent == null
+                ? 'Near the limit. Stop and save soon.'
+                : `Near the limit. Saves automatically at ${automaticSavePercent}% used.`}
+            </Text>
+          )}
+        </View>
+      )}
+      <View style={[s.recordRow, landscape && s.sideRecordRow]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Edit session name"
+          accessibilityValue={{ text: name }}
+          disabled={Boolean(status.recording || working)}
+          onPress={() => setToolSheet('name')}
+          style={[
+            s.nameButton,
+            landscape && s.sideNameButton,
+            (status.recording || working) && s.dim,
+          ]}
+        >
+          <Text style={s.small} numberOfLines={1}>
+            Name
+          </Text>
+          <Text style={s.link} numberOfLines={1}>
+            {name}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={toggle}
+          disabled={working || !Engine}
+          style={[s.record, landscape && s.sideRecord]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            status.recording ? 'Stop and save recording' : 'Start recording'
+          }
+        >
+          {working ? (
+            <ActivityIndicator color={C.bg} />
+          ) : (
+            <>
+              <View style={[s.recordDot, status.recording && s.square]} />
+              <Text style={[s.recordText, landscape && s.sideRecordText]}>
+                {status.recording
+                  ? landscape
+                    ? 'Stop'
+                    : 'Stop & save'
+                  : 'Record'}
+              </Text>
+            </>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={() => setNoteOpen(true)}
+          disabled={
+            !status.recording || working || activeRecordingMode === 'facts'
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Bookmark"
+          accessibilityHint={
+            activeRecordingMode === 'facts'
+              ? 'Bookmarks are available in Video + facts mode.'
+              : 'Save a note and sensor snapshot at this moment.'
+          }
+          accessibilityState={{
+            disabled: Boolean(
+              !status.recording || working || activeRecordingMode === 'facts',
+            ),
+          }}
+          style={[
+            s.bookmark,
+            (!status.recording || activeRecordingMode === 'facts') && s.dim,
+          ]}
+        >
+          <Text style={s.plus}>+</Text>
+          <Text style={s.bookmarkText}>Mark</Text>
+        </Pressable>
+      </View>
     </View>
   );
   const previewControls =
@@ -1338,7 +1550,9 @@ function CaptureApp() {
                 <Text style={s.telemetry}>
                   {status.recording ? '● RECORDING' : 'READY'} ·{' '}
                   {duration(status.elapsedSeconds)} ·{' '}
-                  {status.framesWritten || 0} frames
+                  {activeRecordingMode === 'facts'
+                    ? 'TAG FACTS · no video'
+                    : `${status.framesWritten || 0} frames`}
                 </Text>
               )}
             </View>
@@ -1522,6 +1736,11 @@ function CaptureApp() {
                             : item.sizeBytes,
                         )}
                       </Text>
+                      {item.recordingMode === 'facts' && (
+                        <Text style={s.factsBadge}>
+                          Tag facts · YAML summary · no video
+                        </Text>
+                      )}
                       <View style={s.sessionActions}>
                         <Pressable
                           accessibilityRole="button"
@@ -1541,24 +1760,30 @@ function CaptureApp() {
                         >
                           <Text style={s.exportText}>Tags seen</Text>
                         </Pressable>
+                        {item.recordingMode !== 'facts' && (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Play recording ${item.name}`}
+                            accessibilityState={{
+                              disabled: Boolean(working || !item.finalized),
+                            }}
+                            disabled={Boolean(working || !item.finalized)}
+                            style={[
+                              s.sessionButton,
+                              (working || !item.finalized) && s.dim,
+                            ]}
+                            onPress={() => openSession(item, 'play')}
+                          >
+                            <Text style={s.exportText}>Play</Text>
+                          </Pressable>
+                        )}
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`Play recording ${item.name}`}
-                          accessibilityState={{
-                            disabled: Boolean(working || !item.finalized),
-                          }}
-                          disabled={Boolean(working || !item.finalized)}
-                          style={[
-                            s.sessionButton,
-                            (working || !item.finalized) && s.dim,
-                          ]}
-                          onPress={() => openSession(item, 'play')}
-                        >
-                          <Text style={s.exportText}>Play</Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Share recording ${item.name}`}
+                          accessibilityLabel={`${
+                            item.recordingMode === 'facts'
+                              ? 'Share YAML summary'
+                              : 'Share recording'
+                          } ${item.name}`}
                           accessibilityState={{
                             disabled: Boolean(working || !item.finalized),
                           }}
@@ -1569,12 +1794,20 @@ function CaptureApp() {
                           ]}
                           onPress={() => openSession(item, 'share')}
                         >
-                          <Text style={s.exportText}>Share ↗</Text>
+                          <Text style={s.exportText}>
+                            {item.recordingMode === 'facts'
+                              ? 'Share YAML ↗'
+                              : 'Share ↗'}
+                          </Text>
                         </Pressable>
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Delete recording ${item.name}`}
-                          accessibilityHint="Permanently removes the video and original capture data."
+                          accessibilityHint={
+                            item.recordingMode === 'facts'
+                              ? 'Permanently removes the tag facts and YAML summary.'
+                              : 'Permanently removes the video and original capture data.'
+                          }
                           accessibilityState={{
                             disabled: Boolean(
                               working ||
@@ -1647,22 +1880,26 @@ function CaptureApp() {
             await openSession(evidence.session, 'play', evidence.seconds);
           }
         }}
-        onOpenEvidence={(tag: FieldTag) => {
-          if (
-            !fieldSession ||
-            !Number.isFinite(tag.videoTimeSeconds) ||
-            tag.videoTimeSeconds == null ||
-            tag.videoTimeSeconds < 0
-          ) {
-            return;
-          }
-          fieldEvidenceRef.current = {
-            session: fieldSession,
-            seconds: tag.videoTimeSeconds,
-          };
-          setFieldsOpen(false);
-          setFieldSession(null);
-        }}
+        onOpenEvidence={
+          fieldSession?.recordingMode === 'facts'
+            ? undefined
+            : (tag: FieldTag) => {
+                if (
+                  !fieldSession ||
+                  !Number.isFinite(tag.videoTimeSeconds) ||
+                  tag.videoTimeSeconds == null ||
+                  tag.videoTimeSeconds < 0
+                ) {
+                  return;
+                }
+                fieldEvidenceRef.current = {
+                  session: fieldSession,
+                  seconds: tag.videoTimeSeconds,
+                };
+                setFieldsOpen(false);
+                setFieldSession(null);
+              }
+        }
         onChange={field => setStatus(previous => ({ ...previous, field }))}
         onSetFloor={async () => {
           setFieldsOpen(false);
@@ -2093,6 +2330,41 @@ const s = StyleSheet.create({
     marginBottom: 11,
   },
   recordRow: { flexDirection: 'row', gap: 11 },
+  recordingControls: { gap: 5, flexShrink: 0 },
+  recordingModes: { flexDirection: 'row', gap: 6 },
+  recordingMode: {
+    flex: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+  },
+  recordingModeSelected: { backgroundColor: C.cyan, borderColor: C.cyan },
+  recordingModeLabel: { color: C.text, fontSize: 12, fontWeight: '700' },
+  recordingModeDetail: { color: C.muted, fontSize: 9, marginTop: 2 },
+  capacity: { gap: 3, paddingHorizontal: 3 },
+  capacityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  capacityLabel: { color: C.cyan, fontSize: 11, fontWeight: '600' },
+  capacityDetail: { color: C.muted, fontSize: 9, marginTop: 2 },
+  capacityWarning: { color: '#FFCB7A', fontSize: 10 },
+  capacityTrack: {
+    backgroundColor: C.line,
+    height: 5,
+    borderRadius: 3,
+    marginVertical: 3,
+    overflow: 'hidden',
+  },
+  capacityFill: { backgroundColor: C.cyan, height: '100%' },
+  capacityFillWarning: { backgroundColor: '#FFCB7A' },
+  factsBadge: { color: C.cyan, fontSize: 11, lineHeight: 16 },
   record: {
     flex: 1,
     height: 44,

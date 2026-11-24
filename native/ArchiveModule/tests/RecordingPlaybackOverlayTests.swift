@@ -357,6 +357,32 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
             // explicitly fall back to clean video.
         }
     }
+
+    func testFolderLoaderAccepts32MiBMetadataAndRejectsOneByteMore() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let framesURL = folder.appendingPathComponent("frames.jsonl")
+        var frameData = try JSONSerialization.data(withJSONObject: frame("f0", 0))
+        frameData.append(10)
+        frameData.append(Data(repeating: 32, count: 32 * 1024 * 1024 - frameData.count))
+        try frameData.write(to: framesURL)
+        try Data().write(to: folder.appendingPathComponent("events.jsonl"))
+        func entry(_ path: String, _ data: Data) -> [String: Any] {
+            ["path": path, "bytes": data.count, "sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()]
+        }
+        var savedManifest = manifest
+        savedManifest["fileInventory"] = [entry("frames.jsonl", frameData), entry("events.jsonl", Data())]
+        try JSONSerialization.data(withJSONObject: savedManifest).write(to: folder.appendingPathComponent("manifest.json"))
+        let timeline = try RecordingPlaybackTimeline.load(folderURL: folder)
+        XCTAssertEqual(try XCTUnwrap(timeline.snapshot(at: 0)).frameID, "f0")
+        let handle = try FileHandle(forWritingTo: framesURL)
+        try handle.truncate(atOffset: 32 * 1024 * 1024 + 1)
+        try handle.close()
+        XCTAssertThrowsError(try RecordingPlaybackTimeline.load(folderURL: folder)) { error in
+            XCTAssertTrue(error.localizedDescription.contains("frames.jsonl is not bounded regular metadata"))
+        }
+    }
 }
 
 @MainActor

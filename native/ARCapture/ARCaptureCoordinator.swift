@@ -103,6 +103,10 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var lastStatusTime = 0.0
     private var lastDepthPreviewTime = 0.0
     private var lastGeometryTime = 0.0
+    private var lastStorageCheckTime = -Double.infinity
+    private var lastFactsCheckpointTime = -Double.infinity
+    private var capacityStopRequested = false
+    private var automaticSaveReason: String?
     private var lastTrackingKey = ""
     private var finalizing = false
     private var resetting = false
@@ -210,23 +214,35 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         }
     }
 
-    func startSession(name: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+    func startSession(name: String, mode: RecordingMode = .video, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         captureQueue.async {
             guard self.recorder == nil && !self.finalizing else { completion(.failure(CaptureError.message("A recording is already active or finalizing."))); return }
             guard let live = self.latestFrame, self.tracking == "normal", self.frameAge(live) >= 0, self.frameAge(live) <= 0.5 else { completion(.failure(CaptureError.message("Wait for a current camera frame with normal AR tracking."))); return }
             do {
-                let recorder = try CaptureRecorder(name: name.isEmpty ? "Field capture" : name, debugSettings: self.debugSettings, fieldDefinition: self.fieldState.definition)
+                let recorder = try CaptureRecorder(name: name.isEmpty ? "Field capture" : name, debugSettings: self.debugSettings, fieldDefinition: self.fieldState.definition, mode: mode)
                 self.recorder = recorder
                 self.fieldState.beginWalk(recorder.id, timestamp: live.timestamp, segment: self.segment)
                 self.clearPoints()
                 DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
                 self.droppedFrames = 0; self.recordingStartedAt = Date(); self.lastError = nil
-                self.counters = ["framesWritten": 0, "depthFrames": 0, "videoFrames": 0, "bytesWritten": 0]
+                self.capacityStopRequested = false; self.automaticSaveReason = nil
+                self.lastFactsCheckpointTime = live.timestamp; self.lastStorageCheckTime = -.infinity
+                self.counters = ["framesWritten": 0, "depthFrames": 0, "videoFrames": 0, "bytesWritten": 0,
+                    "recordingMode": mode.rawValue, "recordingCapacity": RecordingCapacity.snapshot(mode: mode)]
                 recorder.onProgress = { [weak self, weak recorder] values in
                     self?.captureQueue.async {
                         guard let self, self.recorder === recorder else { return }
                         self.counters = values
                         if let error = values["lastError"] as? String { self.lastError = error }
+                        if let capacity = values["recordingCapacity"] as? [String: Any], capacity["shouldStop"] as? Bool == true,
+                           !self.capacityStopRequested {
+                            self.capacityStopRequested = true
+                            let resource = capacity["limitingResource"] as? String ?? "Recording capacity"
+                            self.automaticSaveReason = resource.lowercased()
+                            self.lastError = "Saving automatically near the \(resource.lowercased()) limit."
+                            recorder?.event(["type": "recordingCapacityReached", "timestamp": self.latestFrame?.timestamp ?? 0, "capacity": capacity])
+                            self.stopSession { _ in }
+                        }
                         self.emitStatus()
                     }
                 }
@@ -236,6 +252,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     "frameId": self.frameID, "timestamp": self.latestFrame?.timestamp ?? 0])
                 recorder.event(["type": "measurementsAtStart", "segmentId": self.segment, "timestamp": self.latestFrame?.timestamp ?? 0,
                     "measurements": self.spatialState.completed.map(\.dictionary), "floor": self.confirmedFloorDictionary() as Any? ?? NSNull()])
+                if mode == .facts { recorder.updateFacts(self.fieldState.summary, timestamp: live.timestamp) }
                 self.emitStatus(); completion(.success(self.status()))
             } catch { self.lastError = error.localizedDescription; self.emitStatus(); completion(.failure(error)) }
         }
@@ -248,7 +265,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 recorder.event(["type": "aprilTagAnalysisPendingAtStop", "frameId": self.tagPendingFrameID as Any? ?? NSNull(), "timestamp": self.latestFrame?.timestamp ?? 0, "analysisSkippedFramesTotal": self.tagSkippedFrames, "policy": "late result is not appended after recording finalization"])
             }
             self.fieldState.stopWalk()
-            recorder.writeFieldSummary(self.fieldState.summary)
+            if recorder.mode == .facts { recorder.updateFacts(self.fieldState.summary, timestamp: self.latestFrame?.timestamp ?? ProcessInfo.processInfo.systemUptime) }
+            else { recorder.writeFieldSummary(self.fieldState.summary) }
             self.recorder = nil; self.finalizingRecorder = recorder; self.finalizing = true; self.emitStatus()
             recorder.finish(droppedFrames: self.droppedFrames) { result in
                 self.captureQueue.async {
@@ -258,6 +276,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     case .success(let record):
                         self.counters["bytesWritten"] = record["sizeBytes"]
                         if let errors = record["errors"] as? [String], let error = errors.last { self.lastError = error }
+                        else if let reason = self.automaticSaveReason {
+                            self.lastError = "Saved automatically near the \(reason) limit. Start a new walk to continue."
+                        }
                     case .failure(let error): self.lastError = error.localizedDescription
                     }
                     self.emitStatus(); completion(result)
@@ -309,16 +330,10 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     func getSavedFieldWalk(_ id: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         savedSessionQueue.async {
             do {
-                guard UUID(uuidString: id) != nil else { throw CaptureError.message("Invalid saved session identifier.") }
-                let folder = CaptureRecorder.root.appendingPathComponent(id, isDirectory: true)
-                let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("manifest.json"))) as? [String: Any]
-                let data = try Data(contentsOf: folder.appendingPathComponent("field-walk-summary.yaml"))
-                guard data.count <= FieldTextCodec.maximumBytes, let text = String(data: data, encoding: .utf8),
-                      let inventory = manifest?["fileInventory"] as? [[String: Any]],
-                      let record = inventory.first(where: { $0["path"] as? String == "field-walk-summary.yaml" }),
-                      record["sha256"] as? String == FieldValue.hash(text), FieldValue.number(record["bytes"]) == Double(data.count) else { throw CaptureError.message("Saved field summary failed its integrity check.") }
-                var summary = try FieldTextCodec.parse(text)
-                if let origin = FieldValue.number(manifest?["firstARFrameTimestamp"]), var field = summary["field"] as? [String: Any], let rows = field["seenTags"] as? [[String: Any]] {
+                let saved = try SavedFieldWalk.load(id: id, sessionsRoot: CaptureRecorder.root)
+                let manifest = saved.manifest, text = saved.text
+                var summary = saved.summary
+                if manifest["recordingMode"] as? String != "facts", let origin = FieldValue.number(manifest["firstARFrameTimestamp"]), var field = summary["field"] as? [String: Any], let rows = field["seenTags"] as? [[String: Any]] {
                     field["seenTags"] = rows.map { source -> [String: Any] in
                         var row = source
                         if let timestamp = FieldValue.number(row["timestamp"]), timestamp >= origin { row["videoTimeSeconds"] = timestamp - origin }
@@ -327,8 +342,14 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     summary["field"] = field
                 }
                 var result = try Self.fieldExports(summary); result["yaml"] = text
-                completion(.success(["yaml": text, "field": result]))
+                completion(.success(["yaml": text, "field": result, "recordingMode": manifest["recordingMode"] as? String ?? "video"]))
             } catch { completion(.failure(CaptureError.message("Field walk summary unavailable: " + error.localizedDescription))) }
+        }
+    }
+    func exportFieldWalk(_ id: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        savedSessionQueue.async {
+            do { completion(.success(try SavedFieldWalk.load(id: id, sessionsRoot: CaptureRecorder.root).descriptor)) }
+            catch { completion(.failure(error)) }
         }
     }
     private static func fieldExports(_ summary: [String: Any]) throws -> [String: Any] {
@@ -560,7 +581,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     guard let data = try? Data(contentsOf: folder.appendingPathComponent("manifest.json")), var value = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
                     value["folderPath"] = folder.path
                     value["sizeBytes"] = CaptureRecorder.directorySize(folder)
-                    value.merge(SavedRecordingStore.shared.descriptor(sessionID: folder.lastPathComponent)) { _, new in new }
+                    if value["recordingMode"] as? String != "facts" {
+                        value.merge(SavedRecordingStore.shared.descriptor(sessionID: folder.lastPathComponent)) { _, new in new }
+                    }
                     return value
                 }.sorted { ($0["createdAt"] as? String ?? "") > ($1["createdAt"] as? String ?? "") }
                 completion(.success(records))
@@ -577,6 +600,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let data = try Data(contentsOf: manifest)
                 let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
                 guard value?["finalized"] as? Bool == true else { throw CaptureError.message("Stop and finalize this session before exporting.") }
+                guard value?["recordingMode"] as? String != "facts" else { throw CaptureError.message("This walk contains tag facts only. Use Share YAML to export its summary.") }
                 completion(.success(["sessionId": id, "folderPath": folder.path, "manifestPath": manifest.path, "finalized": true]))
             } catch { completion(.failure(error)) }
         }
@@ -688,35 +712,48 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         renderSpatial(frame)
         analyzeAprilTags(frame)
         if let recorder {
-            var metadata: [String: Any] = ["frameId": frameID, "segmentId": segment, "timestamp": frame.timestamp,
-                "imageWidth": CVPixelBufferGetWidth(frame.capturedImage), "imageHeight": CVPixelBufferGetHeight(frame.capturedImage),
-                "pixelFormat": CVPixelBufferGetPixelFormatType(frame.capturedImage), "intrinsicsColumnMajor": Self.matrix(frame.camera.intrinsics),
-                "cameraToWorldColumnMajor": Self.matrix(frame.camera.transform), "tracking": tracking, "trackingReason": trackingReason,
-                "worldMappingStatus": frame.worldMappingStatus.rawValue, "interfaceOrientation": orientation.rawValue,
-                "viewportWidth": viewport.width, "viewportHeight": viewport.height, "depthAvailable": depthAvailable,
-                "previewMode": previewMode,
-                "droppedWriterFramesTotal": droppedFrames, "exposureDurationSeconds": frame.camera.exposureDuration]
-            let display = frame.displayTransform(for: orientation, viewportSize: viewport)
-            metadata["displayTransform"] = [display.a, display.b, display.c, display.d, display.tx, display.ty]
-            let previewDisplay = PreviewZoom.displayTransform(base: display, zoom: displayZoom)
-            metadata["displayZoom"] = displayZoom
-            metadata["previewDisplayTransform"] = [previewDisplay.a, previewDisplay.b, previewDisplay.c, previewDisplay.d, previewDisplay.tx, previewDisplay.ty]
-            if frame.timestamp - lastGeometryTime >= 1 {
-                lastGeometryTime = frame.timestamp
-                metadata["planes"] = frame.anchors.compactMap { anchor -> [String: Any]? in
-                    guard let plane = anchor as? ARPlaneAnchor else { return nil }
-                    return ["id": plane.identifier.uuidString, "alignment": plane.alignment.rawValue, "center": Self.vector(plane.center), "extent": Self.vector(plane.extent), "transformColumnMajor": Self.matrix(plane.transform)]
-                }
-                if let features = frame.rawFeaturePoints {
-                    metadata["featurePointsSample"] = features.points.prefix(200).map(Self.vector)
-                    metadata["featurePointsTotal"] = features.points.count
-                }
-                if let available = try? CaptureRecorder.root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage, available < 250_000_000 {
-                    lastError = "Recording stopped: less than 250 MB free storage."
-                    stopSession { _ in }; emitStatus(); return
+            if frame.timestamp - lastStorageCheckTime >= 1 {
+                lastStorageCheckTime = frame.timestamp
+                if let available = try? CaptureRecorder.root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage {
+                    recorder.updateAvailableStorage(available)
+                    if available < 250_000_000 {
+                        lastError = "Recording stopped: less than 250 MB free storage."
+                        stopSession { _ in }; emitStatus(); return
+                    }
                 }
             }
-            if !recorder.append(frame: frame, metadata: metadata) { droppedFrames += 1 }
+            if recorder.mode == .facts {
+                if frame.timestamp - lastFactsCheckpointTime >= 1 {
+                    lastFactsCheckpointTime = frame.timestamp
+                    recorder.checkpointFacts(fieldState.summary, timestamp: frame.timestamp)
+                }
+            } else {
+                var metadata: [String: Any] = ["frameId": frameID, "segmentId": segment, "timestamp": frame.timestamp,
+                    "imageWidth": CVPixelBufferGetWidth(frame.capturedImage), "imageHeight": CVPixelBufferGetHeight(frame.capturedImage),
+                    "pixelFormat": CVPixelBufferGetPixelFormatType(frame.capturedImage), "intrinsicsColumnMajor": Self.matrix(frame.camera.intrinsics),
+                    "cameraToWorldColumnMajor": Self.matrix(frame.camera.transform), "tracking": tracking, "trackingReason": trackingReason,
+                    "worldMappingStatus": frame.worldMappingStatus.rawValue, "interfaceOrientation": orientation.rawValue,
+                    "viewportWidth": viewport.width, "viewportHeight": viewport.height, "depthAvailable": depthAvailable,
+                    "previewMode": previewMode,
+                    "droppedWriterFramesTotal": droppedFrames, "exposureDurationSeconds": frame.camera.exposureDuration]
+                let display = frame.displayTransform(for: orientation, viewportSize: viewport)
+                metadata["displayTransform"] = [display.a, display.b, display.c, display.d, display.tx, display.ty]
+                let previewDisplay = PreviewZoom.displayTransform(base: display, zoom: displayZoom)
+                metadata["displayZoom"] = displayZoom
+                metadata["previewDisplayTransform"] = [previewDisplay.a, previewDisplay.b, previewDisplay.c, previewDisplay.d, previewDisplay.tx, previewDisplay.ty]
+                if frame.timestamp - lastGeometryTime >= 1 {
+                    lastGeometryTime = frame.timestamp
+                    metadata["planes"] = frame.anchors.compactMap { anchor -> [String: Any]? in
+                        guard let plane = anchor as? ARPlaneAnchor else { return nil }
+                        return ["id": plane.identifier.uuidString, "alignment": plane.alignment.rawValue, "center": Self.vector(plane.center), "extent": Self.vector(plane.extent), "transformColumnMajor": Self.matrix(plane.transform)]
+                    }
+                    if let features = frame.rawFeaturePoints {
+                        metadata["featurePointsSample"] = features.points.prefix(200).map(Self.vector)
+                        metadata["featurePointsTotal"] = features.points.count
+                    }
+                }
+                if !recorder.append(frame: frame, metadata: metadata) { droppedFrames += 1 }
+            }
         }
         if previewMode != "camera", frame.timestamp - lastDepthPreviewTime > 0.2 {
             lastDepthPreviewTime = frame.timestamp
@@ -903,6 +940,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         expireAprilTagsIfNeeded()
         var value = counters
         value["recording"] = recorder != nil; value["finalizing"] = finalizing
+        value["recordingMode"] = recorder?.mode.rawValue ?? finalizingRecorder?.mode.rawValue ?? "video"
         value["sessionId"] = recorder?.id as Any? ?? NSNull(); value["name"] = recorder?.name as Any? ?? NSNull()
         value["folderPath"] = recorder?.folder.path as Any? ?? NSNull()
         value["tracking"] = tracking; value["trackingReason"] = trackingReason

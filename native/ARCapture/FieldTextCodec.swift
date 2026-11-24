@@ -9,8 +9,8 @@ enum FieldTextCodec {
         var errorDescription: String? { if case .invalid(let s) = self { return s }; return nil }
     }
     static let maximumBytes = 2 * 1024 * 1024
-    static func parse(_ text: String) throws -> [String: Any] {
-        guard text.utf8.count <= maximumBytes else { throw Failure.invalid("Field document exceeds 2 MiB.") }
+    static func parse(_ text: String, maximumBytes: Int = Self.maximumBytes) throws -> [String: Any] {
+        guard text.utf8.count <= maximumBytes else { throw Failure.invalid("Field document exceeds \(maximumBytes / 1024 / 1024) MiB.") }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let value: Any
         if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
@@ -26,8 +26,10 @@ enum FieldTextCodec {
         String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
     }
     private static func scalar(_ value: Any) throws -> String {
-        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys, .withoutEscapingSlashes])
-        return String(decoding: data, as: UTF8.self)
+        try autoreleasepool {
+            let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys, .withoutEscapingSlashes])
+            return String(decoding: data, as: UTF8.self)
+        }
     }
     private static func emit(_ value: Any, indent: Int) throws -> String {
         guard indent <= 64 else { throw Failure.invalid("Field document nesting exceeds 32 levels.") }

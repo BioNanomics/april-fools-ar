@@ -41,7 +41,7 @@ struct SessionMP4Writer {
     }
 
     private static let maximum = UInt64(UInt32.max) // Strictly below 4 GiB.
-    private static let jsonLimit = 16 * 1024 * 1024
+    private static let jsonLimit = 32 * 1024 * 1024
     private static let yamlLimit = 64 * 1024 * 1024
     private static let movieLimit = 64 * 1024 * 1024
     private static let entryLimit = 65_534
@@ -316,7 +316,7 @@ struct SessionMP4Writer {
         try verifyEntry(entry, inside: source)
     }
     private func readMetadata(_ entry: Entry, inside source: URL, shouldCancel: () -> Bool) throws -> Data {
-        guard entry.bytes <= UInt64(Self.jsonLimit) else { throw ExportError.limit("each source metadata file must be at most 16 MiB") }
+        guard entry.bytes <= UInt64(Self.jsonLimit) else { throw ExportError.limit("each source metadata file must be at most 32 MiB") }
         var result = Data(); result.reserveCapacity(Int(entry.bytes))
         try streamFile(entry, inside: source, shouldCancel: shouldCancel) { result.append($0) }
         return result
@@ -363,13 +363,28 @@ struct SessionMP4Writer {
 
     // MARK: YAML 1.2, JSON-compatible values only
 
+    /// Exact contribution of one native JSONL record to its exported YAML
+    /// track, including the document marker. Holds only scalar/line temporaries;
+    /// no complete YAML document or extra record-sized JSON buffer is built.
+    static func yamlRecordByteCount(_ object: [String: Any]) throws -> Int64 {
+        try autoreleasepool {
+            var output = YAMLBuffer(limit: yamlLimit, countsOnly: true)
+            try output.append("---\n")
+            try output.emit(object)
+            return Int64(output.byteCount)
+        }
+    }
+
     private struct YAMLBuffer {
         var data = Data()
         let limit: Int
+        var countsOnly = false
+        private(set) var byteCount = 0
         mutating func append(_ text: String) throws {
-            let bytes = Data(text.utf8)
-            guard bytes.count <= limit - data.count else { throw ExportError.limit("generated YAML must remain at most 64 MiB per track") }
-            data.append(bytes)
+            let bytes = text.utf8.count
+            guard bytes <= limit - byteCount else { throw ExportError.limit("generated YAML must remain at most 64 MiB per track") }
+            byteCount += bytes
+            if !countsOnly { data.append(contentsOf: text.utf8) }
         }
         private func scalar(_ value: Any) throws -> String {
             if value is NSNull { return "null" }
@@ -383,7 +398,15 @@ struct SessionMP4Writer {
                 // NSNumber.stringValue rounds some Double values to 16 digits.
                 // JSON's scalar encoder preserves the original binary64 value,
                 // and JSON numeric syntax is also valid YAML 1.2 syntax.
-                let encoded = try JSONSerialization.data(withJSONObject: number, options: [.fragmentsAllowed])
+                var encoded = try JSONSerialization.data(withJSONObject: number, options: [.fragmentsAllowed])
+                if countsOnly {
+                    // The native recorder first writes JSON, then export parses
+                    // it back. Match that scalar normalization without building
+                    // or parsing a second whole-record JSON document. In
+                    // particular, native -0.0 is written as -0 and reopens as 0.
+                    let reopened = try JSONSerialization.jsonObject(with: encoded, options: [.fragmentsAllowed])
+                    encoded = try JSONSerialization.data(withJSONObject: reopened, options: [.fragmentsAllowed])
+                }
                 return String(decoding: encoded, as: UTF8.self)
             }
             if let mapping = value as? [String: Any], mapping.isEmpty { return "{}" }

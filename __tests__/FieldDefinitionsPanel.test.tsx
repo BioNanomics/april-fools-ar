@@ -102,6 +102,11 @@ beforeEach(() => {
     getSavedFieldWalk: jest
       .fn()
       .mockResolvedValue({ yaml: initial.yaml, field: initial }),
+    exportFieldWalk: jest.fn().mockResolvedValue({
+      url: 'file:///tmp/Blue-field.yaml',
+      path: '/tmp/Blue-field.yaml',
+      bytes: 100,
+    }),
     clearFieldAlignment: jest
       .fn()
       .mockResolvedValue({ ...initial, alignment: 'unaligned' }),
@@ -334,7 +339,7 @@ test('missing recorded time shows unavailable instead of offering a zero-time ob
   expect(text()).toContain('Recorded-time video link unavailable');
 });
 
-test('saved walks are read-only, show their saved YAML and share the original summary', async () => {
+test('saved walks are read-only, show saved YAML and share the actual YAML file', async () => {
   const sharing = jest
     .spyOn(Share, 'share')
     .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
@@ -351,9 +356,118 @@ test('saved walks are read-only, show their saved YAML and share the original su
   expect(button('Field YAML document').props.children).toBe(initial.yaml);
   await act(async () => button('Tags seen').props.onPress());
   await act(async () => button('Share walk YAML').props.onPress());
-  expect(sharing).toHaveBeenLastCalledWith(
-    expect.objectContaining({ message: initial.yaml }),
+  expect(engine.exportFieldWalk).toHaveBeenCalledWith('saved-id');
+  expect(sharing).toHaveBeenLastCalledWith({
+    url: 'file:///tmp/Blue-field.yaml',
+    title: 'Blue field · YAML',
+  });
+  sharing.mockRestore();
+});
+
+test('facts show discovered and not-seen tags with usable provenance and no playback links', async () => {
+  const field: FieldStatus = {
+    ...initial,
+    discoveredCount: 1,
+    seenTags: [
+      {
+        id: 999,
+        expected: false,
+        frameId: 'rejected',
+        segmentId: 'segment-A',
+        observedPosition: null,
+        observedWorldPosition: null,
+        quality: { usable: false },
+        latestUsableObservation: {
+          observedWorldPosition: [1, 2, 3],
+          segmentId: 'segment-A',
+          frameId: 'usable',
+        },
+        videoTimeSeconds: 1,
+      },
+    ],
+    notSeenCount: 1,
+    notSeenTags: [
+      {
+        id: 2,
+        name: 'Fixture tag',
+        status: 'notSeen',
+        nominalPosition: [4, 3, 1.5],
+      },
+    ],
+  };
+  engine.getSavedFieldWalk.mockResolvedValue({
+    yaml: initial.yaml!,
+    field,
+    recordingMode: 'facts',
+  });
+  await render({
+    savedSession: { id: 'saved-id', name: 'Facts' },
+    onOpenEvidence: jest.fn(),
+  });
+  expect(text()).toContain('This session has no video or sensor playback.');
+  expect(text()).toContain('Discovered tag');
+  expect(text()).toContain('Expected but not seen: 1');
+  expect(text()).toContain(
+    'does not establish that they are physically missing',
   );
+  expect(text()).toContain('Latest usable position: 1.000, 2.000, 3.000 m');
+  expect(text()).toContain('source frame usable');
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Open observation for tag 999',
+    }),
+  ).toHaveLength(0);
+  expect(text()).not.toContain('Recorded-time video link unavailable');
+});
+
+test.each([false, true])(
+  'walk without a selected definition explains discovered-only coverage (saved=%s)',
+  async saved => {
+    const field: FieldStatus = {
+      packageId: null,
+      expectedCount: 0,
+      expectedSeenCount: 0,
+      seenCount: 1,
+      discoveredCount: 1,
+      seenTags: [{ id: 999, expected: false }],
+    };
+    engine.getFieldWalk.mockResolvedValue(field);
+    engine.getSavedFieldWalk.mockResolvedValue({
+      yaml: 'schemaVersion: 1\n',
+      field,
+      recordingMode: 'facts',
+    });
+    await render({
+      field,
+      savedSession: saved ? { id: 'facts-id', name: 'Discovery walk' } : null,
+    });
+    if (!saved) {
+      await act(async () => button('Tags seen').props.onPress());
+    }
+    expect(text()).toContain('Discovered tags: 1');
+    expect(text()).not.toContain('/ 0 expected');
+    expect(text()).not.toContain('Discovered outside the selected definition');
+    expect(text()).toContain(
+      saved
+        ? 'No field definition was selected for this walk. Expected tags not seen are unavailable.'
+        : 'Choose a field definition to include expected tags not seen in the walk summary.',
+    );
+  },
+);
+
+test('YAML file export failures report the native error without sharing text as a file', async () => {
+  const sharing = jest
+    .spyOn(Share, 'share')
+    .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
+  engine.exportFieldWalk.mockRejectedValue(
+    new Error('The saved summary failed its integrity check.'),
+  );
+  await render({
+    savedSession: { id: 'saved-id', name: 'Facts', recordingMode: 'facts' },
+  });
+  await act(async () => button('Share walk YAML').props.onPress());
+  expect(text()).toContain('The saved summary failed its integrity check.');
+  expect(sharing).not.toHaveBeenCalled();
   sharing.mockRestore();
 });
 

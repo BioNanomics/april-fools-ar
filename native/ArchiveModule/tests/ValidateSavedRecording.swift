@@ -97,6 +97,25 @@ enum ValidateSavedRecording {
             try expect(!entries.contains { $0.lastPathComponent.hasPrefix("." + directory.lastPathComponent) }, "Failed save left staging files")
         }
 
+        let largeManifest = try clone()
+        let largeManifestURL = largeManifest.appendingPathComponent("manifest.json")
+        var paddedManifest = try Data(contentsOf: largeManifestURL)
+        paddedManifest.append(Data(repeating: 32, count: 16 * 1024 * 1024 + 1 - paddedManifest.count))
+        try paddedManifest.write(to: largeManifestURL)
+        _ = try store.prepare(folderPath: largeManifest.path)
+        try expect(store.descriptor(sessionID: largeManifest.lastPathComponent)["recordingReady"] as? Bool == true,
+                   "A manifest above the former 16 MiB limit was rejected")
+        let manifestHandle = try FileHandle(forWritingTo: largeManifestURL)
+        try manifestHandle.truncate(atOffset: 32 * 1024 * 1024 + 1)
+        try manifestHandle.close()
+        do {
+            _ = try store.prepare(folderPath: largeManifest.path)
+            throw failure("Expected rejection above the 32 MiB manifest boundary")
+        } catch let error as NSError {
+            try expect(error.localizedDescription == "The capture manifest exceeds the 32 MiB metadata limit.",
+                       "Oversized manifest did not fail at the metadata size guard: " + error.localizedDescription)
+        }
+
         let broken = try clone()
         let events = broken.appendingPathComponent("events.jsonl")
         let eventBytes = try Data(contentsOf: events)

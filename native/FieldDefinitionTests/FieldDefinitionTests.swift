@@ -30,6 +30,8 @@ final class FieldDefinitionTests: XCTestCase {
     private func metadata(_ timestamp: Double, _ frame: String, segment: String = "segment-A", floor: Bool = true, tracking: String = "normal") -> [String: Any] {
         ["frameId": frame, "segmentId": segment, "timestamp": timestamp,
          "cameraToWorldColumnMajor": FieldValue.values(camera), "tracking": tracking,
+         "intrinsicsColumnMajor": [1200.0,0,0,0,1200,0,960,720,1], "imageWidth": 1920, "imageHeight": 1440,
+         "debugSettings": TagDebugSettings().dictionary,
          "floorSnapshot": floor ? ["id": "field-floor", "segmentId": segment, "frameId": "floor-frame",
             "originWorldMeters": [0.0,0.2,0], "normalWorld": [0.0,1,0], "classification": "floor", "operatorConfirmed": true] as Any : NSNull()]
     }
@@ -58,6 +60,166 @@ final class FieldDefinitionTests: XCTestCase {
         }
     }
     private func rows(_ state: FieldWalkState) -> [[String: Any]] { state.status["seenTags"] as? [[String: Any]] ?? [] }
+    private func fullDetection(_ id: Int) -> [String: Any] {
+        var value = detection(id)
+        var pose = value["pose"] as! [String: Any]
+        pose["eulerDegrees"] = [-12.345678901234,0.0,45.125]
+        pose["poseError"] = 0.000000123456789
+        value["pose"] = pose
+        value["center"] = [960.123456789,720.123456789]
+        value["corners"] = [[900.0,660.0],[1020,660],[1020,780],[900,780]]
+        value["cameraRanges"] = ["tagAvailable": true, "tagRangeMeters": 3.012345678901,
+            "lidarAvailable": false, "lidarRangeMeters": NSNull(), "lidarReason": "invalidConfidence",
+            "distanceDeltaMeters": NSNull(), "tagDepthZMeters": 3.0]
+        value["gravityOrientation"] = ["available": true, "planeLeanFromVerticalDegrees": 0.0,
+            "uprightRotationClockwiseDegrees": -15.1234567890123, "tiltFromVerticalDegrees": 0.0,
+            "twistDegrees": -15.1234567890123, "twistAvailable": true,
+            "normalWorld": [0.0,0,-1], "upWorld": [0.0,1,0], "worldFromTagRotationRowMajor": [1.0,0,0,0,1,0,0,0,1]]
+        value["depth"] = ["centerDepthMeters": NSNull(), "centerConfidence": 0, "reason": "invalidConfidence"]
+        return value
+    }
+
+    func testWalkWithoutSelectedFieldRetainsDiscoveredFactsAndLocalPosition() throws {
+        let state = FieldWalkState(); state.beginWalk("facts", timestamp: 100)
+        state.process([detection(999)], metadata: metadata(100,"discovered"), now: 100.01, settings: TagDebugSettings())
+        let row = try XCTUnwrap(rows(state).first)
+        XCTAssertEqual(row["expected"] as? Bool, false)
+        XCTAssertEqual(row["status"] as? String, "seen")
+        XCTAssertTrue(row["nominalPosition"] is NSNull)
+        XCTAssertTrue(row["observedPosition"] is NSNull)
+        XCTAssertNotNil(row["observedWorldPosition"] as? [Double])
+        XCTAssertEqual(row["segmentId"] as? String, "segment-A")
+        XCTAssertEqual(row["frameId"] as? String, "discovered")
+        XCTAssertEqual((state.status["notSeenTags"] as? [[String: Any]])?.count, 0)
+        XCTAssertEqual(FieldValue.number(state.status["discoveredCount"]), 1)
+        let yaml = try FieldTextCodec.yaml(state.summary)
+        let restored = try FieldTextCodec.parse(yaml)
+        XCTAssertEqual(FieldValue.number(restored["summaryVersion"]), 2)
+        XCTAssertEqual((restored["field"] as? [String: Any])?["walkId"] as? String, "facts")
+    }
+
+    func testSummarySeparatesExpectedNotSeenFromDiscoveredAndNeverClaimsAbsence() throws {
+        let state = FieldWalkState(); state.select(try field()); state.beginWalk("facts", timestamp: 100)
+        state.process([detection(1),detection(999)], metadata: metadata(100,"one"), now: 100.01, settings: TagDebugSettings())
+        let notSeen = try XCTUnwrap(state.status["notSeenTags"] as? [[String: Any]])
+        XCTAssertEqual(notSeen.count, 1)
+        XCTAssertEqual(notSeen.first?["id"] as? Int, 2)
+        XCTAssertEqual(notSeen.first?["status"] as? String, "notSeen")
+        XCTAssertEqual(try XCTUnwrap(notSeen.first?["nominalPosition"] as? [Double]), [4,3,1.5])
+        XCTAssertTrue(notSeen.first?["observedPosition"] is NSNull)
+        XCTAssertTrue((notSeen.first?["reason"] as? String)?.contains("does not establish physical absence") == true)
+        let discovered = rows(state).filter { $0["expected"] as? Bool == false }
+        XCTAssertEqual(discovered.first?["id"] as? Int, 999)
+        XCTAssertEqual((state.summary["fieldDefinition"] as? [String: Any])?["packageSha256"] as? String, state.definition?.hash)
+    }
+
+    func testLatestUsableObservationSurvivesLaterRejectionWithOriginalProvenance() throws {
+        let state = FieldWalkState(); state.select(try field()); state.beginWalk("facts", timestamp: 100); process(state)
+        state.process([detection()], metadata: metadata(100.4,"usable"), now: 100.41, settings: TagDebugSettings())
+        let accepted = try XCTUnwrap(rows(state).first?["observedPosition"] as? [Double])
+        var rejected = detection(); rejected.removeValue(forKey: "pose"); rejected["debug"] = ["status": "poseUnavailable"]
+        state.process([rejected], metadata: metadata(100.5,"rejected"), now: 100.51, settings: TagDebugSettings())
+        let row = try XCTUnwrap(rows(state).first)
+        XCTAssertEqual(row["frameId"] as? String, "rejected")
+        XCTAssertTrue(row["observedPosition"] is NSNull)
+        let retained = try XCTUnwrap(row["latestUsableObservation"] as? [String: Any])
+        XCTAssertEqual(retained["frameId"] as? String, "usable")
+        XCTAssertEqual(retained["segmentId"] as? String, "segment-A")
+        XCTAssertEqual(retained["observedPosition"] as? [Double], accepted)
+        XCTAssertEqual((retained["registration"] as? [String: Any])?["anchorId"] as? Int, 1)
+    }
+
+    func testCompleteNumericDetectionAndSourceSnapshotsSurviveYAMLAndLaterUnavailablePose() throws {
+        let state = FieldWalkState(); state.beginWalk("facts", timestamp: 100)
+        let accepted = fullDetection(999)
+        var source = metadata(100,"usable")
+        let sourceSettings: [String: Any] = ["maxDistanceMeters": 7.123456789, "showPoseAxes": true, "tagSizeMeters": 0.1651]
+        source["debugSettings"] = sourceSettings
+        source["calculationCore"] = ["name": "original-core", "algorithmContractVersion": 1]
+        state.process([accepted], metadata: source, now: 100.01, settings: TagDebugSettings())
+        var rejected = fullDetection(999)
+        rejected["pose"] = NSNull()
+        rejected["gravityOrientation"] = ["available": false, "reason": "poseUnavailable",
+            "planeLeanFromVerticalDegrees": NSNull(), "uprightRotationClockwiseDegrees": NSNull()]
+        rejected["debug"] = ["status": "poseUnavailable", "reason": "No calibrated pose", "rangeValid": false]
+        var later = metadata(101,"rejected"); later["debugSettings"] = ["maxDistanceMeters": 2.0]
+        state.process([rejected], metadata: later, now: 101.01, settings: TagDebugSettings())
+        let yaml = try FieldTextCodec.yaml(state.summary)
+        let parsed = try FieldTextCodec.parse(yaml, maximumBytes: 32*1024*1024)
+        let field = try XCTUnwrap(parsed["field"] as? [String: Any])
+        let row = try XCTUnwrap((field["seenTags"] as? [[String: Any]])?.first)
+        let latest = try XCTUnwrap(row["latestObservation"] as? [String: Any])
+        let usable = try XCTUnwrap(row["latestUsableObservation"] as? [String: Any])
+        let latestDetection = try XCTUnwrap(latest["detection"] as? [String: Any])
+        let usableDetection = try XCTUnwrap(usable["detection"] as? [String: Any])
+        XCTAssertTrue(NSDictionary(dictionary: latestDetection).isEqual(to: rejected))
+        XCTAssertTrue(NSDictionary(dictionary: usableDetection).isEqual(to: accepted))
+        XCTAssertTrue(latestDetection["pose"] is NSNull)
+        XCTAssertTrue((latestDetection["gravityOrientation"] as? [String: Any])?["uprightRotationClockwiseDegrees"] is NSNull)
+        let usableSource = try XCTUnwrap(usable["source"] as? [String: Any])
+        XCTAssertEqual(usableSource["frameId"] as? String, "usable")
+        XCTAssertEqual(usableSource["segmentId"] as? String, "segment-A")
+        XCTAssertEqual(FieldValue.number(usableSource["timestamp"]), 100)
+        XCTAssertEqual(usableSource["cameraToWorldColumnMajor"] as? [Double], FieldValue.values(camera))
+        XCTAssertEqual(usableSource["intrinsicsColumnMajor"] as? [Double], source["intrinsicsColumnMajor"] as? [Double])
+        XCTAssertTrue(NSDictionary(dictionary: try XCTUnwrap(usableSource["debugSettings"] as? [String: Any])).isEqual(to: sourceSettings))
+        XCTAssertNil(usableDetection["notPresentInSource"])
+        XCTAssertTrue(usableSource["detectorError"] is NSNull)
+        XCTAssertFalse(yaml.contains("rgbImagePath"))
+    }
+
+    func testFactsRetainBoundedTagAndRegistrationEvidenceAndContinueExistingCounts() throws {
+        let state = FieldWalkState(); state.beginWalk("facts", timestamp: 100)
+        for n in 0...FieldWalkState.maximumSeenTags {
+            let t = 100 + Double(n)
+            state.process([fullDetection(n)], metadata: metadata(t,"frame-\(n)"), now: t+0.01, settings: TagDebugSettings())
+        }
+        state.process([detection(0)], metadata: metadata(1000,"existing"), now: 1000.01, settings: TagDebugSettings())
+        for n in 0..<140 { state.invalidate("Reset \(n)", timestamp: 1001+Double(n)) }
+        XCTAssertEqual(rows(state).count, FieldWalkState.maximumSeenTags)
+        XCTAssertEqual(FieldValue.number(rows(state).first?["count"]), 2)
+        XCTAssertEqual(state.status["summaryTruncated"] as? Bool, true)
+        XCTAssertEqual(FieldValue.number(state.status["omittedTagObservationCount"]), 1)
+        XCTAssertEqual((state.summary["registrationEvents"] as? [[String: Any]])?.count, FieldWalkState.maximumRegistrationEvents)
+        XCTAssertGreaterThan(try XCTUnwrap(FieldValue.number(state.summary["historyOmittedCount"])), 0)
+        let capacity = try XCTUnwrap(state.status["inventoryCapacity"] as? [String: Any])
+        XCTAssertEqual(FieldValue.number(capacity["usedEntries"]), Double(FieldWalkState.maximumSeenTags))
+        XCTAssertEqual(FieldValue.number(capacity["observationCount"]), Double(FieldWalkState.maximumSeenTags+2))
+        let yaml = try FieldTextCodec.yaml(state.summary)
+        XCTAssertLessThan(yaml.utf8.count, 8*1024*1024)
+        let restored = try FieldTextCodec.parse(yaml, maximumBytes: 32*1024*1024)
+        let restoredField = try XCTUnwrap(restored["field"] as? [String: Any])
+        XCTAssertEqual((restoredField["seenTags"] as? [[String: Any]])?.count, FieldWalkState.maximumSeenTags)
+        XCTAssertEqual((restoredField["seenTags"] as? [[String: Any]])?.filter { $0["expected"] as? Bool == false }.count, FieldWalkState.maximumSeenTags)
+    }
+
+    func testExpectedTagsKeepReservedCapacityWhenDiscoveredInventoryIsFull() throws {
+        let state = FieldWalkState(); state.select(try field()); state.beginWalk("facts", timestamp: 100)
+        for n in 0..<(FieldWalkState.maximumSeenTags-1) {
+            let t = 100 + Double(n)
+            state.process([detection(1000+n)], metadata: metadata(t,"unknown-\(n)"), now: t+0.01, settings: TagDebugSettings())
+        }
+        state.process([detection(1)], metadata: metadata(1000,"known"), now: 1000.01, settings: TagDebugSettings())
+        let notSeen = try XCTUnwrap(state.status["notSeenTags"] as? [[String: Any]])
+        XCTAssertEqual(notSeen.map { $0["id"] as? Int }, [2])
+        XCTAssertNotNil(rows(state).first { $0["id"] as? Int == 1 })
+        XCTAssertEqual(FieldValue.number(state.status["expectedSeenCount"]), 1)
+    }
+
+    func testAggregateWalkCountsContinuePastOldPerObservationCapacity() throws {
+        let state = FieldWalkState(); state.beginWalk("long-facts", timestamp: 100)
+        var source = metadata(100,"frame")
+        var rejected = detection(999); rejected.removeValue(forKey: "pose")
+        for n in 0..<100_005 {
+            let t = 100+Double(n)/30
+            source["frameId"] = "frame-\(n)"; source["timestamp"] = t
+            state.process([rejected], metadata: source, now: t+0.01, settings: TagDebugSettings())
+        }
+        XCTAssertEqual(FieldValue.number(rows(state).first?["count"]), 100_005)
+        XCTAssertEqual(rows(state).count, 1)
+        XCTAssertEqual(state.status["summaryTruncated"] as? Bool, false)
+        XCTAssertLessThan(try FieldTextCodec.yaml(state.summary).utf8.count, 20_000)
+    }
 
     func testAllFourBundledYAMLDefinitionsValidateAndHaveExpectedSources() throws {
         let definitions = try catalog()

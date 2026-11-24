@@ -32,6 +32,7 @@ jest.mock('react-native', () => {
     stopSession: jest.fn(),
     listSessions: jest.fn().mockResolvedValue([]),
     exportSession: jest.fn(),
+    exportFieldWalk: jest.fn(),
     deleteSession: jest.fn(),
     clearMeasurements: jest.fn(),
     setSpatialMode: jest.fn(),
@@ -62,6 +63,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   engine.listSessions.mockResolvedValue([]);
   engine.exportSession.mockReset();
+  engine.exportFieldWalk.mockReset();
+  engine.startSessionWithMode = undefined;
   engine.deleteSession.mockReset().mockResolvedValue(undefined);
   NativeModules.ArchiveModule.archiveSession.mockReset();
   NativeModules.ArchiveModule.previewSession.mockReset();
@@ -177,6 +180,230 @@ const savedSession = {
   sizeBytes: 1024,
   finalized: true,
 };
+
+test('starts the selected facts-only mode and defaults new walks to video plus facts', async () => {
+  engine.startSessionWithMode = jest.fn().mockResolvedValue(undefined);
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Video + facts' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Start recording' })
+      .props.onPress(),
+  );
+  expect(engine.startSessionWithMode).toHaveBeenLastCalledWith(
+    'Field walk',
+    'video',
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Tag facts only' })
+      .props.onPress(),
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Tag facts only' }).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Start recording' })
+      .props.onPress(),
+  );
+  expect(engine.startSessionWithMode).toHaveBeenLastCalledWith(
+    'Field walk',
+    'facts',
+  );
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Bookmark' }).props.disabled,
+  ).toBe(true);
+  expect(engine.startSession).not.toHaveBeenCalled();
+});
+
+test('shows remaining capacity with accessible exact metadata usage and locks recording mode', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: true,
+    recordingMode: 'video',
+    recordingCapacity: {
+      usedBytes: 24 * 1048576,
+      limitBytes: 32 * 1048576,
+      remainingBytes: 8 * 1048576,
+      fractionUsed: 0.75,
+      limitingResource: 'Event metadata',
+      estimatedSecondsRemaining: 18,
+    },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const meter = tree.root.findByProps({
+    accessibilityLabel: 'Recording capacity remaining',
+  });
+  expect(meter.props.accessibilityRole).toBe('progressbar');
+  expect(meter.props.accessibilityValue).toEqual({
+    min: 0,
+    max: 100,
+    now: 25,
+    text: '25% remaining. Event metadata: 24.0 MiB of 32.0 MiB',
+  });
+  for (const label of ['Video + facts', 'Tag facts only']) {
+    expect(
+      tree.root.findByProps({ accessibilityLabel: label }).props.disabled,
+    ).toBe(true);
+  }
+  expect(
+    tree.root
+      .findAllByType(Text)
+      .some(node => node.props.children?.join?.('') === 'about 00:18 left'),
+  ).toBe(true);
+});
+
+test('warns near capacity and labels package estimates without presenting records as bytes', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: true,
+    recordingMode: 'facts',
+    recordingCapacity: {
+      usedBytes: 95000,
+      limitBytes: 100000,
+      remainingBytes: 5000,
+      fractionUsed: 0.95,
+      limitingResource: 'Walk observations',
+      unit: 'records',
+    },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Recording capacity remaining',
+    }).props.accessibilityValue.text,
+  ).toBe('5% remaining. Walk observations: 95,000 records of 100,000 records');
+  expect(
+    tree.root
+      .findAllByType(Text)
+      .some(
+        node => node.props.children === 'Near the limit. Stop and save soon.',
+      ),
+  ).toBe(true);
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: true,
+      recordingCapacity: {
+        usedBytes: 128 * 1048576,
+        limitBytes: 256 * 1048576,
+        remainingBytes: 128 * 1048576,
+        fractionUsed: 0.5,
+        limitingResource: 'Packaged recording',
+        estimated: true,
+      },
+    }),
+  );
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Recording capacity remaining',
+    }).props.accessibilityValue.text,
+  ).toBe(
+    '50% remaining. Packaged recording (estimate): 128.0 MiB of 256.0 MiB',
+  );
+});
+
+test('shares a facts-only walk as a YAML file and preserves tag review without video controls', async () => {
+  engine.listSessions.mockResolvedValue([
+    { ...savedSession, recordingMode: 'facts', summaryReady: true },
+  ]);
+  engine.exportFieldWalk.mockResolvedValue({
+    url: 'file:///saved/walk.yaml',
+    path: '/saved/walk.yaml',
+    bytes: 1200,
+  });
+  const share = jest
+    .spyOn(Share, 'share')
+    .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
+  await openSavedSessions();
+  expect(
+    tree.root.findAllByProps({
+      accessibilityLabel: 'Play recording North field',
+    }),
+  ).toHaveLength(0);
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Field walk for North field',
+    }).props.onPress,
+  ).toEqual(expect.any(Function));
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Share YAML summary North field' })
+      .props.onPress(),
+  );
+  expect(engine.exportFieldWalk).toHaveBeenCalledWith('session-1');
+  expect(share).toHaveBeenCalledWith({
+    url: 'file:///saved/walk.yaml',
+    title: 'April Fools AR tag facts — North field',
+  });
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Field walk for North field' })
+      .props.onPress(),
+  );
+  expect(
+    tree.root.findByType(FieldDefinitionsPanel).props.onOpenEvidence,
+  ).toBeUndefined();
+});
+
+test('explains the automatic save threshold and disables bookmarks during a facts walk', async () => {
+  const recordingCapacity = {
+    usedBytes: 94000,
+    limitBytes: 100000,
+    remainingBytes: 6000,
+    fractionUsed: 0.94,
+    limitingResource: 'Tag facts summary',
+    unit: 'bytes',
+    automaticSaveFraction: 0.95,
+  };
+  engine.getStatus.mockResolvedValue({
+    recording: true,
+    recordingMode: 'facts',
+    recordingCapacity,
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(
+    tree.root.findByProps({ accessibilityLabel: 'Bookmark' }).props.disabled,
+  ).toBe(true);
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel: 'Recording capacity remaining',
+    }).props.accessibilityValue.text,
+  ).toContain('Auto-save at 95% used.');
+  expect(
+    tree.root
+      .findAllByType(Text)
+      .some(
+        node =>
+          node.props.children ===
+          'Near the limit. Saves automatically at 95% used.',
+      ),
+  ).toBe(true);
+  await act(async () =>
+    DeviceEventEmitter.emit('ARCaptureStatus', {
+      recording: true,
+      recordingMode: 'facts',
+      recordingCapacity: { ...recordingCapacity, fractionUsed: 0.95 },
+    }),
+  );
+  expect(
+    tree.root
+      .findAllByType(Text)
+      .some(node => node.props.children === 'Saving automatically…'),
+  ).toBe(true);
+});
 
 async function openSavedSessions() {
   await act(async () => {

@@ -119,7 +119,7 @@ FFmpeg can instead remux the visible video track into a playable standalone MP4.
 
 ## Implementations and limits
 
-The app's native Swift writer streams video and TAR file contents in bounded chunks. Node readers stream input and restored binary files as well. The exported file must remain below 4 GiB, with at most 65,534 file/directory entries. Source JSON/JSONL files are capped at 16 MiB each; generated/read YAML payloads and movie metadata boxes are capped at 64 MiB each, with at most 100,000 records per metadata stream. Metadata is held in bounded memory for parsing and serialization. These are implementation limits, not fundamental MP4 container limits.
+The app's native Swift writer streams video and TAR file contents in bounded chunks. Node readers stream input and restored binary files as well. The exported file must remain below 4 GiB, with at most 65,534 file/directory entries. Source JSON/JSONL files are capped at 32 MiB each; generated/read YAML payloads and movie metadata boxes are capped at 64 MiB each, with at most 100,000 records per metadata stream. In-app overlay playback uses the same 32 MiB source-file cap. Metadata is held in bounded memory for parsing and serialization. These are implementation limits, not fundamental MP4 container limits.
 
 The optional Node `packSession` helper remains an in-memory implementation capped at 256 MiB of original session files. This cap does not apply to the app's native writer or the streaming Node readers.
 

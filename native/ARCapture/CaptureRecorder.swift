@@ -12,12 +12,14 @@ final class CaptureRecorder {
     let name: String
     let createdAt = Date()
     let folder: URL
+    let mode: RecordingMode
     private let initialDebugSettings: TagDebugSettings
     private let initialTagSizeEvidence: [String: Any]?
     private let initialFieldDefinition: FieldDefinition?
     private let initialApplication: [String: Any]
     private let queue = DispatchQueue(label: "AprilFoolsAR.capture.disk", qos: .utility)
     private let slots = DispatchSemaphore(value: 3)
+    private let factsCheckpointSlot = DispatchSemaphore(value: 1)
     private let ciContext = CIContext(options: [.cacheIntermediates: false])
     private var framesFile: FileHandle!
     private var eventsFile: FileHandle!
@@ -34,6 +36,22 @@ final class CaptureRecorder {
     private var videoFrames = 0
     private var droppedVideoFrames = 0
     private var bytesWritten: Int64 = 0
+    private var frameMetadataBytes: Int64 = 0
+    private var eventMetadataBytes: Int64 = 0
+    private var frameYAMLBytes: Int64 = 0
+    private var eventYAMLBytes: Int64 = 0
+    private var eventRecords: Int64 = 0
+    private var fileEntries: Int64 = 5 // two directories, two logs and video
+    private var summaryBytes: Int64 = 0
+    private var summarySaved = false
+    private var summaryWriteFailed = false
+    private var factEntries: Int64 = 0
+    private var factEntryLimit: Int64 = 512
+    private var discoveredEntries: Int64 = 0
+    private var discoveredEntryLimit: Int64 = 512
+    private var availableStorage: Int64?
+    private var exceededResource: String?
+    private var factObservationCount: Int64 = 0
     private var errors = [String]()
     private var sampledIDs = Set<String>()
     private var tagAnalyzedFrames = 0
@@ -52,34 +70,90 @@ final class CaptureRecorder {
             .appendingPathComponent("AprilFoolsAR/sessions", isDirectory: true)
     }
 
-    init(name: String, debugSettings: TagDebugSettings = .load(), application: [String: Any] = AppBuildInfo.application, fieldDefinition: FieldDefinition? = nil) throws {
+    init(name: String, debugSettings: TagDebugSettings = .load(), application: [String: Any] = AppBuildInfo.application, fieldDefinition: FieldDefinition? = nil, mode: RecordingMode = .video) throws {
         self.name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160))
+        self.mode = mode
         initialDebugSettings = debugSettings
         initialTagSizeEvidence = debugSettings.matchingTagSizeEvidence()
         initialFieldDefinition = fieldDefinition
         initialApplication = application
         folder = Self.root.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: folder.appendingPathComponent("frames"), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: folder.appendingPathComponent("depth"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        if mode == .video {
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent("frames"), withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent("depth"), withIntermediateDirectories: true)
+        }
         if let fieldDefinition { try Data(fieldDefinition.yaml.utf8).write(to: folder.appendingPathComponent("field-definition.yaml"), options: .atomic) }
-        let framesURL = folder.appendingPathComponent("frames.jsonl")
-        let eventsURL = folder.appendingPathComponent("events.jsonl")
-        FileManager.default.createFile(atPath: framesURL.path, contents: nil)
-        FileManager.default.createFile(atPath: eventsURL.path, contents: nil)
-        framesFile = try FileHandle(forWritingTo: framesURL)
-        eventsFile = try FileHandle(forWritingTo: eventsURL)
+        if mode == .video {
+            let framesURL = folder.appendingPathComponent("frames.jsonl")
+            let eventsURL = folder.appendingPathComponent("events.jsonl")
+            FileManager.default.createFile(atPath: framesURL.path, contents: nil)
+            FileManager.default.createFile(atPath: eventsURL.path, contents: nil)
+            framesFile = try FileHandle(forWritingTo: framesURL)
+            eventsFile = try FileHandle(forWritingTo: eventsURL)
+        }
+        fileEntries = (mode == .video ? 6 : 1) + (fieldDefinition == nil ? 0 : 1)
         try writeManifest(finalized: false)
         writeEvent(["type": "recordingStarted", "wallTime": Self.iso(createdAt), "application": initialApplication])
     }
 
     func writeFieldSummary(_ summary: [String: Any]) {
         queue.async { [self] in
-            do { try Data(FieldTextCodec.yaml(summary).utf8).write(to: folder.appendingPathComponent("field-walk-summary.yaml"), options: .atomic) }
-            catch { recordError("Field summary: " + error.localizedDescription) }
+            autoreleasepool {
+                do {
+                    var document = summary
+                    document["capture"] = ["mode": mode.rawValue, "sessionId": id, "name": name,
+                        "createdAt": Self.iso(createdAt), "application": initialApplication,
+                        "debugSettingsAtStart": initialDebugSettings.dictionary, "videoRecorded": mode == .video]
+                    let data = try Data(FieldTextCodec.yaml(document).utf8)
+                    guard data.count <= RecordingCapacity.summaryBytes else {
+                        exceededResource = "Tag facts summary"
+                        throw CaptureError.message("Tag facts summary exceeds 32 MiB.")
+                    }
+                    try data.write(to: folder.appendingPathComponent("field-walk-summary.yaml"), options: .atomic)
+                    if !summarySaved { fileEntries += 1 }
+                    summaryBytes = Int64(data.count); summarySaved = true; summaryWriteFailed = false
+                } catch {
+                    summaryWriteFailed = true
+                    recordError("Field summary: " + error.localizedDescription)
+                }
+            }
         }
     }
 
+    /// Facts mode checkpoints a bounded aggregate; no camera buffers or frame
+    /// logs are retained. The final checkpoint is replaced after stopWalk().
+    func updateFacts(_ summary: [String: Any], timestamp: TimeInterval) {
+        guard mode == .facts else { return }
+        writeFieldSummary(summary)
+        queue.async { [self] in
+            if firstTimestamp == nil { firstTimestamp = timestamp }
+            lastTimestamp = max(lastTimestamp ?? timestamp, timestamp)
+            if let field = summary["field"] as? [String: Any], let inventory = field["inventoryCapacity"] as? [String: Any] {
+                factEntries = (inventory["usedEntries"] as? NSNumber)?.int64Value ?? 0
+                factEntryLimit = (inventory["limitEntries"] as? NSNumber)?.int64Value ?? 512
+                factObservationCount = (inventory["observationCount"] as? NSNumber)?.int64Value ?? 0
+                discoveredEntries = (field["discoveredCount"] as? NSNumber)?.int64Value ?? 0
+                discoveredEntryLimit = max(1, factEntryLimit - ((field["expectedCount"] as? NSNumber)?.int64Value ?? 0))
+            }
+            publishProgress()
+        }
+    }
+
+    /// A slow disk/serializer must not queue an unbounded number of aggregate
+    /// copies. Initial and final snapshots use updateFacts() and are never skipped.
+    func checkpointFacts(_ summary: [String: Any], timestamp: TimeInterval) {
+        guard mode == .facts, factsCheckpointSlot.wait(timeout: .now()) == .success else { return }
+        updateFacts(summary, timestamp: timestamp)
+        queue.async { [self] in factsCheckpointSlot.signal() }
+    }
+
+    func updateAvailableStorage(_ bytes: Int64) {
+        queue.async { [self] in availableStorage = bytes; publishProgress() }
+    }
+
     func append(frame: ARFrame, metadata: [String: Any]) -> Bool {
+        guard mode == .video else { return true }
         guard slots.wait(timeout: .now()) == .success else { return false }
         queue.async { [self] in
             defer { slots.signal() }
@@ -117,6 +191,7 @@ final class CaptureRecorder {
 
     /// Events are small and never dropped. A bookmark retains one frame only if the bounded pool permits.
     func event(_ event: [String: Any], frame: ARFrame? = nil, frameID: String? = nil) {
+        guard mode == .video else { return }
         let captureFrame = frame != nil && slots.wait(timeout: .now()) == .success
         let retainedFrame = captureFrame ? frame : nil
         let hadFrame = frame != nil
@@ -137,6 +212,7 @@ final class CaptureRecorder {
 
     /// Analysis metadata is recorded for empty results too. Positive-result image retention shares the bounded writer pool.
     func aprilTagEvent(_ event: [String: Any], pixelBuffer: CVPixelBuffer?, frameID: String) {
+        guard mode == .video else { return }
         let timestamp = (event["timestamp"] as? NSNumber)?.doubleValue ?? -Double.infinity
         let snapshotDue = pixelBuffer != nil && timestamp - lastTagSnapshotRequestedTimestamp >= 0.2
         let captureImage = snapshotDue && slots.wait(timeout: .now()) == .success
@@ -171,6 +247,17 @@ final class CaptureRecorder {
     func finish(droppedFrames: Int, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         queue.async { [self] in
             recentDropCount = droppedFrames
+            if mode == .facts {
+                do {
+                    guard summarySaved, !summaryWriteFailed else { throw CaptureError.message("The final tag facts summary could not be saved. The last checkpoint remains available for recovery.") }
+                    guard !wasBackgroundExpired else { throw CaptureError.message("Background finalization expired; tag facts remain available for recovery.") }
+                    try writeManifest(finalized: true)
+                    finalized = true
+                    var result = sessionRecord(); result["summaryReady"] = true; result["errors"] = errors
+                    completion(.success(result))
+                } catch { recordError(error.localizedDescription); completion(.failure(error)) }
+                return
+            }
             writeEvent(["type": "recordingStopped", "wallTime": Self.iso(Date()), "droppedFrames": droppedFrames])
             let finishFiles = { [self] in
                 queue.async { [self] in
@@ -249,6 +336,7 @@ final class CaptureRecorder {
         if let depth = frame.sceneDepth {
             let data = Self.packedData(depth.depthMap, bytesPerPixel: 4)
             try data.write(to: folder.appendingPathComponent(depthPath), options: .atomic)
+            fileEntries += 1
             bytesWritten += Int64(data.count); paths["depthPath"] = depthPath
             paths["depthSource"] = "sceneDepth"
             paths["depthWidth"] = CVPixelBufferGetWidth(depth.depthMap)
@@ -258,6 +346,7 @@ final class CaptureRecorder {
             if let confidence = depth.confidenceMap {
                 let bytes = Self.packedData(confidence, bytesPerPixel: 1)
                 try bytes.write(to: folder.appendingPathComponent(confidencePath), options: .atomic)
+                fileEntries += 1
                 bytesWritten += Int64(bytes.count); paths["confidencePath"] = confidencePath
                 paths["confidenceEncoding"] = "uint8-packed-ARConfidenceLevel-0-low-1-medium-2-high"
             }
@@ -272,7 +361,7 @@ final class CaptureRecorder {
         if FileManager.default.fileExists(atPath: url.path) { return path }
         let image = CIImage(cvPixelBuffer: buffer)
         guard let jpeg = ciContext.jpegRepresentation(of: image, colorSpace: CGColorSpaceCreateDeviceRGB(), options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.94]) else { throw CaptureError.message("Could not encode camera image") }
-        try jpeg.write(to: url, options: .atomic); bytesWritten += Int64(jpeg.count)
+        try jpeg.write(to: url, options: .atomic); bytesWritten += Int64(jpeg.count); fileEntries += 1
         return path
     }
 
@@ -289,16 +378,72 @@ final class CaptureRecorder {
 
     private func appendJSON(_ object: [String: Any], to handle: FileHandle) throws {
         var data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        let isFrame = handle === framesFile
+        let stream = isFrame ? "Frame" : "Event"
+        let current = isFrame ? frameMetadataBytes : eventMetadataBytes
+        let currentYAML = isFrame ? frameYAMLBytes : eventYAMLBytes
+        let records = isFrame ? Int64(framesWritten) : eventRecords
+        guard current + Int64(data.count) + 1 <= RecordingCapacity.metadataBytes, records < RecordingCapacity.records else {
+            throw capacityError(records >= RecordingCapacity.records ? "\(stream) records" : "\(stream) metadata")
+        }
+        let yamlBytes: Int64
+        do { yamlBytes = try SessionMP4Writer.yamlRecordByteCount(object) }
+        catch {
+            exceededResource = isFrame ? "Frame YAML metadata" : "Event YAML metadata"
+            publishProgress()
+            throw error
+        }
+        guard currentYAML + yamlBytes <= RecordingCapacity.yamlBytes else {
+            throw capacityError("\(stream) YAML metadata")
+        }
         data.append(10); try handle.write(contentsOf: data); bytesWritten += Int64(data.count)
+        if isFrame { frameMetadataBytes += Int64(data.count); frameYAMLBytes += yamlBytes }
+        else { eventMetadataBytes += Int64(data.count); eventYAMLBytes += yamlBytes; eventRecords += 1 }
+    }
+    private func capacityError(_ resource: String) -> CaptureError {
+        exceededResource = resource
+        publishProgress()
+        return .message("Recording capacity reached for \(resource). Stop and save this recording.")
     }
     private func writeEvent(_ object: [String: Any]) {
+        guard mode == .video else { return }
         do { try appendJSON(object, to: eventsFile) } catch { recordError(error.localizedDescription) }
     }
     private func recordError(_ text: String) { if errors.last != text && errors.count < 100 { errors.append(text) } }
     private func publishProgress() {
         let videoBytes = (try? folder.appendingPathComponent("rgb.mp4").resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        var capacity = RecordingCapacity.snapshot(mode: mode,
+            frameBytes: frameMetadataBytes, eventBytes: eventMetadataBytes,
+            frameYAMLBytes: frameYAMLBytes, eventYAMLBytes: eventYAMLBytes,
+            frameRecords: Int64(framesWritten), eventRecords: eventRecords,
+            sourceBytes: bytesWritten + Int64(videoBytes) + summaryBytes, fileEntries: fileEntries,
+            summaryBytes: summaryBytes, availableStorage: availableStorage)
+        if mode == .facts, Double(factEntries) / Double(max(1, factEntryLimit)) > (capacity["fractionUsed"] as? Double ?? 0) {
+            let fraction = Double(factEntries) / Double(max(1, factEntryLimit))
+            capacity = ["usedBytes": factEntries, "limitBytes": factEntryLimit, "remainingBytes": max(0, factEntryLimit - factEntries),
+                "fractionUsed": min(1, fraction), "limitingResource": "Discovered tags", "unit": "entries", "estimated": false,
+                "automaticSaveFraction": RecordingCapacity.automaticSaveFraction, "shouldStop": fraction >= RecordingCapacity.automaticSaveFraction]
+        }
+        if mode == .facts, Double(discoveredEntries) / Double(discoveredEntryLimit) > (capacity["fractionUsed"] as? Double ?? 0) {
+            let fraction = Double(discoveredEntries) / Double(discoveredEntryLimit)
+            capacity = ["usedBytes": discoveredEntries, "limitBytes": discoveredEntryLimit,
+                "remainingBytes": max(0, discoveredEntryLimit - discoveredEntries),
+                "fractionUsed": min(1, fraction), "limitingResource": "Tags outside the field definition", "unit": "entries", "estimated": false,
+                "automaticSaveFraction": RecordingCapacity.automaticSaveFraction, "shouldStop": fraction >= RecordingCapacity.automaticSaveFraction]
+        }
+        if let exceededResource {
+            let records = exceededResource.hasSuffix(" records")
+            let limit = records ? RecordingCapacity.records
+                : exceededResource.contains("YAML") ? RecordingCapacity.yamlBytes : RecordingCapacity.metadataBytes
+            capacity["shouldStop"] = true; capacity["fractionUsed"] = 1.0
+            capacity["usedBytes"] = limit; capacity["limitBytes"] = limit
+            capacity["remainingBytes"] = 0; capacity["limitingResource"] = exceededResource
+            capacity["unit"] = records ? "records" : "bytes"; capacity["estimated"] = false
+        }
         onProgress?(["framesWritten": framesWritten, "depthFrames": depthFrames, "videoFrames": videoFrames,
                      "videoDroppedFrames": droppedVideoFrames, "bytesWritten": bytesWritten + Int64(videoBytes),
+                     "recordingMode": mode.rawValue,
+                     "recordingCapacity": capacity,
                      "lastError": errors.last as Any? ?? NSNull()])
     }
     private func writeManifest(finalized: Bool) throws {
@@ -316,16 +461,24 @@ final class CaptureRecorder {
         manifest["firstARFrameTimestamp"] = firstTimestamp as Any? ?? NSNull()
         manifest["coordinateConvention"] = "ARKit right-handed, gravity aligned +Y up, camera looks along -Z; camera transforms column-major camera-to-world; depth is camera-plane Z in meters"
         manifest["captureDefaults"] = ["videoFPS": 30, "depthAndJPEGHz": 5, "maxRetainedWriterFrames": 3, "jpegQuality": 0.94, "videoBitrate": 10_000_000]
+        if mode == .facts { manifest["captureDefaults"] = ["videoFPS": 0, "depthAndJPEGHz": 0, "summaryCheckpointSeconds": 1] }
         manifest["aprilTagConfiguration"] = ["enabled": true, "family": "tag36h11", "implementation": "AprilRobotics/apriltag via AFTagDetector", "upstreamRevision": AFTagDetector.upstreamRevision(), "quadDecimate": 2, "threads": 2, "targetAnalysisHz": 30, "analysisScheduling": "one in flight; no artificial throttle; actual throughput recorded", "maxInFlight": 1, "poseEstimation": true, "coordinates": "full-resolution capturedImage sensor pixels; camera optical XYZ", "overlayMaximumAgeSeconds": 0.4, "positiveDetectionJPEGMaxHz": 5, "debugSettingsAtStart": initialDebugSettings.dictionary]
         manifest["aprilTagCounts"] = ["analyzedFrames": tagAnalyzedFrames, "positiveFrames": tagPositiveFrames, "errors": tagErrors]
+        if mode == .facts { manifest["aprilTagCounts"] = ["tagObservations": factObservationCount, "source": "bounded per-tag walk aggregates"] }
         manifest["tagSizeEvidenceAtStart"] = initialTagSizeEvidence as Any? ?? NSNull()
         manifest["counts"] = ["metadataFrames": framesWritten, "depthFrames": depthFrames, "videoFrames": videoFrames, "writerDroppedFrames": recentDropCount, "videoDroppedFrames": droppedVideoFrames]
-        manifest["files"] = ["frames": "frames.jsonl", "events": "events.jsonl", "video": "rgb.mp4", "images": "frames/", "depth": "depth/"]
+        manifest["files"] = mode == .video
+            ? ["frames": "frames.jsonl", "events": "events.jsonl", "video": "rgb.mp4", "images": "frames/", "depth": "depth/", "summary": "field-walk-summary.yaml"]
+            : ["summary": "field-walk-summary.yaml"]
+        manifest["fieldWalkSummaryPath"] = "field-walk-summary.yaml"
+        manifest["recordingLimits"] = ["metadataBytesPerFile": RecordingCapacity.metadataBytes, "summaryBytes": RecordingCapacity.summaryBytes,
+            "packageBytes": RecordingCapacity.packageBytes, "automaticSaveFraction": RecordingCapacity.automaticSaveFraction]
         var videoContent: [String: Any] = ["source": "ARFrame.capturedImage", "codec": "h264", "overlaysBurnedIn": false, "audioRecorded": false,
             "orientationLockedAtFirstFrame": true]
         videoContent["playbackTransform"] = videoPlaybackTransform as Any? ?? NSNull()
         videoContent["orientationSource"] = videoPlaybackTransform == nil ? "unavailable" : "first-frame-sensor-to-display-rotation"
         manifest["videoContent"] = videoContent
+        if mode == .facts { manifest["videoContent"] = NSNull() }
         manifest["evidence"] = "Live capture; measurement accuracy has not been independently validated. AR world poses are not surveyed field truth."
         manifest["errors"] = errors
         manifest["backgroundFinalizationExpired"] = wasBackgroundExpired
@@ -341,7 +494,8 @@ final class CaptureRecorder {
         try data.write(to: folder.appendingPathComponent("manifest.json"), options: .atomic)
     }
     private func sessionRecord() -> [String: Any] {
-        ["id": id, "sessionId": id, "name": name, "createdAt": Self.iso(createdAt), "durationSeconds": max(0, (lastTimestamp ?? firstTimestamp ?? 0) - (firstTimestamp ?? 0)), "sizeBytes": Self.directorySize(folder), "folderPath": folder.path, "manifestPath": folder.appendingPathComponent("manifest.json").path, "finalized": finalized]
+        ["id": id, "sessionId": id, "name": name, "createdAt": Self.iso(createdAt), "durationSeconds": max(0, (lastTimestamp ?? firstTimestamp ?? 0) - (firstTimestamp ?? 0)), "sizeBytes": Self.directorySize(folder), "folderPath": folder.path, "manifestPath": folder.appendingPathComponent("manifest.json").path, "finalized": finalized,
+         "recordingMode": mode.rawValue, "summaryReady": summarySaved]
     }
     static func directorySize(_ folder: URL) -> Int64 {
         guard let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]) else { return 0 }

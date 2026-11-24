@@ -153,12 +153,101 @@ enum ValidateMP4 {
             _ = try writer.archiveSession(folderPath: oversized.path, allowedSessionsRoot: root,
                                          destinationDirectory: output)
         }
+        let metadataBoundary = try changedSession { directory in
+            // Whitespace grows the source log without generating a huge YAML
+            // value or millions of records. The exact 32 MiB boundary is valid.
+            let location = directory.appendingPathComponent("frames.jsonl")
+            var data = try Data(contentsOf: location)
+            data.append(Data(repeating: 32, count: 32 * 1024 * 1024 - data.count))
+            try data.write(to: location)
+            let manifestURL = directory.appendingPathComponent("manifest.json")
+            var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as! [String: Any]
+            var inventory = manifest["fileInventory"] as! [[String: Any]]
+            let index = inventory.firstIndex { $0["path"] as? String == "frames.jsonl" }!
+            inventory[index]["bytes"] = data.count
+            inventory[index]["sha256"] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            manifest["fileInventory"] = inventory
+            try JSONSerialization.data(withJSONObject: manifest).write(to: manifestURL)
+        }
+        defer { try? fileManager.removeItem(at: metadataBoundary) }
+        let boundaryResult = try writer.archiveSession(folderPath: metadataBoundary.path, allowedSessionsRoot: root,
+                                                       destinationDirectory: output)
+        try fileManager.removeItem(at: boundaryResult.url)
+        let boundaryHandle = try FileHandle(forWritingTo: metadataBoundary.appendingPathComponent("frames.jsonl"))
+        try boundaryHandle.truncate(atOffset: 32 * 1024 * 1024 + 1)
+        try boundaryHandle.close()
+        let boundaryManifestURL = metadataBoundary.appendingPathComponent("manifest.json")
+        var boundaryManifest = try JSONSerialization.jsonObject(with: Data(contentsOf: boundaryManifestURL)) as! [String: Any]
+        var boundaryInventory = boundaryManifest["fileInventory"] as! [[String: Any]]
+        let boundaryIndex = boundaryInventory.firstIndex { $0["path"] as? String == "frames.jsonl" }!
+        boundaryInventory[boundaryIndex]["bytes"] = 32 * 1024 * 1024 + 1
+        boundaryManifest["fileInventory"] = boundaryInventory
+        try JSONSerialization.data(withJSONObject: boundaryManifest).write(to: boundaryManifestURL)
+        do {
+            _ = try writer.archiveSession(folderPath: metadataBoundary.path, allowedSessionsRoot: root,
+                                         destinationDirectory: output)
+            throw failure("Expected rejection above the 32 MiB metadata boundary")
+        } catch SessionMP4Writer.ExportError.limit(let reason) {
+            guard reason == "each source metadata file must be at most 32 MiB" else { throw failure(reason) }
+        }
+        let counterRecords: [[String: Any]] = [
+            ["type": "counter", "unicode": "Tag 4 — café 🦀\nquote: \"yes\" / slash \\",
+             "empty": ["mapping": [String: Any](), "sequence": [Any](), "null": NSNull()],
+             "nested": [["values": [true, false, NSNull(), ["inner": "日本語"]] as [Any]], ["empty": [Any]()]],
+             "numbers": [Int64.min, UInt64.max, -0.0, 0, 1.0, Double.pi, Double.leastNonzeroMagnitude,
+                         Double.greatestFiniteMagnitude, NSDecimalNumber(string: "123456789012345678901234567890.125")] as [Any]],
+            [:],
+            ["array": [[1, 2], [3], []], "escaped\nkey": "\t\r\n"],
+        ]
+        var counterSourceData = Data(), expectedYAMLBytes: Int64 = 0
+        for object in counterRecords {
+            expectedYAMLBytes += try SessionMP4Writer.yamlRecordByteCount(object)
+            counterSourceData.append(try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
+            counterSourceData.append(10)
+        }
+        let counterSession = try changedSession { directory in
+            try counterSourceData.write(to: directory.appendingPathComponent("events.jsonl"))
+            let manifestURL = directory.appendingPathComponent("manifest.json")
+            var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as! [String: Any]
+            var inventory = manifest["fileInventory"] as! [[String: Any]]
+            let index = inventory.firstIndex { $0["path"] as? String == "events.jsonl" }!
+            inventory[index]["bytes"] = counterSourceData.count
+            inventory[index]["sha256"] = SHA256.hash(data: counterSourceData).map { String(format: "%02x", $0) }.joined()
+            manifest["fileInventory"] = inventory
+            try JSONSerialization.data(withJSONObject: manifest).write(to: manifestURL)
+        }
+        defer { try? fileManager.removeItem(at: counterSession) }
+        let counterResult = try writer.archiveSession(folderPath: counterSession.path, allowedSessionsRoot: root,
+                                                      destinationDirectory: output)
+        let extractor = Process(), yamlPipe = Pipe()
+        extractor.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        extractor.arguments = ["ffmpeg", "-v", "error", "-i", counterResult.url.path,
+                               "-map", "0:m:handler_name:afar.events", "-c", "copy", "-f", "data", "pipe:1"]
+        extractor.standardOutput = yamlPipe
+        try extractor.run()
+        let exportedYAML = yamlPipe.fileHandleForReading.readDataToEndOfFile()
+        extractor.waitUntilExit()
+        guard extractor.terminationStatus == 0, expectedYAMLBytes == Int64(exportedYAML.count) else {
+            throw failure("YAML byte counter disagrees with actual exported nested/Unicode/numeric records: \(expectedYAMLBytes) vs \(exportedYAML.count)")
+        }
+        try fileManager.removeItem(at: counterResult.url)
+        try expectRejection("YAML counter non-finite scalar") {
+            _ = try SessionMP4Writer.yamlRecordByteCount(["invalid": Double.nan])
+        }
+        try expectRejection("YAML counter unsupported scalar") {
+            _ = try SessionMP4Writer.yamlRecordByteCount(["invalid": Date()])
+        }
+        var excessiveNesting: [String: Any] = ["leaf": true]
+        for _ in 0..<128 { excessiveNesting = ["child": excessiveNesting] }
+        try expectRejection("YAML counter depth boundary") {
+            _ = try SessionMP4Writer.yamlRecordByteCount(excessiveNesting)
+        }
         let remaining = try fileManager.contentsOfDirectory(at: output, includingPropertiesForKeys: nil)
         guard Set(remaining.map(\.lastPathComponent)) == completedExports,
               remaining.allSatisfy({ $0.pathExtension == "mp4" }) else {
             throw failure("Failed exports left partial output files")
         }
-        print("PASS: native MP4 byte count, unique file-URL export, finalized/inventory checks, source containment, link/path rejection, truncated movie and 4 GiB boundary rejection.")
+        print("PASS: native MP4 byte count, unique file-URL export, finalized/inventory checks, source containment, link/path rejection, truncated movie, exact YAML record counting, 32 MiB metadata boundary and 4 GiB boundary rejection.")
     }
 
     private static func expectRejection(_ reason: String, _ action: () throws -> Void) throws {

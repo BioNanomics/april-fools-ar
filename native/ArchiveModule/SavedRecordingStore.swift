@@ -212,7 +212,7 @@ final class SavedRecordingStore {
               canonical.deletingLastPathComponent().path == sessionsRoot.path else { throw failure("Select one session directly inside the sessions folder.") }
         let manifest = canonical.appendingPathComponent("manifest.json")
         let identity = try fileIdentity(manifest)
-        guard identity.bytes <= 16 * 1024 * 1024 else { throw failure("The capture manifest is too large.") }
+        guard identity.bytes <= 32 * 1024 * 1024 else { throw failure("The capture manifest exceeds the 32 MiB metadata limit.") }
         let data = try Data(contentsOf: manifest)
         guard try fileIdentity(manifest) == identity,
               let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],

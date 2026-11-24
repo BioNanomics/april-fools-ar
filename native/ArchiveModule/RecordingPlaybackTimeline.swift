@@ -89,7 +89,7 @@ final class RecordingPlaybackTimeline {
     var hasDepthSamples: Bool { rasterIndex.samples.contains { $0.depthFile != nil } }
     var hasConfidenceSamples: Bool { rasterIndex.samples.contains { $0.confidenceFile != nil } }
     private static let stride = 64
-    private static let metadataLimit = 16 * 1024 * 1024
+    private static let metadataLimit = 32 * 1024 * 1024
     private static let recordLimit = 100_000
 
     static func load(folderURL: URL) throws -> Self {

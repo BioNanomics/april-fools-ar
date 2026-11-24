@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// Exercises the installed Release app and its real React Native/native bridge.
 /// No synthetic sensor stream is injected and no physical camera claim is made.
@@ -40,10 +41,46 @@ final class FieldAppUITests: XCTestCase {
         item.tap()
     }
     private func evidence(_ name: String) {
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
         let tree = XCTAttachment(string: app.debugDescription)
         tree.name = name + "-native-accessibility"; tree.lifetime = .keepAlways; add(tree)
+    }
+    func testRecordingModesAreAccessibleAndTappableInPortraitAndLandscapeWithoutRecording() {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for (orientation, name) in [(UIDeviceOrientation.portrait, "portrait"), (.landscapeLeft, "landscape")] {
+            XCUIDevice.shared.orientation = orientation
+            let landscape = orientation == .landscapeLeft
+            let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                landscape ? self.app.frame.width > self.app.frame.height : self.app.frame.height > self.app.frame.width
+            }, object: app)
+            XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 10), .completed, "App did not rotate to \(name)")
+            let video = named("Video + facts"), facts = named("Tag facts only")
+            let record = named("Start recording")
+            for mode in [video, facts] {
+                XCTAssertTrue(mode.isEnabled, "Mode must be enabled before recording: \(mode.label)")
+                XCTAssertTrue(mode.isHittable, "Mode must be tappable in \(name): \(mode.label)")
+                XCTAssertGreaterThanOrEqual(mode.frame.width, 44)
+                XCTAssertGreaterThanOrEqual(mode.frame.height, 44)
+                XCTAssertTrue(app.frame.contains(mode.frame), "Mode lies outside the visible app: \(mode.frame)")
+                XCTAssertFalse(mode.frame.intersects(record.frame), "Mode overlaps the Record button in \(name)")
+            }
+            XCTAssertTrue(video.isSelected, "Video + facts should start selected in \(name)")
+            XCTAssertFalse(facts.isSelected)
+            evidence("field-recording-modes-\(name)-video-native")
+            facts.tap()
+            let factsSelected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: facts)
+            XCTAssertEqual(XCTWaiter.wait(for: [factsSelected], timeout: 5), .completed)
+            XCTAssertFalse(video.isSelected)
+            XCTAssertTrue(record.exists, "Changing the mode must leave recording stopped")
+            XCTAssertFalse(app.buttons["Stop and save recording"].exists)
+            evidence("field-recording-modes-\(name)-facts-native")
+            video.tap()
+            let videoSelected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: video)
+            XCTAssertEqual(XCTWaiter.wait(for: [videoSelected], timeout: 5), .completed)
+            XCTAssertFalse(facts.isSelected)
+            XCTAssertTrue(record.exists, "Switching back must leave recording stopped")
+        }
     }
     func testBundledCatalogSelectionAndYAMLUseRealNativeBridge() {
         tap("Field definitions and tags seen")

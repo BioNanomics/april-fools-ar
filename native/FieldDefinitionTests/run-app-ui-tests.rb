@@ -7,10 +7,11 @@ require 'shellwords'
 require 'open3'
 require 'json'
 
-options = {}
+options = { only_testing: [] }
 OptionParser.new do |parser|
   parser.on('--work-dir DIR') { |value| options[:work_dir] = value }
   parser.on('--app-path PATH') { |value| options[:app_path] = value }
+  parser.on('--only-testing ID') { |value| options[:only_testing] << value }
 end.parse!
 root = File.expand_path('../..',__dir__)
 work = options[:work_dir] || Dir.mktmpdir('april-field-app-ui-')
@@ -55,7 +56,9 @@ begin
   scheme.save_as(project.path,'FieldAppUITests')
   command = ['xcodebuild','-project',project.path.to_s,'-scheme','FieldAppUITests','-configuration','Debug',
     '-destination',"id=#{device}",'-derivedDataPath',File.join(work,'TestDerivedData'),
-    '-resultBundlePath',File.join(work,'Results.xcresult'),'-parallel-testing-enabled','NO','test']
+    '-resultBundlePath',File.join(work,'Results.xcresult'),'-parallel-testing-enabled','NO']
+  command.concat(options[:only_testing].map { |identifier| "-only-testing:#{identifier}" })
+  command << 'test'
   log = File.join(work,'xcodebuild.log')
   puts "Executing native app UI checks: #{command.shelljoin}"; $stdout.flush
   success = system(*command,out:log,err:[:child,:out])

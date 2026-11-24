@@ -11,7 +11,7 @@ export const LIMITS = Object.freeze({
   maxSessionBytes: 256 * 1024 * 1024,
   maxRecordingBytes: 0xfffffffe,
   maxSourceVideoBytes: 0xfffffffe,
-  maxMetadataBytes: 16 * 1024 * 1024,
+  maxMetadataBytes: 32 * 1024 * 1024,
   maxYAMLBytes: 64 * 1024 * 1024,
   maxMoovBytes: 64 * 1024 * 1024,
   maxEntries: 65534,

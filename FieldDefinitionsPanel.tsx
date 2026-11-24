@@ -36,6 +36,23 @@ export type FieldTag = {
   videoTimeSeconds?: number | null;
   nominalPosition?: number[] | null;
   observedPosition?: number[] | null;
+  observedWorldPosition?: number[] | null;
+  expected?: boolean;
+  status?: 'seen' | 'notSeen';
+  quality?: { usable?: boolean; status?: string; tracking?: string };
+  latestObservation?: {
+    detection?: Record<string, unknown>;
+    source?: Record<string, unknown>;
+  };
+  latestUsableObservation?: {
+    frameId?: string;
+    segmentId?: string;
+    timestamp?: number;
+    observedWorldPosition?: number[] | null;
+    observedPosition?: number[] | null;
+    detection?: Record<string, unknown>;
+    source?: Record<string, unknown>;
+  };
   expectedHeightMeters?: number | null;
   observedHeightMeters?: number | null;
   expectedTiltDegrees?: number | null;
@@ -65,6 +82,17 @@ export type FieldStatus = {
   seenTags?: FieldTag[];
   seenCount?: number;
   expectedCount?: number;
+  expectedSeenCount?: number;
+  notSeenTags?: FieldTag[];
+  notSeenCount?: number;
+  discoveredCount?: number;
+  summaryTruncated?: boolean;
+  historyOmittedCount?: number;
+  inventoryCapacity?: {
+    usedEntries: number;
+    limitEntries: number;
+    observationCount?: number;
+  };
   yaml?: string;
   json?: string;
   csv?: string;
@@ -78,9 +106,14 @@ export type FieldEngine = {
   selectField: (id: string) => Promise<FieldStatus>;
   importFieldDefinition: (text: string) => Promise<FieldStatus>;
   getFieldWalk: () => Promise<FieldStatus>;
-  getSavedFieldWalk: (
+  getSavedFieldWalk: (id: string) => Promise<{
+    yaml: string;
+    field?: FieldStatus;
+    recordingMode?: 'video' | 'facts';
+  }>;
+  exportFieldWalk: (
     id: string,
-  ) => Promise<{ yaml: string; field?: FieldStatus }>;
+  ) => Promise<{ url: string; path: string; bytes: number }>;
   clearFieldAlignment: () => Promise<FieldStatus>;
   recheckFieldAlignment: () => Promise<FieldStatus>;
   alignFieldUnverified: () => Promise<FieldStatus>;
@@ -91,7 +124,11 @@ type Props = {
   engine?: Partial<FieldEngine>;
   recording?: boolean;
   field?: FieldStatus;
-  savedSession?: { id: string; name: string } | null;
+  savedSession?: {
+    id: string;
+    name: string;
+    recordingMode?: 'video' | 'facts';
+  } | null;
   onClose: () => void;
   onDismiss?: () => void;
   onChange?: (field: FieldStatus) => void;
@@ -201,6 +238,9 @@ export function FieldDefinitionsPanel({
   const [importText, setImportText] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [savedMode, setSavedMode] = useState<'video' | 'facts' | undefined>(
+    savedSession?.recordingMode,
+  );
   const generation = useRef(0);
   const saved = Boolean(savedSession);
   useEffect(() => {
@@ -231,6 +271,7 @@ export function FieldDefinitionsPanel({
         }
         setWalk(result.field || {});
         setYaml(result.yaml || '');
+        setSavedMode(result.recordingMode || savedSession.recordingMode);
       } else {
         if (!engine?.getFieldCatalog || !engine.getFieldWalk) {
           throw new Error('Field definitions are unavailable in this build.');
@@ -337,6 +378,20 @@ export function FieldDefinitionsPanel({
     });
   const share = (format: 'yaml' | 'json' | 'csv') =>
     perform(async () => {
+      if (format === 'yaml' && savedSession) {
+        if (!engine?.exportFieldWalk) {
+          throw new Error('YAML file export is unavailable in this build.');
+        }
+        const file = await engine.exportFieldWalk(savedSession.id);
+        if (!file.url) {
+          throw new Error('The saved YAML file is unavailable.');
+        }
+        await Share.share({
+          url: file.url,
+          title: `${savedSession.name} · YAML`,
+        });
+        return;
+      }
       const data = saved ? walk : (await engine?.getFieldWalk?.()) || walk;
       const message =
         format === 'yaml'
@@ -599,10 +654,40 @@ export function FieldDefinitionsPanel({
                 )}
                 <Text style={s.heading}>
                   Tags seen: {walk.seenCount ?? tags.length}
-                  {walk.expectedCount != null
-                    ? ` / ${walk.expectedCount} expected`
+                  {walk.expectedCount != null && walk.expectedCount > 0
+                    ? ` · ${
+                        walk.expectedSeenCount ?? walk.seenCount ?? tags.length
+                      } / ${walk.expectedCount} expected`
                     : ''}
                 </Text>
+                {saved && savedMode === 'facts' && (
+                  <Text style={s.note}>
+                    Walk facts saved as YAML. This session has no video or
+                    sensor playback.
+                  </Text>
+                )}
+                {walk.discoveredCount != null && walk.discoveredCount > 0 && (
+                  <Text style={s.detail}>
+                    {walk.packageId
+                      ? 'Discovered outside the selected definition: '
+                      : 'Discovered tags: '}
+                    {walk.discoveredCount}
+                  </Text>
+                )}
+                {!walk.packageId && (
+                  <Text style={s.note}>
+                    {saved
+                      ? 'No field definition was selected for this walk. Expected tags not seen are unavailable.'
+                      : 'Choose a field definition to include expected tags not seen in the walk summary.'}
+                  </Text>
+                )}
+                {walk.summaryTruncated && (
+                  <Text style={s.warning}>
+                    The summary reached its retained evidence capacity. Counts
+                    and available facts are retained; some tag observations or
+                    older registration events were omitted.
+                  </Text>
+                )}
                 {!tags.length && (
                   <Text style={s.detail}>
                     {saved
@@ -631,6 +716,36 @@ export function FieldDefinitionsPanel({
                     <Text selectable style={s.detail}>
                       Observed XYZ: {positionText(tag.observedPosition)}
                     </Text>
+                    {tag.expected === false && (
+                      <Text style={s.note}>
+                        Discovered tag · no published position in the selected
+                        definition.
+                      </Text>
+                    )}
+                    {tag.observedWorldPosition && (
+                      <Text selectable style={s.detail}>
+                        Local AR XYZ: {positionText(tag.observedWorldPosition)}{' '}
+                        · segment {tag.segmentId || 'unavailable'} · Y up
+                      </Text>
+                    )}
+                    {tag.quality?.usable === false &&
+                      tag.latestUsableObservation && (
+                        <Text selectable style={s.detail}>
+                          Latest usable position:{' '}
+                          {positionText(
+                            tag.latestUsableObservation.observedPosition ||
+                              tag.latestUsableObservation.observedWorldPosition,
+                          )}
+                          {tag.latestUsableObservation.observedPosition
+                            ? ' · field frame'
+                            : ' · local AR frame, Y up'}
+                          {' · segment '}
+                          {tag.latestUsableObservation.segmentId ||
+                            'unavailable'}
+                          {' · source frame '}
+                          {tag.latestUsableObservation.frameId || 'unavailable'}
+                        </Text>
+                      )}
                     {(tag.expectedHeightMeters != null ||
                       tag.observedHeightMeters != null) && (
                       <Text style={s.detail}>
@@ -657,6 +772,7 @@ export function FieldDefinitionsPanel({
                       </Text>
                     )}
                     {saved &&
+                      savedMode !== 'facts' &&
                       (onOpenEvidence &&
                       finite(tag.videoTimeSeconds) &&
                       tag.videoTimeSeconds >= 0 ? (
@@ -678,6 +794,32 @@ export function FieldDefinitionsPanel({
                       ))}
                   </View>
                 ))}
+                {!!walk.notSeenTags?.length && (
+                  <>
+                    <Text style={s.heading}>
+                      Expected but not seen:{' '}
+                      {walk.notSeenCount ?? walk.notSeenTags.length}
+                    </Text>
+                    <Text style={s.note}>
+                      These tags were not observed in this walk. This does not
+                      establish that they are physically missing.
+                    </Text>
+                    {walk.notSeenTags.map(tag => (
+                      <View
+                        key={`notSeen:${tag.family || ''}:${tag.id}`}
+                        style={s.card}
+                      >
+                        <Text style={s.heading}>
+                          #{tag.id}
+                          {tag.name ? ` · ${tag.name}` : ''} · not seen
+                        </Text>
+                        <Text selectable style={s.detail}>
+                          Published XYZ: {positionText(tag.nominalPosition)}
+                        </Text>
+                      </View>
+                    ))}
+                  </>
+                )}
                 <View style={s.actions}>
                   <Action
                     label="Share walk YAML"

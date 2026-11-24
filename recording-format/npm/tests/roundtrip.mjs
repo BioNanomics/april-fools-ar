@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, writeFile, readdir, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readFile, writeFile, readdir, rm, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -243,4 +243,48 @@ test('malformed input is rejected without creating an output', async t => {
   const output = path.join(root, 'output');
   await assert.rejects(unpackRecording(bad, output));
   assert.deepEqual((await readdir(root)).sort(), ['bad.mp4']);
+});
+
+test('source metadata above 16 MiB and through 32 MiB packs and restores; one byte more fails', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'afar-metadata-boundary-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { source, manifest } = await fixture(root, false);
+  // Padding exercises the file-size boundary without a huge YAML value or a
+  // huge record count. Include both JSON and JSONL source parsing paths.
+  for (const [name, bytes] of [['frames.jsonl', 32 * 1024 * 1024], ['events.jsonl', 16 * 1024 * 1024 + 1]]) {
+    const original = await readFile(path.join(source, name));
+    const padded = Buffer.alloc(bytes, 32);
+    original.copy(padded);
+    await writeFile(path.join(source, name), padded);
+    const entry = manifest.fileInventory.find(item => item.path === name);
+    entry.bytes = padded.length;
+    entry.sha256 = sha256(padded);
+  }
+  const manifestData = Buffer.alloc(16 * 1024 * 1024 + 1, 32);
+  Buffer.from(JSON.stringify(manifest)).copy(manifestData);
+  await writeFile(path.join(source, 'manifest.json'), manifestData);
+  const movie = path.join(root, 'metadata-boundary.mp4');
+  await packSession(source, movie);
+  const restored = path.join(root, 'restored');
+  await unpackRecording(movie, restored);
+  for (const name of ['manifest.json', 'frames.jsonl', 'events.jsonl']) {
+    assert.equal(sha256(await readFile(path.join(restored, name))), sha256(await readFile(path.join(source, name))), name);
+  }
+  assert.deepEqual((await inspectRecording(movie)).session, manifest);
+
+  const framePath = path.join(source, 'frames.jsonl');
+  const frameHandle = await open(framePath, 'r+');
+  try { await frameHandle.truncate(32 * 1024 * 1024 + 1); }
+  finally { await frameHandle.close(); }
+  const frameEntry = manifest.fileInventory.find(item => item.path === 'frames.jsonl');
+  frameEntry.bytes = 32 * 1024 * 1024 + 1;
+  frameEntry.sha256 = sha256(await readFile(framePath));
+  await writeFile(path.join(source, 'manifest.json'), JSON.stringify(manifest));
+  const oversizedOutput = path.join(root, 'oversized.mp4');
+  await assert.rejects(packSession(source, oversizedOutput), /frames.jsonl exceeds metadata limit/);
+  const manifestHandle = await open(path.join(source, 'manifest.json'), 'r+');
+  try { await manifestHandle.truncate(32 * 1024 * 1024 + 1); }
+  finally { await manifestHandle.close(); }
+  await assert.rejects(packSession(source, oversizedOutput), /manifest.json exceeds metadata limit/);
+  assert.ok(!(await readdir(root)).includes('oversized.mp4'));
 });

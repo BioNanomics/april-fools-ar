@@ -38,6 +38,11 @@ final class ARCaptureEngine: RCTEventEmitter {
     func startSession(_ name: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.startSession(name: name) { self.complete($0, resolve: resolve, reject: reject) }
     }
+    @objc(startSessionWithMode:mode:resolver:rejecter:)
+    func startSessionWithMode(_ name: String, mode: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        guard let mode = RecordingMode(rawValue: mode) else { reject("AR_CAPTURE_ERROR", "Choose Video + facts or Tag facts only.", nil); return }
+        ARCaptureCoordinator.shared.startSession(name: name, mode: mode) { self.complete($0, resolve: resolve, reject: reject) }
+    }
     @objc(stopSession:rejecter:)
     func stopSession(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.stopSession { self.complete($0, resolve: resolve, reject: reject) }
@@ -69,6 +74,10 @@ final class ARCaptureEngine: RCTEventEmitter {
     @objc(getSavedFieldWalk:resolver:rejecter:)
     func getSavedFieldWalk(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.getSavedFieldWalk(id) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(exportFieldWalk:resolver:rejecter:)
+    func exportFieldWalk(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.exportFieldWalk(id) { self.complete($0, resolve: resolve, reject: reject) }
     }
     @objc(clearFieldAlignment:rejecter:)
     func clearFieldAlignment(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {

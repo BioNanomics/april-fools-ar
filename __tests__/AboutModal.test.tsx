@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking, Modal, Text } from 'react-native';
+import { Alert, Linking, Modal, StyleSheet, Text } from 'react-native';
 import Renderer, { act } from 'react-test-renderer';
 import { AboutModal } from '../AboutModal';
 import legal from '../legal-documents.json';
@@ -33,6 +33,7 @@ test('privacy and complete app and third-party licenses are available without op
   await act(async () => {
     tree = Renderer.create(<AboutModal visible onClose={jest.fn()} />);
   });
+  await pressTab('Privacy');
   expect(
     tree!.root.findByProps({ testID: 'privacy-policy' }).props.children,
   ).toBe(legal.privacy);
@@ -50,7 +51,7 @@ test('privacy and complete app and third-party licenses are available without op
   expect(openURL).not.toHaveBeenCalled();
 });
 
-test('Done and native dismissal close the modal, and reopening returns to privacy', async () => {
+test('Done and native dismissal close the modal, and reopening returns to About with sponsors', async () => {
   const onClose = jest.fn();
   await act(async () => {
     tree = Renderer.create(<AboutModal visible onClose={onClose} />);
@@ -70,8 +71,88 @@ test('Done and native dismissal close the modal, and reopening returns to privac
   await act(async () => {
     tree!.update(<AboutModal visible onClose={onClose} />);
   });
-  expect(tree!.root.findByProps({ testID: 'privacy-policy' })).toBeTruthy();
+  expect(tree!.root.findByProps({ testID: 'about-and-sponsors' })).toBeTruthy();
+  expect(tree!.root.findAllByProps({ testID: 'privacy-policy' })).toHaveLength(
+    0,
+  );
   expect(tree!.root.findAllByProps({ testID: 'app-license' })).toHaveLength(0);
+});
+
+test('About combines app details and both sponsors in a full-screen page with bottom navigation', async () => {
+  const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  const onOpenVersion = jest.fn();
+  const onDismiss = jest.fn();
+  await act(async () => {
+    tree = Renderer.create(
+      <AboutModal
+        visible
+        onClose={jest.fn()}
+        appVersion={{ version: '0.8.0', build: '28' }}
+        onOpenVersion={onOpenVersion}
+        onDismiss={onDismiss}
+      />,
+    );
+  });
+  const modal = tree!.root.findByType(Modal);
+  expect(modal.props.presentationStyle).toBe('overFullScreen');
+  expect(modal.props.transparent).toBe(false);
+  const contents = JSON.stringify(tree!.toJSON());
+  expect(contents).toContain('April Fools AR by The REFINERY');
+  expect(contents).toContain('A BioNanomics project');
+  expect(contents).toContain('Don Wood Foundation');
+  expect(contents).toContain('Medical Informatics Engineering');
+  const nav = tree!.root.findByProps({ testID: 'about.bottomNav' });
+  expect(nav.findAllByProps({ accessibilityRole: 'tab' })).not.toHaveLength(0);
+  const hostTabs = nav.findAll(
+    node =>
+      typeof node.type === 'string' && node.props.accessibilityRole === 'tab',
+  );
+  expect(hostTabs).toHaveLength(3);
+  expect(hostTabs.map(tab => tab.findByType(Text).props.children)).toEqual([
+    'About',
+    'Privacy',
+    'Licenses & notices',
+  ]);
+  for (const tab of hostTabs) {
+    expect(
+      StyleSheet.flatten(tab.props.style).minHeight,
+    ).toBeGreaterThanOrEqual(44);
+  }
+  const close = nav.findByProps({
+    accessibilityLabel: 'Close about and privacy',
+  });
+  expect(
+    StyleSheet.flatten(close.props.style).minHeight,
+  ).toBeGreaterThanOrEqual(44);
+  await act(async () =>
+    tree!.root.findByProps({ testID: 'app.versionBadge' }).props.onPress(),
+  );
+  expect(onOpenVersion).toHaveBeenCalledTimes(1);
+  await act(async () => modal.props.onDismiss());
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+  expect(openURL).not.toHaveBeenCalled();
+});
+
+test('the legacy Sponsors entry opens the combined About page and sponsor links remain explicit', async () => {
+  const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  await act(async () => {
+    tree = Renderer.create(
+      <AboutModal visible initialPage="sponsors" onClose={jest.fn()} />,
+    );
+  });
+  expect(tree!.root.findByProps({ testID: 'about-and-sponsors' })).toBeTruthy();
+  await act(async () =>
+    tree!.root
+      .findByProps({ accessibilityLabel: 'Don Wood Foundation website' })
+      .props.onPress(),
+  );
+  expect(openURL).toHaveBeenCalledWith('https://www.donwoodfoundation.org/');
+  await pressTab('Privacy');
+  expect(
+    tree!.root.findAllByProps({ testID: 'about-and-sponsors' }),
+  ).toHaveLength(0);
+  await pressTab('About');
+  expect(tree!.root.findByProps({ testID: 'about-and-sponsors' })).toBeTruthy();
 });
 
 test('website opens only on request and supplies the support address when opening fails', async () => {

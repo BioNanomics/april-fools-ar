@@ -48,12 +48,16 @@ struct TagDebugSettings: Codable, Equatable {
     var showPoseAxes = false
     var showImperialHeight = true
     var levelFloorWithGravity = false
+    var kalmanFilterEnabled = false
+    var kalmanFilterSamples = 5
+    static let allowedKalmanFilterSamples = [3, 5, 10, 20, 30]
     static let defaultsKey = "AprilFoolsAR.TagDebugSettings.v1"
     static let tagSizeEvidenceKey = "AprilFoolsAR.TagSizeEvidence.v1"
 
     private enum CodingKeys: String, CodingKey {
         case tagSizeMeters, tagSizeMode, competitionYear, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
         case rejectDepthDifferenceMeters, distanceDeltaThresholdMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes, showImperialHeight, levelFloorWithGravity
+        case kalmanFilterEnabled, kalmanFilterSamples
     }
     init() {}
     init(from decoder: Decoder) throws {
@@ -80,6 +84,8 @@ struct TagDebugSettings: Codable, Equatable {
         showPoseAxes = try values.decodeIfPresent(Bool.self, forKey: .showPoseAxes) ?? false
         showImperialHeight = try values.decodeIfPresent(Bool.self, forKey: .showImperialHeight) ?? true
         levelFloorWithGravity = try values.decodeIfPresent(Bool.self, forKey: .levelFloorWithGravity) ?? false
+        kalmanFilterEnabled = try values.decodeIfPresent(Bool.self, forKey: .kalmanFilterEnabled) ?? false
+        kalmanFilterSamples = try values.decodeIfPresent(Int.self, forKey: .kalmanFilterSamples) ?? 5
     }
 
     var dictionary: [String: Any] {
@@ -88,7 +94,8 @@ struct TagDebugSettings: Codable, Equatable {
          "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "distanceDeltaThresholdMeters": distanceDeltaThresholdMeters,
          "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
          "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes, "showImperialHeight": showImperialHeight,
-         "levelFloorWithGravity": levelFloorWithGravity]
+         "levelFloorWithGravity": levelFloorWithGravity,
+         "kalmanFilterEnabled": kalmanFilterEnabled, "kalmanFilterSamples": kalmanFilterSamples]
     }
     func merging(_ changes: [String: Any]) throws -> TagDebugSettings {
         var result = self
@@ -110,13 +117,14 @@ struct TagDebugSettings: Codable, Equatable {
         } else { requestedYear = nil }
         for (key, value) in changes {
             if key == "tagSizeMode" || key == "competitionYear" { continue }
-            if key == "showPoseAxes" || key == "showImperialHeight" || key == "levelFloorWithGravity" {
+            if key == "showPoseAxes" || key == "showImperialHeight" || key == "levelFloorWithGravity" || key == "kalmanFilterEnabled" {
                 guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
                     throw TagDebugError.invalid("\(key) must be a boolean.")
                 }
                 if key == "showPoseAxes" { result.showPoseAxes = number.boolValue }
                 else if key == "showImperialHeight" { result.showImperialHeight = number.boolValue }
-                else { result.levelFloorWithGravity = number.boolValue }
+                else if key == "levelFloorWithGravity" { result.levelFloorWithGravity = number.boolValue }
+                else { result.kalmanFilterEnabled = number.boolValue }
                 continue
             }
             guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else {
@@ -137,6 +145,11 @@ struct TagDebugSettings: Codable, Equatable {
             case "rejectDepthDifferenceMeters": result.rejectDepthDifferenceMeters = value
             case "distanceDeltaThresholdMeters": result.distanceDeltaThresholdMeters = value
             case "maxReprojectionErrorPixels": result.maxReprojectionErrorPixels = value
+            case "kalmanFilterSamples":
+                guard let samples = Self.allowedKalmanFilterSamples.first(where: { Double($0) == value }) else {
+                    throw TagDebugError.invalid("Kalman smoothing samples must be 3, 5, 10, 20, or 30.")
+                }
+                result.kalmanFilterSamples = samples
             default: throw TagDebugError.invalid("Unknown debug setting: \(key)")
             }
         }
@@ -166,7 +179,8 @@ struct TagDebugSettings: Codable, Equatable {
               result.warningDepthDifferenceMeters >= 0, result.rejectDepthDifferenceMeters > 0,
               result.warningDepthDifferenceMeters < result.rejectDepthDifferenceMeters, result.rejectDepthDifferenceMeters <= 10,
               (0...10).contains(result.distanceDeltaThresholdMeters),
-              result.maxReprojectionErrorPixels > 0, result.maxReprojectionErrorPixels <= 100 else {
+              result.maxReprojectionErrorPixels > 0, result.maxReprojectionErrorPixels <= 100,
+              Self.allowedKalmanFilterSamples.contains(result.kalmanFilterSamples) else {
             throw TagDebugError.invalid("Settings out of range: positive size/distance/error, plane angle 0–90°, 0 ≤ warning < reject depth difference, and distance delta threshold 0–10 m are required.")
         }
         return result

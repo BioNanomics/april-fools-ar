@@ -36,7 +36,7 @@ host = project.new_target(:application, 'PanelTestHost', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'TagDebugPanelRegressionTests', :ios, '17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 ['native/ARCapture/TagDebugPanelView.swift', 'native/ARCapture/TagDebugMath.swift',
- 'native/ARCapture/HeightDisplayFormatter.swift',
+ 'native/ARCapture/HeightDisplayFormatter.swift', 'native/ARCapture/TagReadoutFilter.swift',
  'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift'].each do |relative|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(root,relative)))
 end

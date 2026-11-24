@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppVersionBadge } from './AppVersionBadge';
 
 export type TagSizeMode = 'auto' | 'ftc' | 'frc' | 'custom';
 
@@ -30,7 +31,11 @@ export type DebugSettings = {
   showPoseAxes?: boolean;
   showImperialHeight?: boolean;
   levelFloorWithGravity?: boolean;
+  kalmanFilterEnabled?: boolean;
+  kalmanFilterSamples?: number;
 };
+
+export const KALMAN_FILTER_SAMPLE_OPTIONS = [3, 5, 10, 20, 30] as const;
 
 export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   tagSizeMeters: 0.1651,
@@ -45,6 +50,8 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   showPoseAxes: false,
   showImperialHeight: true,
   levelFloorWithGravity: false,
+  kalmanFilterEnabled: false,
+  kalmanFilterSamples: 5,
 };
 
 type SettingsKey = Exclude<
@@ -55,6 +62,8 @@ type SettingsKey = Exclude<
   | 'showPoseAxes'
   | 'showImperialHeight'
   | 'levelFloorWithGravity'
+  | 'kalmanFilterEnabled'
+  | 'kalmanFilterSamples'
 >;
 const fields: {
   key: SettingsKey;
@@ -259,20 +268,33 @@ export function DebugSettingsModal({
   onCancel,
   onSave,
   onMeasure,
+  appVersion,
+  onOpenVersion,
+  onDismiss,
 }: {
   visible: boolean;
   initialSettings: DebugSettings;
   onCancel: () => void;
   onSave: (settings: DebugSettings) => Promise<void>;
   onMeasure: () => void;
+  appVersion?: { version: string; build: string } | null;
+  onOpenVersion?: () => void;
+  onDismiss?: () => void;
 }) {
   const inset = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const horizontalPadding = 16;
   const availableWidth =
     width - inset.left - inset.right - horizontalPadding * 2;
-  const columns = availableWidth >= 660;
+  const landscape = width > height;
+  const sheetWidth = landscape
+    ? Math.min(420, availableWidth * 0.48)
+    : Math.min(900, availableWidth);
+  const columns = sheetWidth >= 660;
   const compact = height < 500;
+  const bottomPadding = inset.bottom + 8;
+  const topPadding = landscape ? inset.top + 60 : height / 2;
+  const sheetHeight = Math.max(0, height - topPadding - bottomPadding);
   const [draft, setDraft] = useState<Draft>(() => makeDraft(initialSettings));
   const [saving, setSaving] = useState(false);
   const [resetToDefaults, setResetToDefaults] = useState(false);
@@ -295,6 +317,13 @@ export function DebugSettingsModal({
   const [levelFloorWithGravity, setLevelFloorWithGravity] = useState(
     initialSettings.levelFloorWithGravity ?? false,
   );
+  const [kalmanFilterEnabled, setKalmanFilterEnabled] = useState(
+    initialSettings.kalmanFilterEnabled ?? false,
+  );
+  const [kalmanFilterSamples, setKalmanFilterSamples] = useState(
+    initialSettings.kalmanFilterSamples ?? 5,
+  );
+  const [sampleOptionsOpen, setSampleOptionsOpen] = useState(false);
   useEffect(() => {
     if (visible) {
       setDraft(makeDraft(initialSettings));
@@ -309,11 +338,11 @@ export function DebugSettingsModal({
       setShowPoseAxes(initialSettings.showPoseAxes ?? false);
       setShowImperialHeight(initialSettings.showImperialHeight ?? true);
       setLevelFloorWithGravity(initialSettings.levelFloorWithGravity ?? false);
+      setKalmanFilterEnabled(initialSettings.kalmanFilterEnabled ?? false);
+      setKalmanFilterSamples(initialSettings.kalmanFilterSamples ?? 5);
+      setSampleOptionsOpen(false);
     }
   }, [visible, initialSettings]);
-  if (!visible) {
-    return null;
-  }
   const selectedSeason = seasonFor(tagSizeMode, competitionYear);
   const selectFieldType = (mode: TagSizeMode) => {
     setTagSizeMode(mode);
@@ -339,6 +368,8 @@ export function DebugSettingsModal({
       values.levelFloorWithGravity = levelFloorWithGravity;
       values.tagSizeMode = tagSizeMode;
       values.competitionYear = selectedSeason?.year ?? 0;
+      values.kalmanFilterEnabled = kalmanFilterEnabled;
+      values.kalmanFilterSamples = kalmanFilterSamples;
       // Display rounding must not turn a threshold-only edit into a new tag width.
       if (
         !resetToDefaults &&
@@ -365,7 +396,7 @@ export function DebugSettingsModal({
   };
   return (
     <Modal
-      visible
+      visible={visible}
       transparent
       animationType="slide"
       supportedOrientations={[
@@ -375,26 +406,35 @@ export function DebugSettingsModal({
         'portrait-upside-down',
       ]}
       onRequestClose={onCancel}
+      onDismiss={onDismiss}
     >
       <KeyboardAvoidingView
+        testID="debug.settings.backdrop"
         style={[
           s.backdrop,
           {
-            paddingTop: inset.top + (compact ? 8 : 20),
-            paddingBottom: inset.bottom + (compact ? 8 : 20),
+            paddingTop: topPadding,
             paddingLeft: inset.left + horizontalPadding,
             paddingRight: inset.right + horizontalPadding,
           },
+          landscape && s.backdropLandscape,
         ]}
         behavior="padding"
+        keyboardVerticalOffset={-inset.bottom}
       >
         <View
-          style={[s.sheet, compact && s.sheetCompact]}
+          testID="debug.settings.sheet"
+          style={[
+            s.sheet,
+            compact && s.sheetCompact,
+            {
+              width: sheetWidth,
+              maxHeight: sheetHeight,
+              marginBottom: bottomPadding,
+            },
+          ]}
           accessibilityViewIsModal
         >
-          <Text style={[s.title, compact && s.titleCompact]}>
-            Tag debug settings
-          </Text>
           <ScrollView
             testID="debug.settings.fields"
             keyboardShouldPersistTaps="handled"
@@ -402,6 +442,12 @@ export function DebugSettingsModal({
             style={s.scroll}
             keyboardDismissMode="interactive"
           >
+            <Text
+              style={[s.title, compact && s.titleCompact]}
+              accessibilityRole="header"
+            >
+              Tag debug settings
+            </Text>
             <Text style={s.description}>
               Applied to all tags and saved on this device. Correct tag width is
               required for a meaningful pose.
@@ -473,9 +519,9 @@ export function DebugSettingsModal({
                         >
                           <Text style={s.sizeOptionText}>
                             {tagSizeMode === 'ftc'
-                              ? `${season.year - 1}–${String(
-                                  season.year,
-                                ).slice(-2)}`
+                              ? `${season.year - 1}–${String(season.year).slice(
+                                  -2,
+                                )}`
                               : season.year}{' '}
                             · {season.game}
                           </Text>
@@ -548,6 +594,94 @@ export function DebugSettingsModal({
                 disabled={saving}
               />
             </View>
+            <View style={s.filterSection}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityLabel="Kalman filter"
+                accessibilityHint="Smooth live tag heights and camera ranges."
+                accessibilityState={{
+                  checked: kalmanFilterEnabled,
+                  disabled: saving,
+                }}
+                disabled={saving}
+                onPress={() => {
+                  setKalmanFilterEnabled(enabled => !enabled);
+                  setSampleOptionsOpen(false);
+                }}
+                style={s.filterToggle}
+              >
+                <View style={s.toggleText}>
+                  <Text style={s.label}>Kalman filter</Text>
+                  <Text style={s.hint}>
+                    Smooth live tag heights and camera ranges.
+                  </Text>
+                </View>
+                <View
+                  style={[s.checkbox, kalmanFilterEnabled && s.checkboxChecked]}
+                >
+                  {kalmanFilterEnabled && <Text style={s.checkmark}>✓</Text>}
+                </View>
+              </Pressable>
+              <Text style={s.label}>Smoothing strength</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Smoothing strength"
+                accessibilityValue={{ text: `${kalmanFilterSamples} samples` }}
+                accessibilityState={{
+                  disabled: !kalmanFilterEnabled || saving,
+                  expanded: sampleOptionsOpen,
+                }}
+                accessibilityHint="Choose the equivalent number of samples."
+                disabled={!kalmanFilterEnabled || saving}
+                onPress={() => setSampleOptionsOpen(open => !open)}
+                style={[
+                  s.sampleDropdown,
+                  (!kalmanFilterEnabled || saving) && s.controlDisabled,
+                ]}
+              >
+                <Text style={s.dropdownText}>
+                  {kalmanFilterSamples} samples
+                </Text>
+                <Text style={s.dropdownText}>
+                  {sampleOptionsOpen ? '▴' : '▾'}
+                </Text>
+              </Pressable>
+              {sampleOptionsOpen && kalmanFilterEnabled && (
+                <View
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="Smoothing strength options"
+                  style={s.sampleOptions}
+                >
+                  {KALMAN_FILTER_SAMPLE_OPTIONS.map(samples => (
+                    <Pressable
+                      key={samples}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${samples} samples`}
+                      accessibilityState={{
+                        checked: kalmanFilterSamples === samples,
+                        disabled: saving,
+                      }}
+                      disabled={saving}
+                      onPress={() => {
+                        setKalmanFilterSamples(samples);
+                        setSampleOptionsOpen(false);
+                      }}
+                      style={[
+                        s.sampleOption,
+                        kalmanFilterSamples === samples && s.sampleSelected,
+                      ]}
+                    >
+                      <Text style={s.dropdownText}>{samples} samples</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <Text style={s.hint}>
+                More equivalent samples reduce jitter and add lag. This sets
+                response strength; raw diagnostics and recordings stay
+                available.
+              </Text>
+            </View>
             <View style={s.fieldGrid}>
               {fields
                 .filter(
@@ -592,17 +726,22 @@ export function DebugSettingsModal({
                 setShowPoseAxes(false);
                 setShowImperialHeight(true);
                 setLevelFloorWithGravity(false);
+                setKalmanFilterEnabled(false);
+                setKalmanFilterSamples(5);
+                setSampleOptionsOpen(false);
               }}
               disabled={saving}
             >
               <Text style={s.link}>Reset to automatic defaults</Text>
             </Pressable>
           </ScrollView>
-          <View style={s.actions}>
+          <View testID="debug.settings.actions" style={s.actions}>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Cancel debug settings"
               onPress={onCancel}
               disabled={saving}
+              style={s.cancelButton}
             >
               <Text style={s.cancel}>Cancel</Text>
             </Pressable>
@@ -620,6 +759,7 @@ export function DebugSettingsModal({
           </View>
         </View>
       </KeyboardAvoidingView>
+      <AppVersionBadge info={appVersion} onPress={onOpenVersion} />
     </Modal>
   );
 }
@@ -638,6 +778,54 @@ const s = StyleSheet.create({
   },
   sizeOptionSelected: { backgroundColor: '#24415A', borderColor: '#A1D18B' },
   sizeOptionText: { color: '#F3F8FD', fontSize: 13 },
+  filterSection: {
+    gap: 8,
+    paddingBottom: 16,
+    borderBottomColor: '#24415A',
+    borderBottomWidth: 1,
+  },
+  filterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minHeight: 44,
+    marginBottom: 4,
+  },
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderWidth: 2,
+    borderColor: '#A1D18B',
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: '#A1D18B' },
+  checkmark: { color: '#071426', fontSize: 18, fontWeight: '700' },
+  sampleDropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 44,
+    borderColor: '#46627B',
+    borderWidth: 1,
+    borderRadius: 9,
+    paddingHorizontal: 12,
+  },
+  controlDisabled: { opacity: 0.45 },
+  dropdownText: { color: '#F3F8FD', fontSize: 16 },
+  sampleOptions: {
+    borderColor: '#46627B',
+    borderWidth: 1,
+    borderRadius: 9,
+    overflow: 'hidden',
+  },
+  sampleOption: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  sampleSelected: { backgroundColor: '#24415A' },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -649,10 +837,11 @@ const s = StyleSheet.create({
   toggleText: { flex: 1 },
   backdrop: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     backgroundColor: '#000000AA',
     alignItems: 'center',
   },
+  backdropLandscape: { alignItems: 'flex-end' },
   sheet: {
     backgroundColor: '#102239',
     borderRadius: 20,
@@ -660,10 +849,9 @@ const s = StyleSheet.create({
     width: '100%',
     maxWidth: 900,
     flex: 1,
-    maxHeight: 860,
     minHeight: 0,
   },
-  sheetCompact: { paddingVertical: 12 },
+  sheetCompact: { paddingVertical: 8 },
   titleCompact: { fontSize: 19 },
   title: { color: '#F3F8FD', fontWeight: '700', fontSize: 22 },
   description: {
@@ -712,8 +900,11 @@ const s = StyleSheet.create({
     borderTopColor: '#24415A',
     gap: 16,
   },
+  cancelButton: { minHeight: 44, minWidth: 64, justifyContent: 'center' },
   cancel: { color: '#A6BACD', fontSize: 14, paddingVertical: 12 },
   apply: {
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: '#A1D18B',
     borderRadius: 10,
     paddingVertical: 12,

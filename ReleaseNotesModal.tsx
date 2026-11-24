@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -8,10 +8,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppVersionBadge } from './AppVersionBadge';
 
 export type ReleaseNote = {
   version: string;
@@ -34,6 +32,7 @@ type Props = {
   visible: boolean;
   info: AppInfo | null;
   onClose: () => void;
+  onDismiss?: () => void;
 };
 
 const C = {
@@ -88,14 +87,21 @@ function ReleaseCard({
   );
 }
 
-export function ReleaseNotesModal({ visible, info, onClose }: Props) {
-  const { width, height } = useWindowDimensions();
+export function ReleaseNotesModal({
+  visible,
+  info,
+  onClose,
+  onDismiss,
+}: Props) {
+  const { height } = useWindowDimensions();
   const inset = useSafeAreaInsets();
   const compact = height < 500;
-  const wide = width - inset.left - inset.right >= 800;
-  if (!visible) {
-    return null;
-  }
+  const [page, setPage] = useState<'version' | 'notes'>('version');
+  useEffect(() => {
+    if (visible) {
+      setPage('version');
+    }
+  }, [visible]);
   const current = info?.releaseNotes.find(
     release => release.version === info.version && release.build === info.build,
   );
@@ -106,130 +112,159 @@ export function ReleaseNotesModal({ visible, info, onClose }: Props) {
     <Modal
       visible={visible}
       animationType="slide"
-      transparent
+      transparent={false}
+      presentationStyle="overFullScreen"
       supportedOrientations={[
         'portrait',
         'landscape-left',
         'landscape-right',
         'portrait-upside-down',
       ]}
-      onDismiss={onClose}
+      onDismiss={onDismiss ?? onClose}
       onRequestClose={onClose}
     >
-      <SafeAreaView
-        style={[styles.backdrop, compact && styles.backdropCompact]}
-        edges={['top', 'bottom', 'left', 'right']}
+      <View
+        testID="release.notes.screen"
+        style={[styles.screen, { paddingTop: inset.top + 28 }]}
         accessibilityViewIsModal
       >
-        <View style={styles.sheet}>
-          <View style={[styles.header, compact && styles.headerCompact]}>
-            <View style={styles.heading}>
-              <Text style={styles.eyebrow}>APRIL FOOLS AR</Text>
-              <Text
-                style={[styles.title, compact && styles.titleCompact]}
-                accessibilityRole="header"
-              >
-                Version & release notes
+        <View
+          style={[
+            styles.header,
+            compact && styles.headerCompact,
+            { paddingLeft: inset.left + 20, paddingRight: inset.right + 20 },
+          ]}
+        >
+          <Text style={styles.eyebrow}>APRIL FOOLS AR</Text>
+          <Text
+            style={[styles.title, compact && styles.titleCompact]}
+            accessibilityRole="header"
+          >
+            Version & release notes
+          </Text>
+        </View>
+        <ScrollView
+          key={page}
+          testID="release.notes.content"
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.content,
+            { paddingLeft: inset.left + 20, paddingRight: inset.right + 20 },
+          ]}
+          showsVerticalScrollIndicator
+        >
+          {!info ? (
+            <View style={styles.release}>
+              <Text style={styles.releaseTitle}>
+                Build information unavailable
+              </Text>
+              <Text style={styles.changeText}>
+                Close this view and reopen it to retry loading the installed app
+                details.
               </Text>
             </View>
+          ) : page === 'version' ? (
+            <View style={styles.buildCard} testID="installed-build-details">
+              <Text style={styles.version}>Version {info.version}</Text>
+              <Text style={styles.build}>Build {info.build}</Text>
+              <Text style={styles.label}>Source revision</Text>
+              <Text selectable style={styles.commit}>
+                {info.buildCommit.slice(0, 12) || 'Unavailable'}
+              </Text>
+              <Text selectable style={styles.exactValue}>
+                {info.buildCommit || 'Full source revision unavailable'}
+              </Text>
+              <Text
+                style={[
+                  styles.sourceState,
+                  info.workingTreeDirty && styles.dirtySource,
+                ]}
+              >
+                {info.workingTreeDirty
+                  ? 'UNCOMMITTED SOURCE CHANGES'
+                  : 'Clean source tree'}
+              </Text>
+              <Text style={styles.label}>Built · UTC</Text>
+              <Text style={styles.value}>{humanUTC(info.buildDateUTC)}</Text>
+              <Text selectable style={styles.exactValue}>
+                {info.buildDateUTC || 'Exact build timestamp unavailable'}
+              </Text>
+              <Text style={styles.label}>App identifier</Text>
+              <Text selectable style={styles.exactValue}>
+                {info.bundleId}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.notesColumn}>
+              {current ? (
+                <ReleaseCard release={current} current />
+              ) : (
+                <View style={styles.release}>
+                  <Text style={styles.changeText}>
+                    No release notes are bundled for this installed version and
+                    build.
+                  </Text>
+                </View>
+              )}
+              {history.length > 0 && (
+                <>
+                  <Text style={styles.historyTitle} accessibilityRole="header">
+                    Release history
+                  </Text>
+                  {history.map(release => (
+                    <ReleaseCard
+                      key={`${release.version}-${release.build}`}
+                      release={release}
+                    />
+                  ))}
+                </>
+              )}
+            </View>
+          )}
+        </ScrollView>
+        <View
+          testID="release.notes.navigation"
+          style={[
+            styles.navigation,
+            {
+              paddingLeft: inset.left + 12,
+              paddingRight: inset.right + 12,
+              paddingBottom: inset.bottom + 8,
+            },
+          ]}
+        >
+          {(
+            [
+              ['version', 'Version'],
+              ['notes', 'Release notes'],
+            ] as const
+          ).map(([key, title]) => (
             <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close release notes"
-              onPress={onClose}
-              style={styles.close}
+              key={key}
+              accessibilityRole="tab"
+              accessibilityLabel={title}
+              accessibilityState={{ selected: page === key }}
+              onPress={() => setPage(key)}
+              style={[styles.tab, page === key && styles.selectedTab]}
             >
-              <Text style={styles.closeText}>Done</Text>
+              <Text
+                style={[styles.tabText, page === key && styles.selectedText]}
+              >
+                {title}
+              </Text>
             </Pressable>
-          </View>
-
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator
+          ))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close release notes"
+            onPress={onClose}
+            style={styles.close}
           >
-            {info ? (
-              <View style={[styles.columns, wide && styles.columnsWide]}>
-                <View
-                  style={[styles.buildCard, wide && styles.buildColumn]}
-                  testID="installed-build-details"
-                >
-                  <Text style={styles.version}>Version {info.version}</Text>
-                  <Text style={styles.build}>Build {info.build}</Text>
-                  <Text style={styles.label}>Source revision</Text>
-                  <Text selectable style={styles.commit}>
-                    {info.buildCommit.slice(0, 12) || 'Unavailable'}
-                  </Text>
-                  <Text selectable style={styles.exactValue}>
-                    {info.buildCommit || 'Full source revision unavailable'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.sourceState,
-                      info.workingTreeDirty && styles.dirtySource,
-                    ]}
-                  >
-                    {info.workingTreeDirty
-                      ? 'UNCOMMITTED SOURCE CHANGES'
-                      : 'Clean source tree'}
-                  </Text>
-                  <Text style={styles.label}>Built · UTC</Text>
-                  <Text style={styles.value}>
-                    {humanUTC(info.buildDateUTC)}
-                  </Text>
-                  <Text selectable style={styles.exactValue}>
-                    {info.buildDateUTC || 'Exact build timestamp unavailable'}
-                  </Text>
-                  <Text style={styles.label}>App identifier</Text>
-                  <Text selectable style={styles.exactValue}>
-                    {info.bundleId}
-                  </Text>
-                </View>
-
-                <View
-                  style={[styles.notesColumn, wide && styles.notesColumnWide]}
-                >
-                  {current ? (
-                    <ReleaseCard release={current} current />
-                  ) : (
-                    <View style={styles.release}>
-                      <Text style={styles.changeText}>
-                        No release notes are bundled for this installed version
-                        and build.
-                      </Text>
-                    </View>
-                  )}
-                  {history.length > 0 && (
-                    <>
-                      <Text
-                        style={styles.historyTitle}
-                        accessibilityRole="header"
-                      >
-                        Release history
-                      </Text>
-                      {history.map(release => (
-                        <ReleaseCard
-                          key={`${release.version}-${release.build}`}
-                          release={release}
-                        />
-                      ))}
-                    </>
-                  )}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.release}>
-                <Text style={styles.releaseTitle}>
-                  Build information unavailable
-                </Text>
-                <Text style={styles.changeText}>
-                  Close this view and reopen it to retry loading the installed
-                  app details.
-                </Text>
-              </View>
-            )}
-          </ScrollView>
+            <Text style={styles.closeText}>Done</Text>
+          </Pressable>
         </View>
-      </SafeAreaView>
+        <AppVersionBadge info={info} onPress={() => setPage('version')} />
+      </View>
     </Modal>
   );
 }
@@ -237,41 +272,20 @@ export function ReleaseNotesModal({ visible, info, onClose }: Props) {
 export default ReleaseNotesModal;
 
 const styles = StyleSheet.create({
-  backdrop: {
+  screen: {
     flex: 1,
-    backgroundColor: '#000000AA',
-    padding: 20,
-    justifyContent: 'center',
-  },
-  backdropCompact: { padding: 8 },
-  sheet: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 980,
-    maxHeight: 920,
-    alignSelf: 'center',
     minHeight: 0,
     backgroundColor: C.bg,
-    borderRadius: 20,
-    overflow: 'hidden',
   },
-  columns: { gap: 18 },
-  columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
-  buildColumn: { flex: 0.9, minWidth: 0 },
   notesColumn: { minWidth: 0, gap: 16 },
-  notesColumnWide: { flex: 1.1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: C.line,
-    gap: 12,
   },
-  headerCompact: { paddingVertical: 8 },
+  headerCompact: { paddingTop: 4, paddingBottom: 10 },
   titleCompact: { fontSize: 19, marginTop: 2 },
-  heading: { flex: 1, minWidth: 0 },
   eyebrow: {
     color: C.cyan,
     fontSize: 11,
@@ -290,8 +304,34 @@ const styles = StyleSheet.create({
     borderColor: C.line,
   },
   closeText: { color: C.cyan, fontSize: 16, fontWeight: '700' },
+  navigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    backgroundColor: C.bg,
+  },
+  tab: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+  },
+  selectedTab: { backgroundColor: C.cyan },
+  tabText: { color: C.text, fontSize: 13, fontWeight: '600' },
+  selectedText: { color: C.bg },
   scroll: { flex: 1, minHeight: 0 },
-  content: { padding: 20, paddingBottom: 36, gap: 16 },
+  content: {
+    width: '100%',
+    maxWidth: 980,
+    alignSelf: 'center',
+    paddingTop: 20,
+    paddingBottom: 28,
+  },
   buildCard: {
     backgroundColor: C.card,
     borderRadius: 14,

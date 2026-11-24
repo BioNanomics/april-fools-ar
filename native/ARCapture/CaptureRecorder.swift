@@ -353,10 +353,14 @@ final class CaptureRecorder {
             let handle = try FileHandle(forReadingFrom: url)
             var hash = SHA256()
             do {
-                while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
+                // Finalization may checksum hundreds of MiB in one disk task.
+                // Release each Foundation buffer as soon as it is hashed.
+                while try autoreleasepool(invoking: { () throws -> Bool in
+                    guard let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty else { return false }
                     if wasBackgroundExpired { throw CaptureError.message("Background finalization expired during checksumming.") }
                     hash.update(data: chunk)
-                }
+                    return true
+                }) {}
                 try handle.close()
             } catch { try? handle.close(); throw error }
             result.append(["path": components.dropFirst(rootComponents.count).joined(separator: "/"), "bytes": Int64(values.fileSize ?? 0), "sha256": hash.finalize().map { String(format: "%02x", $0) }.joined()])

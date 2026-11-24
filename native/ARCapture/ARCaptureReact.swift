@@ -11,9 +11,13 @@ final class ARCaptureEngine: RCTEventEmitter {
             guard let self, self.listening else { return }
             self.sendEvent(withName: "ARCaptureStatus", body: status)
         }
+        ARCaptureCoordinator.shared.onTagSelected = { [weak self] id in
+            guard let self, self.listening else { return }
+            self.sendEvent(withName: "ARCaptureTagSelected", body: ["id": id])
+        }
     }
     @objc override static func requiresMainQueueSetup() -> Bool { true }
-    override func supportedEvents() -> [String]! { ["ARCaptureStatus"] }
+    override func supportedEvents() -> [String]! { ["ARCaptureStatus", "ARCaptureTagSelected"] }
     override func startObserving() { listening = true }
     override func stopObserving() { listening = false }
 
@@ -116,4 +120,17 @@ final class ARCaptureEngine: RCTEventEmitter {
 final class ARCaptureViewManager: RCTViewManager {
     override static func requiresMainQueueSetup() -> Bool { true }
     override func view() -> UIView! { ARCaptureView(frame: .zero) }
+}
+
+@objc(ARCaptureReadoutViewManager)
+final class ARCaptureReadoutViewManager: RCTViewManager {
+    override static func requiresMainQueueSetup() -> Bool { true }
+    override func view() -> UIView! {
+        let view = ARCaptureReadoutView(frame: .zero)
+        view.onWindowAttachmentChanged = { readout, attached in
+            if attached { ARCaptureCoordinator.shared.attachReadout(readout) }
+            else { ARCaptureCoordinator.shared.detachReadout(readout) }
+        }
+        return view
+    }
 }

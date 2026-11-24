@@ -47,12 +47,17 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var debugMode = true
     private var selectedTagID: Int?
     private var latestTagDetections = [[String: Any]]()
+    // Presentation copies only; geometry, status and recordings retain the source observations.
+    private var latestTagReadouts = [[String: Any]]()
+    private var tagReadoutFilter = TagReadoutFilter()
     private var latestTagDisplayTransform = CGAffineTransform.identity
     private var latestTagImageSize = CGSize(width: 1, height: 1)
     private var latestTagIntrinsics: [Double]?
     private var tagCompletionTimes = [Double]()
     private var lastJSEmissionTime = 0.0
     private weak var host: ARCaptureView?
+    // Mounted independently in the bottom sheet; accessed only on the main queue.
+    private weak var readoutHost: ARCaptureReadoutView?
     private var session: ARSession?
     private var recorder: CaptureRecorder?
     private var finalizingRecorder: CaptureRecorder?
@@ -101,6 +106,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     // Accessed only on the main queue.
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     var onStatus: (([String: Any]) -> Void)?
+    var onTagSelected: ((Int) -> Void)?
 
     override init() {
         super.init()
@@ -128,6 +134,23 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
 
     static var lidarSupported: Bool { ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) }
+
+    func attachReadout(_ view: ARCaptureReadoutView) {
+        readoutHost = view
+        // Opening details must show the current selected result without waiting for another frame.
+        captureQueue.async { self.renderTagDebug() }
+    }
+
+    func detachReadout(_ view: ARCaptureReadoutView) {
+        guard readoutHost === view else { return }
+        readoutHost = nil
+    }
+
+    /// Camera annotations and separately mounted details share the same result lifetime.
+    private func clearTagPresentation() {
+        host?.clearAprilTagOverlay()
+        readoutHost?.panel.showUnavailable("Waiting for a current visible tag")
+    }
 
     func attach(_ view: ARCaptureView) {
         host = view
@@ -304,8 +327,17 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
 
     func selectTag(_ id: Int) {
         captureQueue.async {
-            guard self.latestTagDetections.contains(where: { ($0["id"] as? NSNumber)?.intValue == id }) else { return }
+            // The accepted cache is generation-gated and cleared whenever tracking/settings reset.
+            // Quality warnings remain selectable so their diagnostic details can be inspected.
+            guard id >= 0, self.tracking == "normal", self.tagError == nil,
+                  let frameID = self.tagResultFrameID, !frameID.isEmpty,
+                  let timestamp = self.lastTagResultTimestamp, timestamp.isFinite else { return }
+            let age = ProcessInfo.processInfo.systemUptime - timestamp
+            guard age.isFinite, age >= 0, age <= 0.4,
+                  self.latestTagDetections.contains(where: { ($0["id"] as? NSNumber)?.intValue == id }) else { return }
             self.selectedTagID = id; self.renderTagDebug(); self.emitStatus(force: true)
+            // Each explicit tap is an intent to open details, including a tap on the selected ID.
+            DispatchQueue.main.async { [weak self] in self?.onTagSelected?(id) }
         }
     }
 
@@ -654,7 +686,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         DispatchQueue.main.async {
             self.host?.depthView.isHidden = true
             self.host?.tagOverlay.isHidden = hideTags
-            if hideTags { self.host?.clearAprilTagOverlay() }
+            if hideTags { self.clearTagPresentation() }
         }
     }
     private func updateFloorCandidates(_ frame: ARFrame) {
@@ -806,15 +838,17 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
     private func invalidateAprilTags() {
         tagGeneration += 1; tagIDs = []; latestTagDetections = []; latestTagIntrinsics = nil; lastTagResultTimestamp = nil; tagResultFrameID = nil
+        latestTagReadouts = []; tagReadoutFilter.reset()
         tagState = "waiting"
-        DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }
+        DispatchQueue.main.async { [weak self] in self?.clearTagPresentation() }
     }
     private func expireAprilTagsIfNeeded() {
         guard let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp > 0.4 else { return }
         if !tagIDs.isEmpty || tagResultFrameID != nil {
             tagIDs = []; latestTagDetections = []; tagResultFrameID = nil
+            latestTagReadouts = []; tagReadoutFilter.reset()
             if tagError == nil { tagState = "waiting" }
-            DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }
+            DispatchQueue.main.async { [weak self] in self?.clearTagPresentation() }
         }
     }
     private func analyzeAprilTags(_ frame: ARFrame) {
@@ -897,10 +931,17 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     self.latestTagImageSize = CGSize(width: width, height: height); self.latestTagDisplayTransform = display
                     self.latestTagIntrinsics = poseIntrinsics
                     let age = ProcessInfo.processInfo.systemUptime - timestamp
+                    if age >= 0 && age <= 0.4 && error == nil {
+                        self.latestTagReadouts = self.tagReadoutFilter.apply(to: detections, timestamp: timestamp,
+                            enabled: settings.kalmanFilterEnabled && sourceTracking == "normal" && self.tracking == "normal",
+                            samples: settings.kalmanFilterSamples)
+                    } else {
+                        self.latestTagReadouts = []; self.tagReadoutFilter.reset()
+                    }
                     self.tagIDs = age <= 0.4 ? Array(Set(detections.compactMap { ($0["id"] as? NSNumber)?.intValue })).sorted() : []
                     self.tagState = error == nil ? (age <= 0.4 ? "ready" : "waiting") : "error"
                     if age <= 0.4 && error == nil { self.renderTagDebug() }
-                    else { DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() } }
+                    else { DispatchQueue.main.async { [weak self] in self?.clearTagPresentation() } }
                     self.renderSpatial()
                     self.captureQueue.asyncAfter(deadline: .now() + max(0, 0.4 - age)) { [weak self] in
                         guard let self, self.tagResultFrameID == sourceFrameID else { return }
@@ -931,18 +972,22 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
     private func renderTagDebug() {
         guard debugMode || spatialState.mode != .selectFloor else {
-            DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }; return
+            DispatchQueue.main.async { [weak self] in self?.clearTagPresentation() }; return
         }
-        guard let frameID = tagResultFrameID, let timestamp = lastTagResultTimestamp, ProcessInfo.processInfo.systemUptime - timestamp <= 0.4 else {
-            DispatchQueue.main.async { [weak self] in self?.host?.clearAprilTagOverlay() }; return
+        guard let frameID = tagResultFrameID, let timestamp = lastTagResultTimestamp,
+              timestamp.isFinite, ProcessInfo.processInfo.systemUptime - timestamp >= 0,
+              ProcessInfo.processInfo.systemUptime - timestamp <= 0.4 else {
+            DispatchQueue.main.async { [weak self] in self?.clearTagPresentation() }; return
         }
-        let rows = latestTagDetections, selected = selectedTagID, debug = selectedTagDebug(), size = latestTagImageSize
+        let rows = latestTagReadouts, selected = selectedTagID, size = latestTagImageSize
+        let debug = rows.first(where: { ($0["id"] as? NSNumber)?.intValue == selected })?["debug"] as? [String: Any]
         let display = PreviewZoom.displayTransform(base: latestTagDisplayTransform, zoom: displayZoom)
         let settings = debugSettings, hz = analysisHz, latency = tagLatencyMilliseconds
         let intrinsics = latestTagIntrinsics
         DispatchQueue.main.async { [weak self] in
             self?.host?.showAprilTagOverlay(rows, imageSize: size, displayTransform: display, frameID: frameID, expiresAt: timestamp+0.4, selectedID: selected, showPoseAxes: settings.showPoseAxes, intrinsics: intrinsics, showImperialHeight: settings.showImperialHeight, distanceDeltaThresholdMeters: settings.distanceDeltaThresholdMeters)
-            self?.host?.debugPanel.show(debug: debug, frameID: frameID, timestamp: timestamp, analysisHz: hz, latencyMilliseconds: latency, settings: settings)
+            self?.readoutHost?.panel.show(debug: debug, frameID: frameID, timestamp: timestamp,
+                analysisHz: hz, latencyMilliseconds: latency, settings: settings)
         }
     }
     private func emitStatus(force: Bool = false) {
@@ -1007,7 +1052,6 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     let depthView = UIImageView()
     let tagOverlay = AprilTagOverlayView(frame: .zero)
     let spatialOverlay = SpatialMeasurementOverlayView(frame: .zero)
-    let debugPanel = TagDebugPanelView(frame: .zero)
     private var debugEnabled = true
     private let statusLabel = UILabel()
     private var attached = false
@@ -1023,11 +1067,6 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         previewContainer.addSubview(depthView)
         addSubview(spatialOverlay)
         addSubview(tagOverlay)
-        addSubview(debugPanel)
-        debugPanel.onPreferredHeightChanged = { [weak self] _ in
-            self?.setNeedsLayout()
-            self?.layoutIfNeeded()
-        }
         statusLabel.textColor = .white; statusLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
         statusLabel.numberOfLines = 3; statusLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
         statusLabel.text = "Starting ARKit · tap two surfaces to measure"
@@ -1059,7 +1098,6 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         tagOverlay.frame = bounds
         spatialOverlay.frame = bounds
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
-        debugPanel.frame = TagDebugPanelView.overlayFrame(in: bounds, preferredHeight: debugPanel.preferredHeight)
         ARCaptureCoordinator.shared.updateViewport(arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
     }
     @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
@@ -1103,7 +1141,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         let mode = status["previewMode"] as? String ?? "camera"
         statusLabel.text = "\(tracking) · \(depth) · \(mode)\nTap two surfaces · \(count)/2 points · estimates only"
     }
-    func setDebugMode(_ enabled: Bool) { debugEnabled = enabled; debugPanel.isHidden = !enabled; setNeedsLayout(); layoutIfNeeded() }
+    func setDebugMode(_ enabled: Bool) { debugEnabled = enabled; setNeedsLayout(); layoutIfNeeded() }
     func setDisplayZoom(_ factor: Double) {
         displayZoom = (try? PreviewZoom.clamped(factor)) ?? PreviewZoom.minimum
         applyDisplayZoom()
@@ -1123,7 +1161,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
             displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5, showImperialHeight: snapshot.showImperialHeight,
             pendingSelectedFloorID: snapshot.pendingSelectedFloorID, automaticTagHeights: snapshot.automaticTagHeights)
     }
-    func clearAprilTagOverlay() { tagOverlay.clear(); debugPanel.showUnavailable("Waiting for a current visible tag") }
+    func clearAprilTagOverlay() { tagOverlay.clear() }
     func showAprilTagOverlay(_ detections: [[String: Any]], imageSize: CGSize, displayTransform: CGAffineTransform, frameID: String, expiresAt: Double, selectedID: Int? = nil, showPoseAxes: Bool = false, intrinsics: [Double]? = nil, showImperialHeight: Bool = true, distanceDeltaThresholdMeters: Double = 0.15) {
         tagOverlay.show(detections, imageSize: imageSize, displayTransform: displayTransform, frameID: frameID, expiresAt: expiresAt, selectedID: selectedID, showPoseAxes: showPoseAxes, intrinsics: intrinsics, showImperialHeight: showImperialHeight, distanceDeltaThresholdMeters: distanceDeltaThresholdMeters)
     }

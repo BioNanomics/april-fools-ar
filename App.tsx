@@ -35,8 +35,12 @@ import {
 import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
 import { formatHeight } from './HeightUnits';
 import { AboutModal, type AboutPage } from './AboutModal';
+import { AppVersionBadge } from './AppVersionBadge';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
+const TagReadoutView = requireNativeComponent<ViewProps>(
+  'ARCaptureReadoutView',
+);
 const Engine = NativeModules.ARCaptureEngine;
 const Archive = NativeModules.ArchiveModule;
 type Measurement = {
@@ -139,24 +143,22 @@ function CaptureApp() {
   const inset = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const usableWidth = width - inset.left - inset.right;
-  const tablet = Math.min(width, height) >= 600;
   const landscape = width > height;
-  const wide =
-    (landscape && usableWidth >= 620) || (tablet && usableWidth >= 740);
-  const compactLandscape = wide && height < 500;
-  const railWidth = tablet && !compactLandscape ? 336 : 276;
-  const sessionColumns = usableWidth >= 1050 ? 3 : usableWidth >= 680 ? 2 : 1;
+  const sideWidth = Math.min(380, usableWidth * 0.44);
+  const sideTop = inset.top + 60;
+  const sideBottom = inset.bottom + 8;
+  const sideHeight = Math.max(0, height - sideTop - sideBottom);
+  const denseDock = height < 360;
+  const listWidth = landscape ? sideWidth : Math.min(760, usableWidth);
+  const sessionColumns = listWidth >= 680 ? 2 : 1;
   const sessionCardWidth =
-    (Math.min(width, 1440) -
-      inset.left -
-      inset.right -
-      40 -
-      14 * (sessionColumns - 1)) /
-    sessionColumns;
+    (listWidth - 32 - 14 * (sessionColumns - 1)) / sessionColumns;
+  const [toolSheet, setToolSheet] = useState<
+    'more' | 'measure' | 'name' | 'details' | null
+  >(null);
   const [tab, setTab] = useState<'capture' | 'sessions'>('capture');
   const [status, setStatus] = useState<Status>({});
   const [name, setName] = useState('Field walk');
-  const [editingName, setEditingName] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sessionAction, setSessionAction] = useState<{
     id: string;
@@ -171,16 +173,29 @@ function CaptureApp() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [aboutPage, setAboutPage] = useState<AboutPage>('privacy');
+  const [aboutPage, setAboutPage] = useState<AboutPage>('about');
+  const pendingVersionRef = useRef(false);
+  const versionClosingRef = useRef(false);
+  const releaseNotesOpenRef = useRef(false);
+  releaseNotesOpenRef.current = releaseNotesOpen;
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [measuringTagSize, setMeasuringTagSize] = useState(false);
   const [finishingFloor, setFinishingFloor] = useState(false);
+  const [togglingKalman, setTogglingKalman] = useState(false);
+  const togglingKalmanRef = useRef(false);
   const [debugSettings, setDebugSettings] = useState<DebugSettings>(
     DEFAULT_DEBUG_SETTINGS,
   );
   const recordingRef = useRef(false);
   recordingRef.current = Boolean(status.recording);
+  const tagSelectionAllowedRef = useRef(true);
+  tagSelectionAllowedRef.current =
+    tab === 'capture' &&
+    !settingsOpen &&
+    !aboutOpen &&
+    !releaseNotesOpen &&
+    !noteOpen;
   const refresh = useCallback(async () => {
     if (Engine) {
       try {
@@ -208,10 +223,29 @@ function CaptureApp() {
     const subscription = Engine
       ? new NativeEventEmitter(Engine).addListener('ARCaptureStatus', setStatus)
       : undefined;
+    const tagSelection = Engine
+      ? new NativeEventEmitter(Engine).addListener(
+          'ARCaptureTagSelected',
+          (event: { id?: unknown } | undefined) => {
+            if (
+              !tagSelectionAllowedRef.current ||
+              pendingVersionRef.current ||
+              versionClosingRef.current ||
+              typeof event?.id !== 'number' ||
+              !Number.isSafeInteger(event.id) ||
+              event.id < 0
+            ) {
+              return;
+            }
+            setToolSheet('details');
+          },
+        )
+      : undefined;
     refresh();
     const interval = setInterval(refresh, 2000);
     return () => {
       subscription?.remove();
+      tagSelection?.remove();
       clearInterval(interval);
     };
   }, [refresh]);
@@ -240,16 +274,39 @@ function CaptureApp() {
       setPreview(status.previewMode);
     }
   }, [status.previewMode]);
+  const reportedImperialHeight =
+    status.aprilTag?.debugSettings?.showImperialHeight;
+  const reportedKalmanEnabled =
+    status.aprilTag?.debugSettings?.kalmanFilterEnabled;
+  const reportedKalmanSamples =
+    status.aprilTag?.debugSettings?.kalmanFilterSamples;
   useEffect(() => {
-    const enabled = status.aprilTag?.debugSettings?.showImperialHeight;
-    if (typeof enabled === 'boolean') {
-      setDebugSettings(previous =>
-        previous.showImperialHeight === enabled
-          ? previous
-          : { ...previous, showImperialHeight: enabled },
-      );
-    }
-  }, [status.aprilTag?.debugSettings?.showImperialHeight]);
+    setDebugSettings(previous => {
+      const showImperialHeight =
+        typeof reportedImperialHeight === 'boolean'
+          ? reportedImperialHeight
+          : previous.showImperialHeight;
+      const kalmanFilterEnabled =
+        typeof reportedKalmanEnabled === 'boolean'
+          ? reportedKalmanEnabled
+          : previous.kalmanFilterEnabled;
+      const kalmanFilterSamples =
+        reportedKalmanSamples ?? previous.kalmanFilterSamples;
+      if (
+        previous.showImperialHeight === showImperialHeight &&
+        previous.kalmanFilterEnabled === kalmanFilterEnabled &&
+        previous.kalmanFilterSamples === kalmanFilterSamples
+      ) {
+        return previous;
+      }
+      return {
+        ...previous,
+        showImperialHeight,
+        kalmanFilterEnabled,
+        kalmanFilterSamples,
+      };
+    });
+  }, [reportedImperialHeight, reportedKalmanEnabled, reportedKalmanSamples]);
   useEffect(() => {
     const handle = async (url: string) => {
       if (url.startsWith('aprilfoolsar://capture/start')) {
@@ -288,7 +345,6 @@ function CaptureApp() {
   }, [refresh]);
   const toggle = async () => {
     Keyboard.dismiss();
-    setEditingName(false);
     setBusy(true);
     try {
       if (status.recording) {
@@ -373,7 +429,9 @@ function CaptureApp() {
         await Engine.deleteSession(session.id);
         // Ignore a list request that started before this deletion completed.
         sessionsRefreshRef.current++;
-        setSessions(previous => previous.filter(item => item.id !== session.id));
+        setSessions(previous =>
+          previous.filter(item => item.id !== session.id),
+        );
       } catch (e) {
         Alert.alert('Delete recording', errorText(e));
       } finally {
@@ -445,18 +503,44 @@ function CaptureApp() {
       }
       setMeasuringTagSize(false);
       setDebugSettings(await Engine.getDebugSettings());
+      setToolSheet(null);
       setSettingsOpen(true);
     } catch (error) {
       Alert.alert('Debug settings', errorText(error));
     }
   };
   const openReleaseNotes = async () => {
+    if (
+      releaseNotesOpenRef.current ||
+      pendingVersionRef.current ||
+      versionClosingRef.current
+    ) {
+      return;
+    }
+    setToolSheet(null);
+    if (settingsOpen || aboutOpen || noteOpen) {
+      // UIKit must finish dismissing the current modal before presenting the full screen.
+      pendingVersionRef.current = true;
+      setSettingsOpen(false);
+      setAboutOpen(false);
+      setNoteOpen(false);
+    } else {
+      releaseNotesOpenRef.current = true;
+      setReleaseNotesOpen(true);
+    }
     try {
       setAppInfo(await Engine.getAppInfo());
-      setReleaseNotesOpen(true);
     } catch (error) {
       Alert.alert('Build information', errorText(error));
     }
+  };
+  const finishModalDismissal = () => {
+    if (!pendingVersionRef.current) {
+      return;
+    }
+    pendingVersionRef.current = false;
+    releaseNotesOpenRef.current = true;
+    setReleaseNotesOpen(true);
   };
   const setViewZoom = async (zoom: number) => {
     try {
@@ -470,9 +554,29 @@ function CaptureApp() {
     setSettingsOpen(false);
     await refresh();
   };
+  const toggleKalmanFilter = async () => {
+    if (!Engine || togglingKalmanRef.current) {
+      return;
+    }
+    togglingKalmanRef.current = true;
+    setTogglingKalman(true);
+    try {
+      const settings = await Engine.setDebugSettings({
+        kalmanFilterEnabled: !(debugSettings.kalmanFilterEnabled ?? false),
+      });
+      setDebugSettings(previous => ({ ...previous, ...settings }));
+    } catch (error) {
+      Alert.alert('Kalman filter', errorText(error));
+    } finally {
+      togglingKalmanRef.current = false;
+      setTogglingKalman(false);
+    }
+  };
   const beginTagSizeMeasurement = async () => {
     try {
       setSettingsOpen(false);
+      setTab('capture');
+      setToolSheet('measure');
       await Engine.setSpatialMode('tagWidth');
       await Engine.setPreviewMode('camera');
       setPreview('camera');
@@ -569,45 +673,186 @@ function CaptureApp() {
   const tags = status.aprilTag;
   const tagIDs = tags?.ids || [];
   const firstDepth = m?.points?.[0]?.depthMeters;
-  const compactNameEditing = compactLandscape && editingName;
   const working = busy || status.finalizing;
   const viewZoom = Number.isFinite(status.displayZoom)
     ? status.displayZoom!
     : 1;
 
-  const modeControls = (
-    <View style={s.debugBar} testID="capture.toolbar">
-      <View style={s.debugSwitch}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Tag debug mode"
-          accessibilityState={{ selected: debugEnabled }}
-          onPress={() => changeDebugMode(true)}
-          style={[s.debugChoice, debugEnabled && s.modeActive]}
+  const closeTools = () => {
+    Keyboard.dismiss();
+    setToolSheet(null);
+  };
+  const navigation = (
+    <View
+      style={[s.dockRow, landscape && s.sideNavigation]}
+      testID="capture.navigation"
+    >
+      <Pressable
+        accessibilityRole="tab"
+        accessibilityLabel="Tag debug mode"
+        accessibilityState={{ selected: tab === 'capture' && debugEnabled }}
+        onPress={() => {
+          setTab('capture');
+          setToolSheet(null);
+          changeDebugMode(true);
+        }}
+        style={[
+          s.dockTab,
+          landscape && s.sideNavButton,
+          tab === 'capture' && debugEnabled && s.modeActive,
+        ]}
+      >
+        <Text style={[s.modeText, tab === 'capture' && debugEnabled && s.dark]}>
+          Tags
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="tab"
+        accessibilityLabel="Measurement mode"
+        accessibilityState={{ selected: tab === 'capture' && !debugEnabled }}
+        onPress={() => {
+          setTab('capture');
+          setToolSheet('measure');
+          changeDebugMode(false);
+        }}
+        style={[
+          s.dockTab,
+          landscape && s.sideNavButton,
+          tab === 'capture' && !debugEnabled && s.modeActive,
+        ]}
+      >
+        <Text
+          style={[s.modeText, tab === 'capture' && !debugEnabled && s.dark]}
         >
-          <Text style={[s.modeText, debugEnabled && s.dark]}>Tag debug</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Measurement mode"
-          accessibilityState={{ selected: !debugEnabled }}
-          onPress={() => changeDebugMode(false)}
-          style={[s.debugChoice, !debugEnabled && s.modeActive]}
-        >
-          <Text style={[s.modeText, !debugEnabled && s.dark]}>Measure</Text>
-        </Pressable>
-      </View>
+          Measure
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="tab"
+        accessibilityLabel="Saved sessions"
+        accessibilityState={{
+          selected: tab === 'sessions',
+          disabled: Boolean(status.recording || working),
+        }}
+        disabled={Boolean(status.recording || working)}
+        onPress={() => {
+          setToolSheet(null);
+          setTab('sessions');
+          refreshSessions();
+        }}
+        style={[
+          s.dockTab,
+          landscape && s.sideNavButton,
+          tab === 'sessions' && s.modeActive,
+          (status.recording || working) && s.dim,
+        ]}
+      >
+        <Text style={[s.modeText, tab === 'sessions' && s.dark]}>Saved</Text>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Debug settings"
-        onPress={openDebugSettings}
+        accessibilityLabel="Tag details"
+        onPress={() => {
+          setTab('capture');
+          setToolSheet('details');
+        }}
+        style={[s.dockIcon, landscape && s.sideNavButton]}
       >
-        <Text style={s.link}>Settings</Text>
+        <Text style={s.link}>Details</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="More controls"
+        accessibilityState={{ expanded: toolSheet === 'more' }}
+        onPress={() => setToolSheet(toolSheet === 'more' ? null : 'more')}
+        style={[s.dockIcon, landscape && s.sideNavButton]}
+      >
+        <Text style={s.link}>More</Text>
       </Pressable>
     </View>
   );
+  const zoomControls = (
+    <View style={[s.zoomBar, landscape && s.sideZoomBar]}>
+      {[1, 2, 4].map(zoom => (
+        <Pressable
+          key={zoom}
+          accessibilityRole="button"
+          accessibilityLabel={`View zoom ${zoom}×`}
+          accessibilityState={{ selected: Math.abs(viewZoom - zoom) < 0.01 }}
+          onPress={() => setViewZoom(zoom)}
+          style={[
+            s.zoomButton,
+            landscape && s.sideZoomButton,
+            Math.abs(viewZoom - zoom) < 0.01 && s.modeActive,
+          ]}
+        >
+          <Text
+            style={[s.zoomText, Math.abs(viewZoom - zoom) < 0.01 && s.dark]}
+          >
+            {zoom}×
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+  const settingsButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Debug settings"
+      onPress={openDebugSettings}
+      style={s.dockIcon}
+    >
+      <Text style={s.link}>Settings</Text>
+    </Pressable>
+  );
+  const quickControls = (
+    <View
+      style={[s.dockRow, landscape && s.sideQuickControls]}
+      testID="capture.quickControls"
+    >
+      <Pressable
+        testID="capture.filterToggle"
+        accessibilityRole="checkbox"
+        accessibilityLabel="Kalman filter"
+        accessibilityHint="Switch smoothing on or off. Change the sample count in Settings."
+        accessibilityValue={{
+          text: `${debugSettings.kalmanFilterSamples ?? 5} samples`,
+        }}
+        accessibilityState={{
+          checked: debugSettings.kalmanFilterEnabled ?? false,
+          disabled: togglingKalman || !Engine,
+          busy: togglingKalman,
+        }}
+        disabled={togglingKalman || !Engine}
+        onPress={toggleKalmanFilter}
+        style={[
+          s.quickFilter,
+          landscape && s.sideFilter,
+          debugSettings.kalmanFilterEnabled && s.quickFilterActive,
+          togglingKalman && s.quickFilterPending,
+        ]}
+      >
+        <View
+          style={[
+            s.quickFilterCheckbox,
+            debugSettings.kalmanFilterEnabled && s.quickFilterCheckboxActive,
+          ]}
+        >
+          {debugSettings.kalmanFilterEnabled && (
+            <Text style={s.quickFilterCheckmark}>✓</Text>
+          )}
+        </View>
+        <Text style={s.quickFilterText}>
+          Kalman {debugSettings.kalmanFilterEnabled ? 'on' : 'off'}
+        </Text>
+      </Pressable>
+      {landscape && settingsButton}
+      {zoomControls}
+      {!landscape && settingsButton}
+    </View>
+  );
   const measurementTools = !debugEnabled ? (
-    <View style={[s.measure, wide && s.measureInRail]}>
+    <View style={s.measure}>
       {settingUpFloor ? (
         <>
           <Text style={s.kicker}>SET UP THE FLOOR</Text>
@@ -840,259 +1085,128 @@ function CaptureApp() {
   ) : null;
   const recordingControls = (
     <View
-      style={[
-        s.controls,
-        wide && s.controlsInRail,
-        compactNameEditing && s.nameEditingControls,
-        {
-          paddingBottom: compactNameEditing ? 6 : wide ? 12 : inset.bottom + 12,
-        },
-      ]}
+      style={[s.recordRow, landscape && s.sideRecordRow]}
+      testID="capture.recordingControls"
     >
-      {!compactNameEditing &&
-        (status.lastError ? (
-          <Text numberOfLines={2} style={s.failure}>
-            {status.lastError}
-          </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Edit session name"
+        accessibilityValue={{ text: name }}
+        disabled={Boolean(status.recording || working)}
+        onPress={() => setToolSheet('name')}
+        style={[
+          s.nameButton,
+          landscape && s.sideNameButton,
+          (status.recording || working) && s.dim,
+        ]}
+      >
+        <Text style={s.small} numberOfLines={1}>
+          Name
+        </Text>
+        <Text style={s.link} numberOfLines={1}>
+          {name}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={toggle}
+        disabled={working || !Engine}
+        style={[s.record, landscape && s.sideRecord]}
+        accessibilityRole="button"
+        accessibilityLabel={
+          status.recording ? 'Stop and save recording' : 'Start recording'
+        }
+      >
+        {working ? (
+          <ActivityIndicator color={C.bg} />
         ) : (
-          <View style={[s.row, wide && s.railTelemetry]}>
-            <Text style={s.telemetry}>
+          <>
+            <View style={[s.recordDot, status.recording && s.square]} />
+            <Text style={[s.recordText, landscape && s.sideRecordText]}>
               {status.recording
-                ? '● RECORDING'
-                : status.depthAvailable
-                ? 'READY TO RECORD'
-                : 'WAITING FOR LIVE DEPTH'}
+                ? landscape
+                  ? 'Stop'
+                  : 'Stop & save'
+                : 'Record'}
             </Text>
-            <Text style={s.telemetry}>
-              {duration(status.elapsedSeconds)} · {status.framesWritten || 0}{' '}
-              frames · {status.depthFrames || 0} depth ·{' '}
-              {status.droppedFrames || 0} skipped
-            </Text>
-          </View>
-        ))}
-      {!status.recording && (
-        <TextInput
-          accessibilityLabel="Session name"
-          value={name}
-          onChangeText={setName}
-          onFocus={() => setEditingName(true)}
-          onBlur={() => setEditingName(false)}
-          onSubmitEditing={() => setEditingName(false)}
-          style={s.input}
-          placeholder="Session name"
-          placeholderTextColor={C.muted}
-          returnKeyType="done"
-        />
-      )}
-      <View style={s.recordRow}>
-        <Pressable
-          onPress={toggle}
-          disabled={working || !Engine}
-          style={[s.record, compactLandscape && s.recordCompact]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            status.recording ? 'Stop and save recording' : 'Start recording'
-          }
-        >
-          {working ? (
-            <ActivityIndicator color={C.bg} />
-          ) : (
-            <>
-              <View style={[s.recordDot, status.recording && s.square]} />
-              <Text style={s.recordText}>
-                {status.recording ? 'Stop & save' : 'Start recording'}
-              </Text>
-            </>
-          )}
-        </Pressable>
-        <Pressable
-          onPress={() => setNoteOpen(true)}
-          disabled={!status.recording || working}
-          accessibilityRole="button"
-          accessibilityLabel="Bookmark"
-          style={[
-            s.bookmark,
-            compactLandscape && s.bookmarkInRail,
-            !status.recording && s.dim,
-          ]}
-        >
-          <Text style={s.plus}>+</Text>
-          {!compactLandscape && <Text style={s.bookmarkText}>Bookmark</Text>}
-        </Pressable>
-      </View>
+          </>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={() => setNoteOpen(true)}
+        disabled={!status.recording || working}
+        accessibilityRole="button"
+        accessibilityLabel="Bookmark"
+        style={[s.bookmark, !status.recording && s.dim]}
+      >
+        <Text style={s.plus}>+</Text>
+        <Text style={s.bookmarkText}>Mark</Text>
+      </Pressable>
     </View>
   );
-
-  const sceneTools = (
-    <>
-      {floorTiltText && (
-        <Text
-          style={s.floorTilt}
-          accessibilityLabel={floorTiltText}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.8}
-        >
-          {floorTiltText}
+  const previewControls =
+    !debugEnabled && !settingUpFloor ? (
+      <View style={s.modes}>
+        {['camera', 'depth', 'confidence'].map(mode => (
+          <Pressable
+            key={mode}
+            accessibilityRole="button"
+            accessibilityLabel={`${mode} preview`}
+            accessibilityState={{ selected: preview === mode }}
+            style={[s.mode, preview === mode && s.modeActive]}
+            onPress={() => setMode(mode)}
+          >
+            <Text style={[s.modeText, preview === mode && s.dark]}>
+              {mode === 'camera'
+                ? 'RGB'
+                : mode === 'depth'
+                ? 'Depth'
+                : 'Confidence'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
+  const moreActions = (
+    <View style={s.moreActions}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="About and sponsors"
+        style={s.menuAction}
+        onPress={() => {
+          closeTools();
+          setAboutPage('about');
+          setAboutOpen(true);
+        }}
+      >
+        <Text style={s.link}>About & sponsors · The REFINERY</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Version and release notes"
+        onPress={openReleaseNotes}
+        style={s.menuAction}
+      >
+        <Text style={s.link}>
+          {appInfo
+            ? `v${appInfo.version} (${
+                appInfo.build
+              }) · ${appInfo.buildCommit.slice(0, 7)}${
+                appInfo.workingTreeDirty ? '*' : ''
+              }`
+            : 'Version & release notes'}
         </Text>
-      )}
-      {!debugEnabled && !!status.trackingReason && (
-        <Text style={s.trackingHint}>
-          {status.trackingReason.replace(/([A-Z])/g, ' $1')}
-        </Text>
-      )}
-      {!debugEnabled && !settingUpFloor && (
-        <View style={s.modes}>
-          {['camera', 'depth', 'confidence'].map(mode => (
-            <Pressable
-              key={mode}
-              style={[s.mode, preview === mode && s.modeActive]}
-              onPress={() => setMode(mode)}
-            >
-              <Text style={[s.modeText, preview === mode && s.dark]}>
-                {mode === 'camera'
-                  ? 'RGB'
-                  : mode === 'depth'
-                  ? 'Depth'
-                  : 'Confidence'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-      {!debugEnabled && !settingUpFloor && (
-        <View style={s.tagStatus} pointerEvents="none">
-          <Text style={s.tagText} numberOfLines={1}>
-            {tags?.state === 'error'
-              ? tags.error || 'Detector unavailable'
-              : tagIDs.length
-              ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
-              : tags?.state === 'running' || tags?.state === 'ready'
-              ? 'Looking for tags'
-              : 'Waiting for camera frames'}
-          </Text>
-        </View>
-      )}
-    </>
+      </Pressable>
+    </View>
   );
-
   return (
     <KeyboardAvoidingView
       style={s.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <StatusBar barStyle="light-content" />
-      <View
-        style={[
-          s.header,
-          wide && s.headerWide,
-          compactNameEditing && s.hideForKeyboard,
-          {
-            paddingTop: inset.top + (compactLandscape ? 4 : 9),
-            paddingLeft: inset.left + 20,
-            paddingRight: inset.right + 20,
-          },
-        ]}
-      >
-        <View style={[s.headerMain, wide && s.headerMainWide]}>
-          <View style={[s.brandRow, wide && s.brandRowWide]}>
-            <Image
-              source={require('./assets/brand/app-mark.png')}
-              style={[s.mark, compactLandscape && s.markCompact]}
-              accessibilityLabel="The REFINERY wrench and viewfinder"
-            />
-            <View style={s.brandContent}>
-              <Text style={[s.brand, compactLandscape && s.brandCompact]}>
-                APRIL FOOLS AR
-              </Text>
-              <View style={s.brandMeta}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="About and privacy"
-                  onPress={() => {
-                    setAboutPage('privacy');
-                    setAboutOpen(true);
-                  }}
-                  hitSlop={8}
-                  style={s.versionButton}
-                >
-                  <Text style={s.versionLabel}>by The REFINERY · About</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Sponsors"
-                  onPress={() => {
-                    setAboutPage('sponsors');
-                    setAboutOpen(true);
-                  }}
-                  hitSlop={8}
-                  style={s.versionButton}
-                >
-                  <Text style={s.versionLabel}>Sponsors</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Version and release notes"
-                  onPress={openReleaseNotes}
-                  hitSlop={8}
-                  style={s.versionButton}
-                >
-                  <Text style={s.versionLabel}>
-                    {appInfo
-                      ? `v${appInfo.version} (${
-                          appInfo.build
-                        }) · ${appInfo.buildCommit.slice(0, 7)}${
-                          appInfo.workingTreeDirty ? '*' : ''
-                        }`
-                      : 'Version & release notes'}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-          <View style={[s.tabs, wide && s.tabsWide]}>
-            {(['capture', 'sessions'] as const).map(t => (
-              <Pressable
-                key={t}
-                style={[s.tab, tab === t && s.tabActive]}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: tab === t }}
-                onPress={() => {
-                  if (!status.recording && !working) {
-                    setTab(t);
-                    if (t === 'sessions') {
-                      refreshSessions();
-                    }
-                  }
-                }}
-              >
-                <Text style={[s.tabText, tab === t && s.cyan]}>
-                  {t === 'capture' ? 'Live capture' : 'Saved sessions'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-        {tab === 'capture' && !wide && modeControls}
-      </View>
       {tab === 'capture' ? (
-        <View
-          testID="capture.workspace"
-          style={[
-            s.workspace,
-            wide && s.workspaceWide,
-            wide && {
-              paddingLeft: inset.left + 12,
-              paddingRight: inset.right + 12,
-              paddingBottom: inset.bottom + 10,
-            },
-          ]}
-        >
-          <View
-            key="camera"
-            testID="capture.camera"
-            style={[s.camera, wide && s.cameraWide]}
-          >
+        <View testID="capture.workspace" style={s.workspace}>
+          <View key="camera" testID="capture.camera" style={s.camera}>
             {Engine ? (
               <CameraView
                 testID="capture.native-camera"
@@ -1101,282 +1215,351 @@ function CaptureApp() {
             ) : (
               <Text style={s.failure}>Native capture module unavailable.</Text>
             )}
-            <View style={s.cameraTop} pointerEvents="box-none">
-              <View style={s.cameraStatusBar}>
-                <View style={s.pill}>
-                  <View
-                    style={[
-                      s.dot,
-                      {
-                        backgroundColor:
-                          status.tracking === 'normal' ? C.cyan : C.coral,
-                      },
-                    ]}
-                  />
-                  <Text
-                    style={s.pillText}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                  >
-                    {(status.tracking || 'STARTING').toUpperCase()}
-                  </Text>
-                </View>
-                <View style={s.pill}>
-                  <Text
-                    style={s.pillText}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.8}
-                  >
-                    {status.depthAvailable
-                      ? 'DEPTH LIVE'
-                      : status.lidarAvailable
-                      ? 'DEPTH WAITING'
-                      : 'CHECKING LiDAR'}
-                  </Text>
-                </View>
-                <View style={s.zoomBar}>
-                  <Text style={s.zoomLabel}>{`View ${viewZoom.toFixed(
-                    1,
-                  )}×`}</Text>
-                  {[1, 2, 4].map(zoom => (
-                    <Pressable
-                      key={zoom}
-                      accessibilityRole="button"
-                      accessibilityLabel={`View zoom ${zoom}×`}
-                      accessibilityState={{
-                        selected: Math.abs(viewZoom - zoom) < 0.01,
-                      }}
-                      onPress={() => setViewZoom(zoom)}
-                      hitSlop={6}
-                      style={[
-                        s.zoomButton,
-                        Math.abs(viewZoom - zoom) < 0.01 && s.modeActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          s.zoomText,
-                          Math.abs(viewZoom - zoom) < 0.01 && s.dark,
-                        ]}
-                      >
-                        {zoom}×
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+            <View
+              style={[
+                s.cameraTop,
+                {
+                  top: inset.top + 8,
+                  left: inset.left + 15,
+                  right: inset.right + (landscape ? sideWidth + 24 : 15),
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <View style={[s.brandRow, !landscape && s.brandWithVersion]}>
+                <Image
+                  source={require('./assets/brand/app-mark.png')}
+                  style={s.mark}
+                  accessibilityLabel="The REFINERY wrench and viewfinder"
+                />
+                <Text
+                  style={s.brand}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
+                  APRIL FOOLS AR
+                </Text>
               </View>
-              {!wide && sceneTools}
+              <View style={s.passiveStatus}>
+                <Text style={s.pillText}>
+                  {(status.tracking || 'STARTING').toUpperCase()} ·{' '}
+                  {status.depthAvailable
+                    ? 'DEPTH LIVE'
+                    : status.lidarAvailable
+                    ? 'DEPTH WAITING'
+                    : 'CHECKING LiDAR'}
+                </Text>
+                <Text style={s.pillText}>{`View ${viewZoom.toFixed(1)}×`}</Text>
+              </View>
+              {floorTiltText && (
+                <Text style={s.floorTilt} accessibilityLabel={floorTiltText}>
+                  {floorTiltText}
+                </Text>
+              )}
+              {!debugEnabled && (
+                <Text style={s.tagText} numberOfLines={1}>
+                  {tags?.state === 'error'
+                    ? tags.error || 'Detector unavailable'
+                    : tagIDs.length
+                    ? `Visible: ${tagIDs.map(id => `#${id}`).join(', ')}`
+                    : 'Looking for tags'}
+                </Text>
+              )}
+              {status.lastError ? (
+                <Text style={s.failure}>{status.lastError}</Text>
+              ) : (
+                <Text style={s.telemetry}>
+                  {status.recording ? '● RECORDING' : 'READY'} ·{' '}
+                  {duration(status.elapsedSeconds)} ·{' '}
+                  {status.framesWritten || 0} frames
+                </Text>
+              )}
             </View>
-            {!wide && measurementTools}
-          </View>
-          <View
-            key="console"
-            testID="capture.console"
-            style={[
-              s.console,
-              wide && s.consoleWide,
-              wide && { width: railWidth },
-            ]}
-          >
-            {wide && (
-              <View
-                style={[s.toolsHeader, compactNameEditing && s.hideForKeyboard]}
-              >
-                {modeControls}
-              </View>
-            )}
-            {wide && (
-              <ScrollView
-                style={[s.toolsScroll, compactNameEditing && s.hideForKeyboard]}
-                contentContainerStyle={s.toolsContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                {sceneTools}
-                {debugEnabled ? (
-                  <View style={s.sceneSummary}>
-                    <Text style={s.kicker}>LIVE TAGS</Text>
-                    <Text style={s.sceneCount}>
-                      {tagIDs.length
-                        ? tagIDs.map(id => `#${id}`).join(' · ')
-                        : status.tracking === 'unavailable'
-                        ? 'Camera unavailable'
-                        : tags?.state === 'error'
-                        ? 'Detector unavailable'
-                        : 'Looking for tags'}
-                    </Text>
-                    <Text style={s.description}>
-                      Point at an AprilTag. Tap its outline to inspect distance
-                      and height.
-                    </Text>
-                    <Text style={s.hint}>
-                      {floorSelected
-                        ? 'Floor selected for height estimates.'
-                        : 'Set up the floor in Measure to see tag heights.'}
-                    </Text>
-                  </View>
-                ) : (
-                  measurementTools
-                )}
-              </ScrollView>
-            )}
-            {recordingControls}
           </View>
         </View>
       ) : (
         <View
           style={[
-            s.sessionPage,
-            {
-              paddingLeft: inset.left + 20,
-              paddingRight: inset.right + 20,
-              paddingBottom: inset.bottom,
-            },
+            s.savedBackdrop,
+            { paddingTop: inset.top + 24 },
+            landscape && { marginRight: sideWidth + inset.right + 16 },
           ]}
+          pointerEvents="none"
         >
-          <View style={s.row}>
-            <Text style={s.title}>Your field recordings</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Refresh saved sessions"
-              accessibilityState={{ disabled: Boolean(working) }}
-              disabled={Boolean(working)}
-              style={working && s.dim}
-              onPress={refreshSessions}
-            >
-              <Text style={s.link}>Refresh</Text>
-            </Pressable>
-          </View>
-          <Text style={s.description}>
-            Play recordings with tag and measurement overlays, or share the
-            clean MP4 with its images, depth, and recorded data.
-          </Text>
-          <FlatList
-            key={`sessions-${sessionColumns}`}
-            numColumns={sessionColumns}
-            columnWrapperStyle={
-              sessionColumns > 1 ? s.sessionColumns : undefined
-            }
-            data={sessions}
-            keyExtractor={item => item.id}
-            contentContainerStyle={s.list}
-            ListEmptyComponent={
-              <View style={s.empty}>
-                <Text style={s.emptyMark}>⌖</Text>
-                <Text style={s.title}>Ready for the first walk</Text>
-                <Text style={s.description}>
-                  Start a capture, walk the field, then stop to save your
-                  session here.
-                </Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <View
-                style={[
-                  s.session,
-                  sessionColumns > 1 && s.sessionTile,
-                  sessionColumns > 1 && { maxWidth: sessionCardWidth },
-                ]}
-              >
-                <Text style={s.title}>{item.name}</Text>
-                <Text style={s.description}>
-                  {new Date(item.createdAt).toLocaleString()}
-                </Text>
-                <Text style={s.description}>
-                  {duration(item.durationSeconds)} ·{' '}
-                  {fileSize(
-                    item.recordingReady && item.recordingBytes != null
-                      ? item.recordingBytes
-                      : item.sizeBytes,
-                  )}
-                </Text>
-                <View style={s.sessionActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Play recording ${item.name}`}
-                    accessibilityState={{
-                      disabled: Boolean(working || !item.finalized),
-                    }}
-                    disabled={Boolean(working || !item.finalized)}
-                    style={[
-                      s.sessionButton,
-                      (working || !item.finalized) && s.dim,
-                    ]}
-                    onPress={() => openSession(item, 'play')}
-                  >
-                    <Text style={s.exportText}>Play</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Share recording ${item.name}`}
-                    accessibilityState={{
-                      disabled: Boolean(working || !item.finalized),
-                    }}
-                    disabled={Boolean(working || !item.finalized)}
-                    style={[
-                      s.sessionButton,
-                      (working || !item.finalized) && s.dim,
-                    ]}
-                    onPress={() => openSession(item, 'share')}
-                  >
-                    <Text style={s.exportText}>Share ↗</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete recording ${item.name}`}
-                    accessibilityHint="Permanently removes the video and original capture data."
-                    accessibilityState={{
-                      disabled: Boolean(
-                        working ||
-                          (status.recording && status.sessionId === item.id),
-                      ),
-                    }}
-                    disabled={Boolean(
-                      working ||
-                        (status.recording && status.sessionId === item.id),
-                    )}
-                    style={[
-                      s.sessionButton,
-                      s.deleteButton,
-                      (working ||
-                        (status.recording && status.sessionId === item.id)) &&
-                        s.dim,
-                    ]}
-                    onPress={() => deleteSession(item)}
-                  >
-                    <Text style={s.exportText}>Delete</Text>
-                  </Pressable>
-                </View>
-                {sessionAction?.id === item.id ? (
-                  <View style={s.sessionProgress}>
-                    <ActivityIndicator color={C.cyan} size="small" />
-                    <Text
-                      accessibilityRole="text"
-                      accessibilityLiveRegion="polite"
-                      style={s.small}
-                    >
-                      {sessionAction.action === 'play'
-                        ? 'Opening recording…'
-                        : sessionAction.action === 'share'
-                          ? 'Preparing to share…'
-                          : 'Deleting recording…'}
-                    </Text>
-                  </View>
-                ) : !item.finalized ? (
-                  <Text style={s.small}>This recording is not finished.</Text>
-                ) : null}
-              </View>
-            )}
+          <Image
+            source={require('./assets/brand/app-mark.png')}
+            style={s.mark}
           />
+          <Text style={s.title}>Your field recordings</Text>
+          <Text style={s.description}>
+            Browse, play, share and delete from the controls{' '}
+            {landscape ? 'on the right' : 'below'}.
+          </Text>
         </View>
       )}
+      <View
+        testID="capture.thumbDock"
+        style={[
+          s.thumbDock,
+          {
+            maxHeight: height / 2,
+            height: toolSheet || tab === 'sessions' ? height / 2 : undefined,
+            paddingLeft: inset.left + 10,
+            paddingRight: inset.right + 10,
+            paddingBottom: inset.bottom + (denseDock ? 0 : 4),
+          },
+          denseDock && s.denseDock,
+          landscape && s.sideDock,
+          landscape && {
+            width: sideWidth,
+            top: sideTop,
+            right: inset.right + 8,
+            bottom: sideBottom,
+            height: sideHeight,
+            maxHeight: sideHeight,
+            paddingLeft: 10,
+            paddingRight: 10,
+            paddingBottom: 8,
+          },
+        ]}
+      >
+        {toolSheet ? (
+          <View testID="capture.toolSheet" style={s.toolSheet}>
+            <View style={s.toolSheetHeader}>
+              <Text style={s.sheetTitle}>
+                {toolSheet === 'more'
+                  ? 'More controls'
+                  : toolSheet === 'name'
+                  ? 'Session name'
+                  : toolSheet === 'details'
+                  ? 'Tag details'
+                  : settingUpFloor
+                  ? 'Floor setup'
+                  : 'Measure'}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close capture tools"
+                onPress={closeTools}
+                style={s.dockIcon}
+              >
+                <Text style={s.link}>Done</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={s.toolScroll}
+              contentContainerStyle={s.toolContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {toolSheet === 'more' ? (
+                moreActions
+              ) : toolSheet === 'name' ? (
+                <>
+                  <TextInput
+                    accessibilityLabel="Session name"
+                    value={name}
+                    onChangeText={setName}
+                    onSubmitEditing={closeTools}
+                    style={s.input}
+                    placeholder="Session name"
+                    placeholderTextColor={C.muted}
+                    returnKeyType="done"
+                  />
+                  <Text style={s.description}>
+                    Name the next field recording.
+                  </Text>
+                </>
+              ) : toolSheet === 'details' ? (
+                <TagReadoutView
+                  testID="capture.tagReadout"
+                  style={s.tagReadout}
+                />
+              ) : (
+                <>
+                  {previewControls}
+                  {measurementTools}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        ) : (
+          <>
+            {landscape && tab === 'capture' ? (
+              <ScrollView
+                style={s.toolScroll}
+                contentContainerStyle={s.sideControls}
+                keyboardShouldPersistTaps="handled"
+              >
+                {navigation}
+                {quickControls}
+              </ScrollView>
+            ) : (
+              <>
+                {navigation}
+                {tab === 'capture' && quickControls}
+              </>
+            )}
+            {tab === 'sessions' && (
+              <View style={s.savedTools}>
+                <View style={s.toolSheetHeader}>
+                  <Text style={s.sheetTitle}>Saved sessions</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Refresh saved sessions"
+                    onPress={refreshSessions}
+                    accessibilityState={{ disabled: Boolean(working) }}
+                    disabled={Boolean(working)}
+                    style={[s.dockIcon, working && s.dim]}
+                  >
+                    <Text style={s.link}>Refresh</Text>
+                  </Pressable>
+                </View>
+                <FlatList
+                  key={`sessions-${sessionColumns}`}
+                  numColumns={sessionColumns}
+                  columnWrapperStyle={
+                    sessionColumns > 1 ? s.sessionColumns : undefined
+                  }
+                  data={sessions}
+                  keyExtractor={item => item.id}
+                  contentContainerStyle={s.list}
+                  ListEmptyComponent={
+                    <View style={s.empty}>
+                      <Text style={s.emptyMark}>⌖</Text>
+                      <Text style={s.title}>Ready for the first walk</Text>
+                      <Text style={s.description}>
+                        Start a capture, walk the field, then stop to save your
+                        session here.
+                      </Text>
+                    </View>
+                  }
+                  renderItem={({ item }) => (
+                    <View
+                      style={[
+                        s.session,
+                        sessionColumns > 1 && s.sessionTile,
+                        sessionColumns > 1 && { maxWidth: sessionCardWidth },
+                      ]}
+                    >
+                      <Text style={s.title}>{item.name}</Text>
+                      <Text style={s.description}>
+                        {new Date(item.createdAt).toLocaleString()}
+                      </Text>
+                      <Text style={s.description}>
+                        {duration(item.durationSeconds)} ·{' '}
+                        {fileSize(
+                          item.recordingReady && item.recordingBytes != null
+                            ? item.recordingBytes
+                            : item.sizeBytes,
+                        )}
+                      </Text>
+                      <View style={s.sessionActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Play recording ${item.name}`}
+                          accessibilityState={{
+                            disabled: Boolean(working || !item.finalized),
+                          }}
+                          disabled={Boolean(working || !item.finalized)}
+                          style={[
+                            s.sessionButton,
+                            (working || !item.finalized) && s.dim,
+                          ]}
+                          onPress={() => openSession(item, 'play')}
+                        >
+                          <Text style={s.exportText}>Play</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Share recording ${item.name}`}
+                          accessibilityState={{
+                            disabled: Boolean(working || !item.finalized),
+                          }}
+                          disabled={Boolean(working || !item.finalized)}
+                          style={[
+                            s.sessionButton,
+                            (working || !item.finalized) && s.dim,
+                          ]}
+                          onPress={() => openSession(item, 'share')}
+                        >
+                          <Text style={s.exportText}>Share ↗</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete recording ${item.name}`}
+                          accessibilityHint="Permanently removes the video and original capture data."
+                          accessibilityState={{
+                            disabled: Boolean(
+                              working ||
+                                (status.recording &&
+                                  status.sessionId === item.id),
+                            ),
+                          }}
+                          disabled={Boolean(
+                            working ||
+                              (status.recording &&
+                                status.sessionId === item.id),
+                          )}
+                          style={[
+                            s.sessionButton,
+                            s.deleteButton,
+                            (working ||
+                              (status.recording &&
+                                status.sessionId === item.id)) &&
+                              s.dim,
+                          ]}
+                          onPress={() => deleteSession(item)}
+                        >
+                          <Text style={s.exportText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                      {sessionAction?.id === item.id ? (
+                        <View style={s.sessionProgress}>
+                          <ActivityIndicator color={C.cyan} size="small" />
+                          <Text
+                            accessibilityRole="text"
+                            accessibilityLiveRegion="polite"
+                            style={s.small}
+                          >
+                            {sessionAction.action === 'play'
+                              ? 'Opening recording…'
+                              : sessionAction.action === 'share'
+                              ? 'Preparing to share…'
+                              : 'Deleting recording…'}
+                          </Text>
+                        </View>
+                      ) : !item.finalized ? (
+                        <Text style={s.small}>
+                          This recording is not finished.
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
+                />
+              </View>
+            )}
+          </>
+        )}
+        {tab === 'capture' && recordingControls}
+      </View>
+      <AppVersionBadge info={appInfo} onPress={openReleaseNotes} />
       <ReleaseNotesModal
         visible={releaseNotesOpen}
         info={appInfo}
-        onClose={() => setReleaseNotesOpen(false)}
+        onClose={() => {
+          versionClosingRef.current = true;
+          releaseNotesOpenRef.current = false;
+          setReleaseNotesOpen(false);
+        }}
+        onDismiss={() => {
+          versionClosingRef.current = false;
+        }}
       />
       <DebugSettingsModal
+        appVersion={appInfo}
+        onOpenVersion={openReleaseNotes}
+        onDismiss={finishModalDismissal}
         visible={settingsOpen}
         initialSettings={debugSettings}
         onCancel={() => setSettingsOpen(false)}
@@ -1384,6 +1567,9 @@ function CaptureApp() {
         onMeasure={beginTagSizeMeasurement}
       />
       <AboutModal
+        appVersion={appInfo}
+        onOpenVersion={openReleaseNotes}
+        onDismiss={finishModalDismissal}
         visible={aboutOpen}
         initialPage={aboutPage}
         onClose={() => setAboutOpen(false)}
@@ -1399,6 +1585,7 @@ function CaptureApp() {
         transparent
         animationType="fade"
         onRequestClose={() => setNoteOpen(false)}
+        onDismiss={finishModalDismissal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1410,10 +1597,19 @@ function CaptureApp() {
               paddingLeft: inset.left + 16,
               paddingRight: inset.right + 16,
             },
+            landscape && { paddingTop: sideTop, alignItems: 'flex-end' },
           ]}
         >
           <ScrollView
-            style={s.modal}
+            style={[
+              s.modal,
+              { maxHeight: height / 2 - inset.bottom - 12 },
+              landscape && {
+                width: sideWidth,
+                maxHeight: sideHeight,
+                alignSelf: 'flex-end',
+              },
+            ]}
             contentContainerStyle={s.modalContent}
             keyboardShouldPersistTaps="handled"
           >
@@ -1441,6 +1637,7 @@ function CaptureApp() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        <AppVersionBadge info={appInfo} onPress={openReleaseNotes} />
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -1456,84 +1653,117 @@ export default function App() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  workspace: { flex: 1, minHeight: 0 },
-  workspaceWide: { flexDirection: 'row', gap: 12 },
-  header: { paddingHorizontal: 20 },
-  headerWide: { paddingBottom: 8 },
-  headerMain: {},
-  headerMainWide: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  brandRowWide: { flex: 1, minWidth: 0 },
-  brandCompact: { fontSize: 13, letterSpacing: 0.8 },
-  markCompact: { width: 32, height: 32 },
-  tabsWide: { marginTop: 0, alignSelf: 'stretch', alignItems: 'center' },
-  console: { flexShrink: 0 },
-  consoleWide: {
-    justifyContent: 'flex-end',
-    backgroundColor: C.card,
-    borderRadius: 18,
+  thumbDock: {
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 760,
+    paddingTop: 4,
+    gap: 4,
+    backgroundColor: '#071426F5',
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+  },
+  denseDock: { paddingTop: 0, gap: 0 },
+  sideDock: {
+    alignSelf: 'auto',
     borderWidth: 1,
     borderColor: C.line,
-    overflow: 'hidden',
+    borderRadius: 18,
+    paddingTop: 8,
+    gap: 8,
   },
-  toolsScroll: { flex: 1, minHeight: 0 },
-  hideForKeyboard: { display: 'none' },
-  nameEditingControls: { paddingTop: 6 },
-  toolsHeader: { paddingHorizontal: 14 },
-  toolsContent: { paddingHorizontal: 14, paddingBottom: 16 },
-  sceneSummary: {
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
+  sideControls: { gap: 8, paddingBottom: 8 },
+  sideNavigation: { flexWrap: 'wrap', justifyContent: 'flex-start' },
+  sideNavButton: { flex: 0, width: '32%', minWidth: 44 },
+  sideQuickControls: { flexWrap: 'wrap' },
+  sideFilter: { flexGrow: 1 },
+  sideZoomBar: { width: '100%' },
+  sideZoomButton: { flex: 1, minWidth: 44 },
+  sideRecordRow: { gap: 6, flexShrink: 0 },
+  sideNameButton: { width: 60 },
+  sideRecord: { gap: 6 },
+  sideRecordText: { fontSize: 13 },
+  dockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+    minHeight: 44,
   },
-  sceneCount: { color: C.text, fontSize: 20, fontWeight: '600', marginTop: 8 },
-  cameraWide: { borderRadius: 18, minWidth: 0 },
-  measureInRail: {
-    position: 'relative',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 0,
-    paddingTop: 14,
-    borderWidth: 0,
-    borderRadius: 0,
-    backgroundColor: 'transparent',
+  dockTab: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
   },
-  controlsInRail: {
-    paddingHorizontal: 14,
-    borderTopWidth: 1,
-    borderTopColor: C.line,
+  dockIcon: {
+    minWidth: 48,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  railTelemetry: { flexWrap: 'wrap', gap: 0 },
-  recordCompact: { height: 44 },
-  bookmarkInRail: { minWidth: 44 },
+  nameButton: {
+    width: 76,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  toolSheet: { flex: 1, minHeight: 0 },
+  toolSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  sheetTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
+  toolScroll: { flex: 1, minHeight: 0 },
+  toolContent: { paddingBottom: 8 },
+  moreActions: { gap: 2 },
+  menuAction: { minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' },
+  tagReadout: { height: 290, width: '100%' },
+  passiveStatus: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingVertical: 7,
+  },
+  savedBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  savedTools: { flex: 1, minHeight: 0 },
+  workspace: { flex: 1, minHeight: 0 },
+
   sessionColumns: { gap: 14, alignItems: 'flex-start' },
   sessionTile: { flex: 1 },
   brandRow: { flexDirection: 'row', gap: 11, alignItems: 'center' },
-  brandContent: { flex: 1 },
-  brandMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    columnGap: 10,
-  },
-  versionButton: { minHeight: 28, justifyContent: 'center' },
-  versionLabel: {
-    color: C.cyan,
-    fontSize: 10,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-  },
+  brandWithVersion: { paddingRight: 110 },
+
   mark: {
     width: 39,
-    height: 39,
+    height: 44,
     borderWidth: 1.5,
     borderColor: C.cyan,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markText: { fontSize: 29, color: C.cyan },
-  brand: { color: C.text, fontSize: 18, fontWeight: '800', letterSpacing: 1.4 },
+
+  brand: {
+    color: C.text,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    flexShrink: 1,
+  },
   kicker: {
     color: C.muted,
     fontSize: 9,
@@ -1541,43 +1771,38 @@ const s = StyleSheet.create({
     letterSpacing: 1.2,
     marginTop: 4,
   },
-  tabs: { flexDirection: 'row', gap: 24, marginTop: 18 },
-  tab: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingBottom: 11,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: { borderBottomColor: C.cyan },
-  tabText: { color: C.muted, fontSize: 13, fontWeight: '600' },
-  debugBar: {
+
+  quickFilter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 9,
-  },
-  toolbarAction: {
+    gap: 6,
     minHeight: 44,
-    minWidth: 54,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  debugSwitch: {
-    flexDirection: 'row',
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line,
     backgroundColor: C.card,
-    borderRadius: 15,
-    padding: 3,
   },
-  debugChoice: {
-    borderRadius: 12,
-    minHeight: 38,
+  quickFilterActive: { borderColor: C.cyan },
+  quickFilterPending: { opacity: 0.6 },
+
+  quickFilterCheckbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 1,
+    borderColor: C.cyan,
+    borderRadius: 4,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 13,
   },
+  quickFilterCheckboxActive: { backgroundColor: C.cyan },
+  quickFilterCheckmark: { color: C.bg, fontSize: 16, fontWeight: '700' },
+  quickFilterText: { color: C.text, fontSize: 13, fontWeight: '600' },
+
   measureModeSwitch: { flexDirection: 'row', gap: 2 },
   measureChoice: {
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: 12,
     paddingVertical: 7,
     paddingHorizontal: 10,
@@ -1622,36 +1847,21 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cyan: { color: C.cyan },
+
   dark: { color: C.bg },
   camera: { flex: 1, backgroundColor: C.card, overflow: 'hidden' },
   cameraTop: { position: 'absolute', top: 14, left: 15, right: 15 },
-  cameraStatusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 44,
-    gap: 8,
-    paddingHorizontal: 8,
-    borderRadius: 22,
-    backgroundColor: '#071426DB',
-  },
+
   zoomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
     gap: 2,
   },
-  zoomLabel: {
-    color: C.text,
-    fontSize: 10,
-    fontWeight: '600',
-    marginRight: 1,
-    fontVariant: ['tabular-nums'],
-  },
+
   zoomButton: {
-    minWidth: 36,
-    minHeight: 32,
+    minWidth: 44,
+    minHeight: 44,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1663,13 +1873,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
-  pill: {
-    flexDirection: 'row',
-    flexShrink: 1,
-    minWidth: 0,
-    gap: 4,
-    alignItems: 'center',
-  },
+
   pillText: {
     fontSize: 9,
     flexShrink: 1,
@@ -1677,17 +1881,7 @@ const s = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.6,
   },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  trackingHint: {
-    color: C.text,
-    backgroundColor: '#071426DB',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderRadius: 8,
-    marginTop: 6,
-    fontSize: 11,
-  },
+
   modes: {
     flexDirection: 'row',
     padding: 3,
@@ -1696,24 +1890,18 @@ const s = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 12,
   },
-  mode: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 17 },
+  mode: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 17,
+  },
   modeActive: { backgroundColor: C.cyan },
   modeText: { fontSize: 11, fontWeight: '600', color: C.text },
-  tagStatus: {
-    backgroundColor: '#071426E8',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-  },
+
   tagText: { color: C.cyan, fontSize: 12, fontWeight: '600' },
   measure: {
-    position: 'absolute',
-    bottom: 14,
-    left: 14,
-    right: 14,
+    position: 'relative',
     backgroundColor: '#071426E8',
     borderWidth: 1,
     borderColor: '#52697977',
@@ -1745,7 +1933,7 @@ const s = StyleSheet.create({
   divider: { width: 1, height: 33, backgroundColor: C.line },
   hint: { fontSize: 10, color: C.muted, marginTop: 12 },
   measureActions: { marginTop: 12 },
-  controls: { paddingHorizontal: 18, paddingTop: 13 },
+
   telemetry: {
     fontSize: 9,
     color: C.muted,
@@ -1753,7 +1941,7 @@ const s = StyleSheet.create({
     marginBottom: 11,
   },
   input: {
-    height: 39,
+    height: 44,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: C.line,
@@ -1765,7 +1953,7 @@ const s = StyleSheet.create({
   recordRow: { flexDirection: 'row', gap: 11 },
   record: {
     flex: 1,
-    height: 53,
+    height: 44,
     borderRadius: 13,
     backgroundColor: C.coral,
     flexDirection: 'row',
@@ -1777,7 +1965,8 @@ const s = StyleSheet.create({
   recordDot: { width: 13, height: 13, borderRadius: 7, backgroundColor: C.bg },
   square: { borderRadius: 3 },
   bookmark: {
-    minWidth: 86,
+    minWidth: 48,
+    minHeight: 44,
     backgroundColor: C.card,
     borderRadius: 13,
     alignItems: 'center',
@@ -1787,14 +1976,7 @@ const s = StyleSheet.create({
   bookmarkText: { color: C.text, fontSize: 10, marginTop: 2 },
   dim: { opacity: 0.4 },
   failure: { color: '#FFAB95', fontSize: 11, marginBottom: 10 },
-  sessionPage: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 1440,
-    alignSelf: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
+
   title: { color: C.text, fontSize: 18, fontWeight: '700' },
   description: { color: C.muted, fontSize: 12, lineHeight: 19, marginTop: 8 },
   list: { paddingTop: 18, paddingBottom: 35, gap: 12 },
@@ -1806,8 +1988,14 @@ const s = StyleSheet.create({
     padding: 17,
     gap: 6,
   },
-  sessionActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  sessionActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 8,
+  },
   sessionButton: {
+    minWidth: 72,
     backgroundColor: C.cyan,
     minHeight: 44,
     flex: 1,
@@ -1836,7 +2024,7 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000AA',
     padding: 23,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
   },
   modal: {
     flexGrow: 0,

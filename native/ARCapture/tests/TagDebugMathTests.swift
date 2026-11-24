@@ -426,6 +426,84 @@ final class TagDebugMathTests: XCTestCase {
         XCTAssertThrowsError(try enabled.merging(["levelFloorWithGravity": 1]))
         XCTAssertThrowsError(try enabled.merging(["levelFloorWithGravity": "true"]))
     }
+    func testKalmanPreferencesMigrateWithoutChangingMeasuredWidthAndPersistWhileDisabled() throws {
+        let suite = "KalmanSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var legacy = TagDebugSettings().dictionary
+        legacy.removeValue(forKey: "kalmanFilterEnabled")
+        legacy.removeValue(forKey: "kalmanFilterSamples")
+        legacy.removeValue(forKey: "tagSizeMode")
+        legacy.removeValue(forKey: "competitionYear")
+        legacy["tagSizeMeters"] = 0.1723456789
+        legacy["tagSizeSource"] = "ar-two-point-edge"
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: TagDebugSettings.defaultsKey)
+        let loaded = TagDebugSettings.load(from: defaults)
+        XCTAssertFalse(loaded.kalmanFilterEnabled)
+        XCTAssertEqual(loaded.kalmanFilterSamples, 5)
+        XCTAssertEqual(loaded.tagSizeMeters, 0.1723456789)
+        XCTAssertEqual(loaded.tagSizeMode, "custom")
+        XCTAssertEqual(loaded.tagSizeSource, "ar-two-point-edge")
+        let enabled = try loaded.merging(["kalmanFilterEnabled": true, "kalmanFilterSamples": 20])
+        XCTAssertTrue(enabled.kalmanFilterEnabled)
+        XCTAssertEqual(enabled.kalmanFilterSamples, 20)
+        XCTAssertEqual(enabled.tagSizeMeters, loaded.tagSizeMeters)
+        XCTAssertEqual(enabled.tagSizeSource, loaded.tagSizeSource)
+        XCTAssertEqual(enabled.dictionary["kalmanFilterEnabled"] as? Bool, true)
+        XCTAssertEqual(enabled.dictionary["kalmanFilterSamples"] as? Int, 20)
+        enabled.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), enabled)
+        let disabled = try enabled.merging(["kalmanFilterEnabled": false])
+        XCTAssertFalse(disabled.kalmanFilterEnabled)
+        XCTAssertEqual(disabled.kalmanFilterSamples, 20)
+        disabled.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), disabled)
+    }
+    func testFieldYearAndKalmanSettingsMergeTogetherWithoutChangingResolvedCalibration() throws {
+        let field = try TagDebugSettings().merging(["tagSizeMode": "ftc", "competitionYear": 2024,
+                                                    "kalmanFilterEnabled": true, "kalmanFilterSamples": 20])
+        XCTAssertEqual(field.tagSizeMode, "ftc")
+        XCTAssertEqual(field.competitionYear, 2024)
+        XCTAssertEqual(field.tagSizeMeters, 0.0508)
+        XCTAssertTrue(field.kalmanFilterEnabled)
+        XCTAssertEqual(field.kalmanFilterSamples, 20)
+        let disabled = try field.merging(["kalmanFilterEnabled": false])
+        XCTAssertEqual(disabled.tagSizeMode, "ftc")
+        XCTAssertEqual(disabled.competitionYear, 2024)
+        XCTAssertEqual(disabled.tagSizeMeters, field.tagSizeMeters)
+        XCTAssertEqual(disabled.kalmanFilterSamples, 20)
+        let suite = "FieldKalmanSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        disabled.persist(to: defaults)
+        XCTAssertEqual(TagDebugSettings.load(from: defaults), disabled)
+    }
+    func testKalmanPreferencesRejectNonBooleanToggleAndUnsupportedOrNonIntegerSamples() throws {
+        let initial = TagDebugSettings()
+        for samples in [3, 5, 10, 20, 30] {
+            XCTAssertEqual(try initial.merging(["kalmanFilterSamples": samples]).kalmanFilterSamples, samples)
+        }
+        for value: Any in [0, 1, 4, 31, 5.5, Double.nan, Double.infinity, Double.greatestFiniteMagnitude, true, "5"] {
+            XCTAssertThrowsError(try initial.merging(["kalmanFilterSamples": value]))
+        }
+        for value: Any in [0, 1, "true", NSNull()] {
+            XCTAssertThrowsError(try initial.merging(["kalmanFilterEnabled": value]))
+        }
+        XCTAssertFalse(initial.kalmanFilterEnabled)
+        XCTAssertEqual(initial.kalmanFilterSamples, 5)
+    }
+    func testUnsupportedPersistedKalmanSampleCountFallsBackToDefaults() throws {
+        let suite = "InvalidKalmanSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for value: Any in [4, 5.5, true, "5"] {
+            var saved = TagDebugSettings().dictionary
+            saved["kalmanFilterEnabled"] = true
+            saved["kalmanFilterSamples"] = value
+            defaults.set(try JSONSerialization.data(withJSONObject: saved), forKey: TagDebugSettings.defaultsKey)
+            XCTAssertEqual(TagDebugSettings.load(from: defaults), TagDebugSettings())
+        }
+    }
     func testMeasuredWidthUsesReviewedEndpointDistanceAndRejectsInvalidInputs() throws {
         let points: [[String: Any]] = [["source": "sceneDepth", "segmentId": "segment", "confidence": 2, "frameId": "a"], ["source": "sceneDepth", "segmentId": "segment", "confidence": 1, "frameId": "b"]]
         XCTAssertEqual(try TagDebugMath.measuredTagSize(points: points, worldDistance: 0.1651, segmentID: "segment", tracking: "normal", frameAgeSeconds: 0.01), 0.1651)

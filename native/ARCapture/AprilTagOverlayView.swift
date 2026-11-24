@@ -247,6 +247,7 @@ final class AprilTagOverlayView: UIView {
                 deltaText = HeightDisplayFormatter.string(meters: delta, showImperial: showImperialHeight)
             }
         }
+        let filtered = floorHeight["readoutFilter"] != nil || ranges["readoutFilter"] != nil
         let orientation = gravityOrientation ?? [:]
         func angle(_ key: String, range: ClosedRange<Double>) -> Double? {
             guard isTrue(orientation["available"]), let value = orientation[key] as? NSNumber,
@@ -259,7 +260,7 @@ final class AprilTagOverlayView: UIView {
         let tiltText = tilt.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
         let twistText = twist.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
         label.setContent(id: id, summary: "\(prefix) · H \(heightText)", lidar: lidar.0, tag: tag.0,
-                         delta: deltaText, orientation: "Tilt \(tiltText) · Twist \(twistText)", showImperial: showImperialHeight)
+                         delta: deltaText, orientation: "Tilt \(tiltText) · Twist \(twistText)", showImperial: showImperialHeight, filtered: filtered)
         label.accessibilityValue = heightAccessibility + " Distance. " + lidar.2 + " " + tag.2
         let orientationReason = orientation["reason"] as? String ?? "No gravity-relative orientation in this frame"
         let tiltAccessibility = tilt.map { "Tilt from vertical \(String(format: "%.1f", $0)) degrees; zero degrees is a vertical tag plane." }
@@ -270,6 +271,9 @@ final class AprilTagOverlayView: UIView {
         let twistAccessibility = twist.map { "Twist from upright \(String(format: "%+.1f", $0)) degrees; positive is clockwise when viewing the printed front." }
             ?? "Twist from upright unavailable. \(twistReason)"
         label.accessibilityValue = (label.accessibilityValue ?? "") + " Gravity-relative orientation. " + tiltAccessibility + " " + twistAccessibility
+        if filtered {
+            label.accessibilityValue = (label.accessibilityValue ?? "") + " Kalman smoothing applied to live readouts."
+        }
         if let deltaText {
             label.accessibilityValue = (label.accessibilityValue ?? "") + " Absolute LiDAR versus Tag camera range difference: \(deltaText)."
         }
@@ -384,9 +388,10 @@ private final class TagReadoutCard: UIView {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, orientation: String, showImperial: Bool) {
+    func setContent(id: Int, summary: String, lidar: String, tag: String, delta: String?, orientation: String, showImperial: Bool, filtered: Bool) {
         summaryLabel.text = summary
         orientationLabel.text = orientation
+        headingLabel.text = filtered ? "Distance · Kalman" : "Distance"
         summaryLabel.accessibilityIdentifier = "apriltag.summary.\(id)"
         orientationLabel.accessibilityIdentifier = "apriltag.gravityOrientation.\(id)"
         headingLabel.accessibilityIdentifier = "apriltag.distanceHeading.\(id)"

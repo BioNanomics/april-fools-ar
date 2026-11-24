@@ -46,6 +46,43 @@ final class ARCaptureEngine: RCTEventEmitter {
     func getStatus(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.getStatus { value in DispatchQueue.main.async { resolve(value) } }
     }
+    @objc(getFieldCatalog:rejecter:)
+    func getFieldCatalog(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.getFieldCatalog { value in DispatchQueue.main.async { resolve(value) } }
+    }
+    @objc(getFieldDefinition:resolver:rejecter:)
+    func getFieldDefinition(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.getFieldDefinition(id) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(selectField:resolver:rejecter:)
+    func selectField(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.selectField(id) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(importFieldDefinition:resolver:rejecter:)
+    func importFieldDefinition(_ text: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.selectField("", importedText: text) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(getFieldWalk:rejecter:)
+    func getFieldWalk(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.getFieldWalk { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(getSavedFieldWalk:resolver:rejecter:)
+    func getSavedFieldWalk(_ id: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.getSavedFieldWalk(id) { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(clearFieldAlignment:rejecter:)
+    func clearFieldAlignment(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.fieldAlignmentAction("clear") { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(recheckFieldAlignment:rejecter:)
+    func recheckFieldAlignment(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.fieldAlignmentAction("recheck") { self.complete($0, resolve: resolve, reject: reject) }
+    }
+    @objc(alignFieldUnverified:rejecter:)
+    func alignFieldUnverified(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        ARCaptureCoordinator.shared.fieldAlignmentAction("manual") { self.complete($0, resolve: resolve, reject: reject) }
+    }
+
     @objc(getDebugSettings:rejecter:)
     func getDebugSettings(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         ARCaptureCoordinator.shared.getDebugSettings { value in DispatchQueue.main.async { resolve(value) } }

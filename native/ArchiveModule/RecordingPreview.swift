@@ -41,9 +41,10 @@ final class RecordingPreview: NSObject, UIAdaptivePresentationControllerDelegate
     }
 
     func present(asset: AVAsset, timeline: RecordingPlaybackTimeline? = nil,
-                 overlayMessage: String? = nil, onDismiss: @escaping () -> Void) throws {
+                 overlayMessage: String? = nil, startSeconds: Double = 0, startPaused: Bool = false, onDismiss: @escaping () -> Void) throws {
         dispatchPrecondition(condition: .onQueue(.main))
         guard preparing, controller == nil else { throw PreviewError.alreadyOpen }
+        guard startSeconds.isFinite, startSeconds >= 0 else { throw PreviewError.unplayableRecording }
         let presenter = try availablePresenter()
         let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         player.audiovisualBackgroundPlaybackPolicy = .pauses
@@ -62,7 +63,11 @@ final class RecordingPreview: NSObject, UIAdaptivePresentationControllerDelegate
         preparing = false
         presenter.present(controller, animated: true) { [weak self, weak controller] in
             guard let controller, self?.controller === controller else { return }
-            controller.player?.play()
+            if startSeconds > 0 || startPaused {
+                controller.player?.seek(to: CMTime(seconds: startSeconds, preferredTimescale: 600_000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak controller] finished in
+                    if finished && !startPaused { controller?.player?.play() }
+                }
+            } else { controller.player?.play() }
         }
         controller.presentationController?.delegate = self
     }

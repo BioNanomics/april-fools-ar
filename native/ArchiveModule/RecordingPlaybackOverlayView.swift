@@ -72,7 +72,7 @@ final class RecordingPlaybackOverlayView: UIView {
         context.saveGState()
         context.clip(to: videoRect.intersection(bounds))
         defer { context.restoreGState() }
-        for polygon in snapshot.polygons.prefix(32) {
+        for polygon in snapshot.polygons.prefix(96) {
             let points = mapped(polygon.points)
             guard points.count >= 3 else { continue }
             let path = UIBezierPath(); path.move(to: points[0])
@@ -182,12 +182,12 @@ final class RecordingPlaybackOverlayView: UIView {
             place("line.\(line.id)", label, CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 - 16), Self.color(line.style),
                   identifier: "recording.preview.measurement.\(line.id)")
         }
-        for polygon in snapshot.polygons.prefix(32) {
+        for polygon in snapshot.polygons.prefix(96) {
             guard let label = polygon.label else { continue }
             let points = mapped(polygon.points)
             guard points.count >= 3, let extent = Self.enclosing(points), extent.intersects(videoRect) else { continue }
             place("polygon.\(polygon.id)", label, CGPoint(x: extent.midX, y: extent.midY), Self.color(polygon.style),
-                  identifier: "recording.preview.floor.\(polygon.id)")
+                  identifier: polygon.style == "fieldExpected" ? "recording.preview.field.\(polygon.id)" : "recording.preview.floor.\(polygon.id)")
         }
         if let message = snapshot.message, !message.isEmpty {
             place("status", message, CGPoint(x: clipping.midX, y: clipping.maxY - 28), .white,
@@ -215,6 +215,7 @@ final class RecordingPlaybackOverlayView: UIView {
         case "axisy", "y": return .systemGreen
         case "axisz", "z", "blue": return .systemBlue
         case "height", "tagheight", "pending", "floor", "base", "selectedfloor", "cyan": return .systemCyan
+        case "fieldexpected": return .systemTeal
         case "candidate", "orange": return .systemOrange
         default: return .lightGray
         }

@@ -36,6 +36,11 @@ import { ReleaseNotesModal, type AppInfo } from './ReleaseNotesModal';
 import { formatHeight } from './HeightUnits';
 import { AboutModal, type AboutPage } from './AboutModal';
 import { AppVersionBadge } from './AppVersionBadge';
+import {
+  FieldDefinitionsPanel,
+  type FieldTag,
+  type FieldStatus,
+} from './FieldDefinitionsPanel';
 
 const CameraView = requireNativeComponent<ViewProps>('ARCaptureView');
 const TagReadoutView = requireNativeComponent<ViewProps>(
@@ -52,6 +57,7 @@ type Measurement = {
   points?: { depthMeters?: number; confidence?: number }[];
 };
 type Status = {
+  field?: FieldStatus;
   recording?: boolean;
   finalizing?: boolean;
   sessionId?: string;
@@ -180,6 +186,12 @@ function CaptureApp() {
   releaseNotesOpenRef.current = releaseNotesOpen;
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [fieldSession, setFieldSession] = useState<Session | null>(null);
+  const fieldEvidenceRef = useRef<{
+    session: Session;
+    seconds: number;
+  } | null>(null);
   const [measuringTagSize, setMeasuringTagSize] = useState(false);
   const [finishingFloor, setFinishingFloor] = useState(false);
   const [togglingKalman, setTogglingKalman] = useState(false);
@@ -195,7 +207,8 @@ function CaptureApp() {
     !settingsOpen &&
     !aboutOpen &&
     !releaseNotesOpen &&
-    !noteOpen;
+    !noteOpen &&
+    !fieldsOpen;
   const refresh = useCallback(async () => {
     if (Engine) {
       try {
@@ -365,7 +378,11 @@ function CaptureApp() {
       setBusy(false);
     }
   };
-  const openSession = async (session: Session, action: 'play' | 'share') => {
+  const openSession = async (
+    session: Session,
+    action: 'play' | 'share',
+    startSeconds?: number,
+  ) => {
     if (sessionActionRef.current || busy || status.finalizing) {
       return;
     }
@@ -386,7 +403,18 @@ function CaptureApp() {
         throw new Error('The saved recording could not be found.');
       }
       if (action === 'play') {
-        await Archive.previewSession(data.folderPath);
+        if (startSeconds != null) {
+          if (
+            !Number.isFinite(startSeconds) ||
+            startSeconds < 0 ||
+            typeof Archive.previewSessionAtTime !== 'function'
+          ) {
+            throw new Error('Recorded-time video navigation is unavailable.');
+          }
+          await Archive.previewSessionAtTime(data.folderPath, startSeconds);
+        } else {
+          await Archive.previewSession(data.folderPath);
+        }
       } else {
         const recording = await Archive.archiveSession(data.folderPath);
         await Share.share({
@@ -682,6 +710,11 @@ function CaptureApp() {
     Keyboard.dismiss();
     setToolSheet(null);
   };
+  const openFields = () => {
+    closeTools();
+    setFieldSession(null);
+    setFieldsOpen(true);
+  };
   const navigation = (
     <View
       style={[s.dockRow, landscape && s.sideNavigation]}
@@ -748,6 +781,14 @@ function CaptureApp() {
         ]}
       >
         <Text style={[s.modeText, tab === 'sessions' && s.dark]}>Saved</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Field definitions and tags seen"
+        onPress={openFields}
+        style={[s.dockIcon, landscape && s.sideNavButton]}
+      >
+        <Text style={s.link}>Fields</Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -1198,6 +1239,31 @@ function CaptureApp() {
       </Pressable>
     </View>
   );
+  const fieldStatusReason =
+    status.field?.reason || status.field?.warnings?.at(-1) || '';
+  const fieldStatus = status.field?.packageId ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Field alignment: ${
+        status.field.alignment || 'unaligned'
+      }. ${fieldStatusReason || status.field.label || ''}`}
+      onPress={openFields}
+      style={s.fieldStatus}
+    >
+      <Text style={s.fieldStatusTitle} numberOfLines={1}>
+        {status.field.label} · {status.field.alignment || 'unaligned'}
+      </Text>
+      {!!fieldStatusReason && (
+        <Text
+          style={s.fieldStatusReason}
+          numberOfLines={3}
+          accessibilityLiveRegion="polite"
+        >
+          {fieldStatusReason}
+        </Text>
+      )}
+    </Pressable>
+  ) : null;
   return (
     <KeyboardAvoidingView
       style={s.root}
@@ -1391,11 +1457,13 @@ function CaptureApp() {
                 contentContainerStyle={s.sideControls}
                 keyboardShouldPersistTaps="handled"
               >
+                {fieldStatus}
                 {navigation}
                 {quickControls}
               </ScrollView>
             ) : (
               <>
+                {tab === 'capture' && fieldStatus}
                 {navigation}
                 {tab === 'capture' && quickControls}
               </>
@@ -1455,6 +1523,24 @@ function CaptureApp() {
                         )}
                       </Text>
                       <View style={s.sessionActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Field walk for ${item.name}`}
+                          disabled={Boolean(working || !item.finalized)}
+                          accessibilityState={{
+                            disabled: Boolean(working || !item.finalized),
+                          }}
+                          style={[
+                            s.sessionButton,
+                            (working || !item.finalized) && s.dim,
+                          ]}
+                          onPress={() => {
+                            setFieldSession(item);
+                            setFieldsOpen(true);
+                          }}
+                        >
+                          <Text style={s.exportText}>Tags seen</Text>
+                        </Pressable>
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Play recording ${item.name}`}
@@ -1544,6 +1630,49 @@ function CaptureApp() {
         {tab === 'capture' && recordingControls}
       </View>
       <AppVersionBadge info={appInfo} onPress={openReleaseNotes} />
+      <FieldDefinitionsPanel
+        visible={fieldsOpen}
+        engine={Engine}
+        recording={Boolean(status.recording || status.finalizing)}
+        field={status.field}
+        savedSession={fieldSession}
+        onClose={() => {
+          setFieldsOpen(false);
+          setFieldSession(null);
+        }}
+        onDismiss={async () => {
+          const evidence = fieldEvidenceRef.current;
+          fieldEvidenceRef.current = null;
+          if (evidence) {
+            await openSession(evidence.session, 'play', evidence.seconds);
+          }
+        }}
+        onOpenEvidence={(tag: FieldTag) => {
+          if (
+            !fieldSession ||
+            !Number.isFinite(tag.videoTimeSeconds) ||
+            tag.videoTimeSeconds == null ||
+            tag.videoTimeSeconds < 0
+          ) {
+            return;
+          }
+          fieldEvidenceRef.current = {
+            session: fieldSession,
+            seconds: tag.videoTimeSeconds,
+          };
+          setFieldsOpen(false);
+          setFieldSession(null);
+        }}
+        onChange={field => setStatus(previous => ({ ...previous, field }))}
+        onSetFloor={async () => {
+          setFieldsOpen(false);
+          setFieldSession(null);
+          setTab('capture');
+          setToolSheet('measure');
+          await setSpatialMode('selectFloor');
+          await changeDebugMode(false);
+        }}
+      />
       <ReleaseNotesModal
         visible={releaseNotesOpen}
         info={appInfo}
@@ -1652,6 +1781,19 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
+  fieldStatus: {
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: '#071426DD',
+    marginBottom: 6,
+  },
+  fieldStatusTitle: { color: C.cyan, fontSize: 12, fontWeight: '600' },
+  fieldStatusReason: {
+    color: '#FFCB7A',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
   root: { flex: 1, backgroundColor: C.bg },
   thumbDock: {
     position: 'absolute',

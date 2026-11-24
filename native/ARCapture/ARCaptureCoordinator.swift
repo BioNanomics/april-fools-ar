@@ -21,6 +21,9 @@ fileprivate struct SpatialRenderSnapshot {
     let displayTransform: CGAffineTransform
     let timestamp: Double
     let showImperialHeight: Bool
+    let fieldPlacements: [FieldPlacement]
+    let fieldDegraded: Bool
+    let fieldVisible: Bool
 }
 
 final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
@@ -43,6 +46,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     private var tagLateRecordingResults = 0
     private var tagResultFrameID: String?
     private var tagError: String?
+    private let fieldState = FieldWalkState()
+    private var fieldStore: FieldDefinitionStore { FieldDefinitionStore.shared }
     private var debugSettings = TagDebugSettings.load()
     private var debugMode = true
     private var selectedTagID: Int?
@@ -110,6 +115,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
 
     override init() {
         super.init()
+        fieldState.onEvent = { [weak self] event in self?.recorder?.event(event) }
+        if let id = UserDefaults.standard.string(forKey: "AprilFoolsAR.FieldPackage.v1"), let field = fieldStore.find(id) { fieldState.select(field) }
         backgroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             if self.backgroundTask == .invalid {
@@ -206,10 +213,11 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     func startSession(name: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         captureQueue.async {
             guard self.recorder == nil && !self.finalizing else { completion(.failure(CaptureError.message("A recording is already active or finalizing."))); return }
-            guard Self.lidarSupported, self.latestFrame?.sceneDepth != nil else { completion(.failure(CaptureError.message("Start requires live scene depth on a LiDAR-capable iPhone. Wait for tracking/depth."))); return }
+            guard let live = self.latestFrame, self.tracking == "normal", self.frameAge(live) >= 0, self.frameAge(live) <= 0.5 else { completion(.failure(CaptureError.message("Wait for a current camera frame with normal AR tracking."))); return }
             do {
-                let recorder = try CaptureRecorder(name: name.isEmpty ? "Field capture" : name, debugSettings: self.debugSettings)
+                let recorder = try CaptureRecorder(name: name.isEmpty ? "Field capture" : name, debugSettings: self.debugSettings, fieldDefinition: self.fieldState.definition)
                 self.recorder = recorder
+                self.fieldState.beginWalk(recorder.id, timestamp: live.timestamp, segment: self.segment)
                 self.clearPoints()
                 DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true }
                 self.droppedFrames = 0; self.recordingStartedAt = Date(); self.lastError = nil
@@ -237,6 +245,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             if self.tagInFlight, self.tagPendingRecorderID == recorder.id {
                 recorder.event(["type": "aprilTagAnalysisPendingAtStop", "frameId": self.tagPendingFrameID as Any? ?? NSNull(), "timestamp": self.latestFrame?.timestamp ?? 0, "analysisSkippedFramesTotal": self.tagSkippedFrames, "policy": "late result is not appended after recording finalization"])
             }
+            self.fieldState.stopWalk()
+            recorder.writeFieldSummary(self.fieldState.summary)
             self.recorder = nil; self.finalizingRecorder = recorder; self.finalizing = true; self.emitStatus()
             recorder.finish(droppedFrames: self.droppedFrames) { result in
                 self.captureQueue.async {
@@ -255,6 +265,80 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
 
     func getStatus(completion: @escaping ([String: Any]) -> Void) { captureQueue.async { completion(self.status()) } }
+
+    func getFieldCatalog(completion: @escaping ([String: Any]) -> Void) {
+        captureQueue.async { completion(["packages": self.fieldStore.packages.map(\.descriptor), "error": self.fieldStore.error as Any? ?? NSNull()]) }
+    }
+    func getFieldDefinition(_ id: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            guard let field = self.fieldStore.find(id) else { completion(.failure(CaptureError.message("Unknown field package."))); return }
+            completion(.success(["id": field.id, "yaml": field.yaml, "packageSha256": field.hash]))
+        }
+    }
+    func selectField(_ id: String, importedText: String? = nil, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do {
+                guard self.recorder == nil, !self.finalizing else { throw CaptureError.message("Stop and save this walk before changing its field definition.") }
+                let field: FieldDefinition
+                if let text = importedText { field = try self.fieldStore.importDefinition(text) }
+                else if let found = self.fieldStore.find(id) { field = found }
+                else { throw CaptureError.message("Unknown field definition.") }
+                self.fieldState.select(field); self.invalidateAprilTags()
+                UserDefaults.standard.set(field.id, forKey: "AprilFoolsAR.FieldPackage.v1")
+                self.renderSpatial(); self.emitStatus(force: true); completion(.success(self.fieldState.status))
+            } catch { completion(.failure(error)) }
+        }
+    }
+    func fieldAlignmentAction(_ action: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do {
+                if action == "manual" { try self.fieldState.requestManual() }
+                else { self.fieldState.invalidate(action == "recheck" ? "Hold a fixed tag in view to recheck alignment." : "Field alignment cleared.", segment: self.segment, timestamp: self.latestFrame?.timestamp ?? 0); self.invalidateAprilTags() }
+                self.renderSpatial(); self.emitStatus(force: true); completion(.success(self.fieldState.status))
+            } catch { completion(.failure(error)) }
+        }
+    }
+    func getFieldWalk(completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        captureQueue.async {
+            do { completion(.success(try Self.fieldExports(self.fieldState.summary))) }
+            catch { completion(.failure(error)) }
+        }
+    }
+    func getSavedFieldWalk(_ id: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        savedSessionQueue.async {
+            do {
+                guard UUID(uuidString: id) != nil else { throw CaptureError.message("Invalid saved session identifier.") }
+                let folder = CaptureRecorder.root.appendingPathComponent(id, isDirectory: true)
+                let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("manifest.json"))) as? [String: Any]
+                let data = try Data(contentsOf: folder.appendingPathComponent("field-walk-summary.yaml"))
+                guard data.count <= FieldTextCodec.maximumBytes, let text = String(data: data, encoding: .utf8),
+                      let inventory = manifest?["fileInventory"] as? [[String: Any]],
+                      let record = inventory.first(where: { $0["path"] as? String == "field-walk-summary.yaml" }),
+                      record["sha256"] as? String == FieldValue.hash(text), FieldValue.number(record["bytes"]) == Double(data.count) else { throw CaptureError.message("Saved field summary failed its integrity check.") }
+                var summary = try FieldTextCodec.parse(text)
+                if let origin = FieldValue.number(manifest?["firstARFrameTimestamp"]), var field = summary["field"] as? [String: Any], let rows = field["seenTags"] as? [[String: Any]] {
+                    field["seenTags"] = rows.map { source -> [String: Any] in
+                        var row = source
+                        if let timestamp = FieldValue.number(row["timestamp"]), timestamp >= origin { row["videoTimeSeconds"] = timestamp - origin }
+                        return row
+                    }
+                    summary["field"] = field
+                }
+                var result = try Self.fieldExports(summary); result["yaml"] = text
+                completion(.success(["yaml": text, "field": result]))
+            } catch { completion(.failure(CaptureError.message("Field walk summary unavailable: " + error.localizedDescription))) }
+        }
+    }
+    private static func fieldExports(_ summary: [String: Any]) throws -> [String: Any] {
+        var result = summary["field"] as? [String: Any] ?? [:]
+        result["yaml"] = try FieldTextCodec.yaml(summary); result["json"] = try FieldTextCodec.json(summary)
+        let rows = result["seenTags"] as? [[String: Any]] ?? []
+        func cell(_ value: Any?) -> String { "\"" + (value.map { String(describing: $0) } ?? "").replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+        result["csv"] = "family,id,count,nominal_position,observed_position,reason\n" + rows.map { row in
+            ["family","id","count","nominalPosition","observedPosition","reason"].map { cell(row[$0]) }.joined(separator: ",")
+        }.joined(separator: "\n") + "\n"
+        return result
+    }
 
     func getDebugSettings(completion: @escaping ([String: Any]) -> Void) { captureQueue.async { completion(self.debugSettings.dictionary) } }
 
@@ -289,7 +373,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let old = debugSettings.dictionary
         let levelingChanged = debugSettings.levelFloorWithGravity != settings.levelFloorWithGravity
         let previousFloor = confirmedFloorDictionary()
+        let fieldPolicyChanged = debugSettings.tagSizeMode != settings.tagSizeMode || debugSettings.competitionYear != settings.competitionYear || debugSettings.tagSizeMeters != settings.tagSizeMeters || levelingChanged || debugSettings.maxDistanceMeters != settings.maxDistanceMeters || debugSettings.maxPlaneAngleDegrees != settings.maxPlaneAngleDegrees || debugSettings.maxReprojectionErrorPixels != settings.maxReprojectionErrorPixels || debugSettings.warningDepthDifferenceMeters != settings.warningDepthDifferenceMeters || debugSettings.rejectDepthDifferenceMeters != settings.rejectDepthDifferenceMeters
         debugSettings = settings; settings.persist(); invalidateAprilTags()
+        if fieldPolicyChanged { fieldState.invalidate("Sizing, floor or quality policy changed; recheck alignment.", segment: segment, timestamp: latestFrame?.timestamp ?? 0) }
         spatialState.setFloorLeveling(settings.levelFloorWithGravity)
         if levelingChanged {
             clearPoints()
@@ -419,6 +505,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let age = self.spatialState.candidate.map { ProcessInfo.processInfo.systemUptime-$0.timestamp } ?? .infinity
                 try self.spatialState.completeFloorSetup(expectedCandidateID: expectedCandidateID, tracking: self.tracking, frameAgeSeconds: age)
                 self.clearPoints(); self.invalidateAprilTags()
+                self.fieldState.invalidate("Field floor confirmed or changed; recheck alignment.", segment: self.segment, timestamp: frame.timestamp)
                 self.recorder?.event(["type": "floorConfirmed", "segmentId": self.segment, "timestamp": frame.timestamp,
                     "frameId": self.frameID, "floor": self.confirmedFloorDictionary() as Any? ?? NSNull(), "floorSetup": setup,
                     "observedFloor": self.spatialState.observedFloor?.dictionary as Any? ?? NSNull(), "levelFloorWithGravity": self.spatialState.levelFloorWithGravity])
@@ -586,7 +673,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         tracking = trackingInfo.0; trackingReason = trackingInfo.1
         let trackingKey = tracking + trackingReason
         if trackingKey != lastTrackingKey {
-            if tracking != "normal" { clearPoints(); invalidateAprilTags(); clearFloorFitCache() }
+            if tracking != "normal" { clearPoints(); invalidateAprilTags(); clearFloorFitCache(); fieldState.suspend("AR tracking lost; recheck field alignment.", timestamp: frame.timestamp, segment: segment) }
             recorder?.event(["type": "trackingChanged", "tracking": tracking, "reason": trackingReason, "frameId": frameID, "timestamp": frame.timestamp, "segmentId": segment])
             lastTrackingKey = trackingKey
         }
@@ -652,6 +739,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
     }
     private func beginSegment(reason: String) {
         let oldSegment = segment, count = spatialState.completed.count, oldTimestamp = latestFrame?.timestamp ?? 0
+        fieldState.invalidate("AR coordinate segment changed: " + reason, segment: segment, timestamp: oldTimestamp)
         segment = UUID().uuidString; spatialState.reset(segmentID: segment); floorCandidates = []; clearPoints(); invalidateAprilTags()
         clearFloorFitCache()
         minimumFrameTimestamp = max(minimumFrameTimestamp, ProcessInfo.processInfo.systemUptime)
@@ -785,7 +873,9 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             intrinsics: frame?.camera.intrinsics ?? matrix_identity_float3x3,
             imageSize: frame?.camera.imageResolution ?? CGSize(width: 1, height: 1),
             displayTransform: PreviewZoom.displayTransform(base: base, zoom: displayZoom), timestamp: frame?.timestamp ?? 0,
-            showImperialHeight: debugSettings.showImperialHeight)
+            showImperialHeight: debugSettings.showImperialHeight,
+            fieldPlacements: clear ? [] : fieldState.placements(), fieldDegraded: fieldState.alignment == "degraded",
+            fieldVisible: !clear && previewMode == "camera" && tracking == "normal" && fieldState.alignmentSegment == segment)
         pendingSpatialRender = snapshot
         guard !spatialRenderScheduled else { spatialRenderLock.unlock(); return }
         spatialRenderScheduled = true
@@ -814,6 +904,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         value["measurement"] = lastMeasurement; value["previewMode"] = previewMode; value["segmentId"] = segment
         value["displayZoom"] = displayZoom
         value["debugMode"] = debugMode
+        value["field"] = fieldState.status
         let available = tracking == "normal" && latestFrame.map({ frameAge($0) <= 0.5 && frameAge($0) >= 0 }) == true
         let floorUsable = spatialState.mode != .selectFloor && spatialState.floor != nil
         let observed = spatialState.mode == .selectFloor ? spatialState.candidate : spatialState.observedFloor
@@ -878,6 +969,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
             "analysisSkippedFramesTotal": tagSkippedFrames, "targetAnalysisHz": 30, "maxAnalysisInFlight": 1,
             "recordingId": sourceRecorderID as Any? ?? NSNull(), "poseEstimation": true, "debugSettings": settings.dictionary,
             "calculationCore": SpatialCoreInfo.dictionary,
+            "fieldPackageId": fieldState.definition?.id as Any? ?? NSNull(),
+            "fieldPackageSha256": fieldState.definition?.hash as Any? ?? NSNull(),
             "floorSnapshot": sourceFloor.map { floor -> [String: Any] in
                 var record = floor.dictionary; record["operatorConfirmed"] = true; return record
             } as Any? ?? NSNull()]
@@ -919,10 +1012,18 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     event["analysisSucceeded"] = result != nil; event["detectorError"] = error as Any? ?? NSNull()
                     event["selectedId"] = selected as Any? ?? NSNull()
                     event["selectedDebug"] = detections.first(where: { ($0["id"] as? NSNumber)?.intValue == selected })?["debug"] as Any? ?? NSNull()
+                    event["fieldProcessingAgeSeconds"] = completed - timestamp
+                    event["fieldRegistrationAllowed"] = generation == self.tagGeneration && sourceSegmentID == self.segment
                     if let sourceRecorderID {
                         if let recorder = self.recorder, recorder.id == sourceRecorderID {
+                            self.fieldState.process(detections, metadata: event, now: completed, settings: settings,
+                                allowRegistration: generation == self.tagGeneration && sourceSegmentID == self.segment)
+                            event["field"] = self.fieldState.registrationSnapshot
                             recorder.aprilTagEvent(event, pixelBuffer: detections.isEmpty ? nil : buffer, frameID: sourceFrameID)
                         } else { self.tagLateRecordingResults += 1 }
+                    }
+                    if sourceRecorderID == nil, self.recorder == nil, generation == self.tagGeneration, sourceSegmentID == self.segment {
+                        self.fieldState.process(detections, metadata: event, now: completed, settings: settings)
                     }
                     guard generation == self.tagGeneration, sourceSegmentID == self.segment else { self.emitStatus(); return }
                     self.tagLatencyMilliseconds = latency; self.tagError = error
@@ -1052,6 +1153,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     let depthView = UIImageView()
     let tagOverlay = AprilTagOverlayView(frame: .zero)
     let spatialOverlay = SpatialMeasurementOverlayView(frame: .zero)
+    let fieldOverlay = FieldOverlayView(frame: .zero)
     private var debugEnabled = true
     private let statusLabel = UILabel()
     private var attached = false
@@ -1065,6 +1167,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         addSubview(previewContainer); previewContainer.addSubview(arView)
         depthView.contentMode = .scaleAspectFill; depthView.clipsToBounds = true; depthView.alpha = 0.88; depthView.isHidden = true
         previewContainer.addSubview(depthView)
+        addSubview(fieldOverlay)
         addSubview(spatialOverlay)
         addSubview(tagOverlay)
         statusLabel.textColor = .white; statusLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
@@ -1097,6 +1200,7 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
         applyDisplayZoom()
         tagOverlay.frame = bounds
         spatialOverlay.frame = bounds
+        fieldOverlay.frame = bounds
         statusLabel.frame = CGRect(x: 10, y: 10, width: max(0, bounds.width-20), height: 58)
         ARCaptureCoordinator.shared.updateViewport(arView.bounds.size, orientation: window?.windowScene?.interfaceOrientation ?? .portrait)
     }
@@ -1153,6 +1257,10 @@ final class ARCaptureView: UIView, UIGestureRecognizerDelegate {
     fileprivate func applySpatial(_ snapshot: SpatialRenderSnapshot) {
         spatialMode = snapshot.mode
         spatialOverlay.isHidden = !snapshot.visible
+        if snapshot.fieldVisible && snapshot.isTrackingNormal {
+            fieldOverlay.show(snapshot.fieldPlacements, degraded: snapshot.fieldDegraded, cameraToWorld: snapshot.cameraToWorld,
+                intrinsics: snapshot.intrinsics, imageSize: snapshot.imageSize, displayTransform: snapshot.displayTransform, expiresAt: snapshot.timestamp + 0.5)
+        } else { fieldOverlay.clear() }
         guard snapshot.visible else { spatialOverlay.clear(); return }
         let age = ProcessInfo.processInfo.systemUptime - snapshot.timestamp
         spatialOverlay.show(planes: snapshot.planes, measurements: snapshot.measurements, pendingPoints: snapshot.pendingPoints,

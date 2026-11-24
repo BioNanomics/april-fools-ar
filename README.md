@@ -33,6 +33,16 @@ Keep recordings short initially and check an export before the first field visit
 
 The app stops and saves an active recording when it goes into the background. Keep it in the foreground while recording. Saved MP4s must remain below 4 GiB. The app retains the raw session files alongside each saved MP4 for recovery and analysis, so both use storage until you delete the session.
 
+## Field definitions and field walks
+
+Open **Fields** to select FRC 2026 REBUILT (welded or AndyMark), FTC 2025–2026 DECODE, or FTC 2026–2027 BIOBUZZ. The definitions, source revisions and physical tag sizes are available offline as YAML; the viewer also accepts an imported YAML or JSON definition. Imported geometry uses a new immutable package identity rather than changing official definitions.
+
+For a registered AR view, select the correct field and use **Measure** to confirm its floor, then point at a fixed field tag. A short sequence of qualified observations checks its expected/observed center height, plane tilt and printed-up direction. Passing checks establish a **provisional single-tag anchor**; dotted expected tag squares and IDs appear at the reference positions. A mismatch explains the expected and observed values and does not automatically move the field. Missing height is unverified, with an explicitly labeled manual option. Additional tags and return visits check disagreement and drift. Height/tilt agreement cannot establish that the anchor's horizontal position or heading is physically correct.
+
+**Start recording** pins the selected package and starts a fresh seen-tag inventory. After **Stop & save**, use **Saved sessions → Tags seen** to review or share its YAML summary (JSON/CSV are also available). Original observations, package bytes/hash, alignment changes and the summary travel inside the self-contained MP4. Recorded overlays reproduce expected geometry during playback and seeking. A field walk can retain nominal tag positions without depth; Auto size still needs usable LiDAR, so choose an explicit size mode when depth is absent.
+
+DECODE tags 20/24 are fixed references; Obelisk tags are not anchors. BIOBUZZ clusters move and have no permanent global position in this catalog. They remain observed tag/cluster evidence rather than stationary alignment controls. Robot consumers and FRC 2027 import remain deferred. Physical accuracy is pending independent field testing; see [the field plan](field-definition-plan.md) and its validation records.
+
 ## Capture contents
 
 - `rgb.mp4`: clean, silent H.264 camera video, targeting 30 fps. Live overlays and preview zoom are not burned into the video.

@@ -28,6 +28,21 @@ final class ArchiveModule: NSObject {
     func previewSession(_ folderPath: String,
                         resolver resolve: @escaping RCTPromiseResolveBlock,
                         rejecter reject: @escaping RCTPromiseRejectBlock) {
+        preparePreview(folderPath, startSeconds: 0, paused: false, resolve: resolve, reject: reject)
+    }
+
+    @objc(previewSessionAtTime:seconds:resolver:rejecter:)
+    func previewSessionAtTime(_ folderPath: String, seconds: Double,
+                              resolver resolve: @escaping RCTPromiseResolveBlock,
+                              rejecter reject: @escaping RCTPromiseRejectBlock) {
+        guard seconds.isFinite, seconds >= 0, seconds <= 86400 else {
+            reject("session_preview_failed", "The observation has no valid movie time.", nil); return
+        }
+        preparePreview(folderPath, startSeconds: seconds, paused: true, resolve: resolve, reject: reject)
+    }
+
+    private func preparePreview(_ folderPath: String, startSeconds: Double, paused: Bool,
+                                resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         DispatchQueue.main.async {
             do {
                 try self.recordingPreview.beginPreparation()
@@ -61,10 +76,12 @@ final class ArchiveModule: NSObject {
                             guard try await asset.load(.isPlayable) else {
                                 throw RecordingPreview.PreviewError.unplayableRecording
                             }
+                            let duration = CMTimeGetSeconds(try await asset.load(.duration))
+                            let targetTime = duration.isFinite && duration > 0 ? min(startSeconds, duration) : 0
                             DispatchQueue.main.async {
                                 do {
                                     try self.recordingPreview.present(asset: asset, timeline: timeline,
-                                                                     overlayMessage: overlayMessage) {
+                                                                     overlayMessage: overlayMessage, startSeconds: targetTime, startPaused: paused) {
                                         resolve(Self.descriptor(recording))
                                     }
                                 } catch {

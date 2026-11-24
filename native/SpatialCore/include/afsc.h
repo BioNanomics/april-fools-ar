@@ -4,4 +4,5 @@
 #include "afsc_geometry.h"
 #include "afsc_measurements.h"
 #include "afsc_projection.h"
+#include "afsc_fields.h"
 #endif

@@ -1,0 +1,14 @@
+"packages":
+  -
+    "id": "frc-2026-rebuilt-welded"
+    "path": "frc-2026-rebuilt-welded/field.yaml"
+  -
+    "id": "frc-2026-rebuilt-andymark"
+    "path": "frc-2026-rebuilt-andymark/field.yaml"
+  -
+    "id": "ftc-2025-2026-decode"
+    "path": "ftc-2025-2026-decode/field.yaml"
+  -
+    "id": "ftc-2026-2027-biobuzz"
+    "path": "ftc-2026-2027-biobuzz/field.yaml"
+"schemaVersion": 1

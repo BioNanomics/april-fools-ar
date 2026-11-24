@@ -1,0 +1,24 @@
+"angleUnit": "radian"
+"competitionYear": 2027
+"coordinateFrame": "ftc-centered-z-up"
+"fieldLengthMeters": null
+"fieldWidthMeters": null
+"floorElevationMeters": 0.0
+"game": "BIOBUZZ"
+"id": "ftc-2026-2027-biobuzz"
+"lengthUnit": "meter"
+"name": "FTC 2026–2027 BIOBUZZ"
+"program": "ftc"
+"schemaVersion": 1
+"seasonEndYear": 2027
+"seasonStartYear": 2026
+"source":
+  "artifactSha256": "756294f8307da88b85a73c5a804dbc20f65dd60af97534ed3dea8f38e528aba8"
+  "extractedFile": "org/firstinspires/ftc/vision/apriltag/AprilTagGameDatabase.java"
+  "revision": "12.0.0"
+  "sha256": "ec457c7536f4f69855c0f51d2a48297428f3f103b11c89dd3b893c647d5a568f"
+  "sourceLengthUnit": "inch"
+  "sourceTagFrame": "detector-x-right-y-down-z-in"
+  "url": "https://repo.maven.apache.org/maven2/org/firstinspires/ftc/Vision/12.0.0/Vision-12.0.0-sources.jar"
+"tagFrame": "detector-x-right-y-down-z-in"
+"variant": "standard"

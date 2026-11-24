@@ -1,0 +1,318 @@
+"angleUnit": "radian"
+"clusters":
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "red-scoring"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 30
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 31
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 32
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 33
+    "name": "RED SCORING"
+    "placement": "movable"
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "red-audience"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 34
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 35
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 36
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 37
+    "name": "RED AUDIENCE"
+    "placement": "movable"
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "blue-audience"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 38
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 39
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 40
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 41
+    "name": "BLUE AUDIENCE"
+    "placement": "movable"
+  -
+    "aimingOrigin": "cell-opening"
+    "coordinateFrame": "detector-cluster-x-right-y-down-z-in"
+    "fieldPose": null
+    "id": "blue-scoring"
+    "localizationEligible": false
+    "members":
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.1651,0.18255996,-0.1427988,1.0]
+        "id": 42
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,-0.06985,0.18255996,-0.1427988,1.0]
+        "id": 43
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.06985,0.18255996,-0.1427988,1.0]
+        "id": 44
+      -
+        "clusterFromTagColumnMajor": [1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.1651,0.18255996,-0.1427988,1.0]
+        "id": 45
+    "name": "BLUE SCORING"
+    "placement": "movable"
+"competitionYear": 2027
+"coordinateFrame": "ftc-centered-z-up"
+"fieldLengthMeters": null
+"fieldWidthMeters": null
+"floorElevationMeters": 0.0
+"game": "BIOBUZZ"
+"id": "ftc-2026-2027-biobuzz"
+"lengthUnit": "meter"
+"name": "FTC 2026–2027 BIOBUZZ"
+"program": "ftc"
+"schemaVersion": 1
+"seasonEndYear": 2027
+"seasonStartYear": 2026
+"source":
+  "artifactSha256": "756294f8307da88b85a73c5a804dbc20f65dd60af97534ed3dea8f38e528aba8"
+  "extractedFile": "org/firstinspires/ftc/vision/apriltag/AprilTagGameDatabase.java"
+  "revision": "12.0.0"
+  "sha256": "ec457c7536f4f69855c0f51d2a48297428f3f103b11c89dd3b893c647d5a568f"
+  "sourceLengthUnit": "inch"
+  "sourceTagFrame": "detector-x-right-y-down-z-in"
+  "url": "https://repo.maven.apache.org/maven2/org/firstinspires/ftc/Vision/12.0.0/Vision-12.0.0-sources.jar"
+"tagFrame": "detector-x-right-y-down-z-in"
+"tags":
+  -
+    "clusterId": "red-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 30
+    "localizationEligible": false
+    "name": "RED SCORING 1"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 31
+    "localizationEligible": false
+    "name": "RED SCORING 2"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 32
+    "localizationEligible": false
+    "name": "RED SCORING 3"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 33
+    "localizationEligible": false
+    "name": "RED SCORING 4"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 34
+    "localizationEligible": false
+    "name": "RED AUDIENCE 1"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 35
+    "localizationEligible": false
+    "name": "RED AUDIENCE 2"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 36
+    "localizationEligible": false
+    "name": "RED AUDIENCE 3"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "red-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 37
+    "localizationEligible": false
+    "name": "RED AUDIENCE 4"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 38
+    "localizationEligible": false
+    "name": "BLUE AUDIENCE 1"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 39
+    "localizationEligible": false
+    "name": "BLUE AUDIENCE 2"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 40
+    "localizationEligible": false
+    "name": "BLUE AUDIENCE 3"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-audience"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 41
+    "localizationEligible": false
+    "name": "BLUE AUDIENCE 4"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 42
+    "localizationEligible": false
+    "name": "BLUE SCORING 1"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 43
+    "localizationEligible": false
+    "name": "BLUE SCORING 2"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 44
+    "localizationEligible": false
+    "name": "BLUE SCORING 3"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+  -
+    "clusterId": "blue-scoring"
+    "expectedHeightMeters": null
+    "expectedTiltRadians": null
+    "family": "tag36h11"
+    "fieldFromTagColumnMajor": null
+    "fieldPose": null
+    "id": 45
+    "localizationEligible": false
+    "name": "BLUE SCORING 4"
+    "placement": "clusterMember"
+    "poseSizeMeters": 0.08255
+    "sourcePose": null
+"variant": "standard"

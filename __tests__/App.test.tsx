@@ -12,6 +12,7 @@ import Renderer, { act } from 'react-test-renderer';
 import App from '../App';
 import { AboutModal } from '../AboutModal';
 import { ReleaseNotesModal } from '../ReleaseNotesModal';
+import { FieldDefinitionsPanel } from '../FieldDefinitionsPanel';
 import {
   DebugSettingsModal,
   DEFAULT_DEBUG_SETTINGS,
@@ -44,10 +45,12 @@ jest.mock('react-native', () => {
     getDebugSettings: jest.fn(),
     setDebugSettings: jest.fn(),
     applyMeasuredTagSize: jest.fn(),
+    getSavedFieldWalk: jest.fn(),
   };
   native.NativeModules.ArchiveModule = {
     archiveSession: jest.fn(),
     previewSession: jest.fn(),
+    previewSessionAtTime: jest.fn(),
   };
   return native;
 });
@@ -62,6 +65,8 @@ beforeEach(() => {
   engine.deleteSession.mockReset().mockResolvedValue(undefined);
   NativeModules.ArchiveModule.archiveSession.mockReset();
   NativeModules.ArchiveModule.previewSession.mockReset();
+  NativeModules.ArchiveModule.previewSessionAtTime.mockReset();
+  engine.getSavedFieldWalk.mockReset();
   engine.completeFloorSetup.mockReset();
   engine.getStatus.mockResolvedValue({
     recording: false,
@@ -606,6 +611,53 @@ test('plays the validated saved session in the native player', async () => {
     '/sessions/session-1',
   );
   expect(NativeModules.ArchiveModule.archiveSession).not.toHaveBeenCalled();
+});
+
+test('opens a tag observation at its recorded time after the field modal finishes dismissing', async () => {
+  engine.listSessions.mockResolvedValue([savedSession]);
+  engine.exportSession.mockResolvedValue({
+    finalized: true,
+    folderPath: '/sessions/session-1',
+  });
+  engine.getSavedFieldWalk.mockResolvedValue({
+    yaml: 'schemaVersion: 1\n',
+    field: {
+      seenTags: [
+        {
+          id: 4,
+          frameId: 'source-frame',
+          segmentId: 'source-segment',
+          timestamp: 121.125,
+          videoTimeSeconds: 1.125,
+        },
+      ],
+    },
+  });
+  NativeModules.ArchiveModule.previewSessionAtTime.mockResolvedValue(undefined);
+  await openSavedSessions();
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Field walk for North field' })
+      .props.onPress(),
+  );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Open observation for tag 4' })
+      .props.onPress(),
+  );
+  expect(engine.exportSession).not.toHaveBeenCalled();
+  expect(
+    NativeModules.ArchiveModule.previewSessionAtTime,
+  ).not.toHaveBeenCalled();
+  await act(async () =>
+    tree.root.findByType(FieldDefinitionsPanel).props.onDismiss(),
+  );
+  expect(engine.exportSession).toHaveBeenCalledWith('session-1');
+  expect(NativeModules.ArchiveModule.previewSessionAtTime).toHaveBeenCalledWith(
+    '/sessions/session-1',
+    1.125,
+  );
+  expect(NativeModules.ArchiveModule.previewSession).not.toHaveBeenCalled();
 });
 
 test('shares the reusable native MP4 from a finalized saved session', async () => {
@@ -2426,4 +2478,27 @@ test('floor tilt readout preserves detected tilt while identifying a leveled mea
   );
   expect(JSON.stringify(tree.toJSON())).toContain('Floor tilt unavailable');
   expect(JSON.stringify(tree.toJSON())).not.toContain('Floor tilt ≈0.0°');
+});
+
+test('live field status shows the current reason rather than a stale recorded warning', async () => {
+  engine.getStatus.mockResolvedValue({
+    recording: false,
+    tracking: 'normal',
+    field: {
+      packageId: 'frc-2026',
+      label: 'FRC 2026',
+      alignment: 'provisional',
+      reason: 'Aligned from tag 5; position remains assumed.',
+      warnings: ['An earlier tag had the wrong height.'],
+    },
+  });
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  expect(
+    tree.root.findByProps({
+      accessibilityLabel:
+        'Field alignment: provisional. Aligned from tag 5; position remains assumed.',
+    }),
+  ).toBeTruthy();
 });

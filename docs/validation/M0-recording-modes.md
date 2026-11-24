@@ -34,4 +34,12 @@ npm --prefix recording-format/npm test
 APRIL_BUILD_DIR=/tmp/april-recording-modes-build ./scripts/build-ios.sh --unsigned
 ```
 
-All test simulators are task-owned and deleted after their checks. No physical device was accessed or installed. Live camera throughput, physical storage reporting and a real walk reaching automatic-save thresholds remain hardware acceptance checks.
+All test simulators were task-owned and deleted after their checks. The initial validation above used no physical device. Live camera throughput, physical storage reporting and a real walk reaching automatic-save thresholds remain hardware acceptance checks.
+
+## Signed iPhone and iPad handoff
+
+At the user's request, **0.13.0 (36)** from clean source `f3f453efe67ac26058cf9b4922b90cc0a6007d6a` was signed with the existing local development identity and provisioning profile, then installed in place on the iPhone and iPad. The iPad was initially unavailable and completed after the user requested another Wi-Fi attempt.
+
+Both installed-app queries returned the expected version/build. Documents paths, sizes and directory flags matched before and after each installation, and each exact launched app process was verified running. No recording was created, altered or deleted; no screen capture or WDA/XCTest runner was started. Each physical session completed verified release with no errors. This establishes installation and launch, while the live recording acceptance checks above remain for a real walk.
+
+Private signing, installation, preservation and release evidence is retained under the local temporary `april-recording-modes-handoff-mjplitwh` directory. Device identifiers and lease tokens are excluded from this repository.

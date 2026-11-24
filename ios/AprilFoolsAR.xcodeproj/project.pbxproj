@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */; };
 		017EB8DE1F5B72D3F7B60A46 /* pnm.c in Sources */ = {isa = PBXBuildFile; fileRef = 2540CE28C05CEEFC3ABC83FF /* pnm.c */; };
 		01CAF493F029E80D5568F3C9 /* AprilTagOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A061FBB7AF5403E86AC3AC /* AprilTagOverlayView.swift */; };
 		0AE1D41CFDE400D554CB72B9 /* svd22.c in Sources */ = {isa = PBXBuildFile; fileRef = 322A348F58056FBE702D49EA /* svd22.c */; };
@@ -70,6 +69,7 @@
 		D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */; };
 		D67D403D684BB61E9B6F4FA1 /* pjpeg-idct.c in Sources */ = {isa = PBXBuildFile; fileRef = 65C702D6ED9CE0BC7E1265E1 /* pjpeg-idct.c */; };
 		DA27C35703607F1813578B2B /* pjpeg.c in Sources */ = {isa = PBXBuildFile; fileRef = D3479FBCC87B27EF6D2FDBD0 /* pjpeg.c */; };
+		DEF1DA5F7467E50C9C4127EB /* TagGravityOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */; };
 		E25CDE140876A1CCDA05B580 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = 9959BA1C7D343658916BEE71 /* NOTICE.md */; };
 		E3745BA9CBBD387DC7A94A7E /* release-notes.json in Resources */ = {isa = PBXBuildFile; fileRef = 3FD063604D0BCFCE34FDDB80 /* release-notes.json */; };
 		E5447352652A80E035CB8F29 /* workerpool.c in Sources */ = {isa = PBXBuildFile; fileRef = AF54B392AF6AF22FF9C87B16 /* workerpool.c */; };
@@ -79,7 +79,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagGravityOrientation.swift; path = ARCapture/TagGravityOrientation.swift; sourceTree = "<group>"; };
 		07C953581979F4BA05C64FBA /* SpatialProjection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpatialProjection.swift; path = ARCapture/SpatialProjection.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* AprilFoolsAR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AprilFoolsAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = AprilFoolsAR/Images.xcassets; sourceTree = "<group>"; };
@@ -104,6 +103,7 @@
 		48B4BB89ECEDBAAE5BFA9060 /* ArchiveModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArchiveModule.swift; path = ArchiveModule/ArchiveModule.swift; sourceTree = "<group>"; };
 		493908AED57E2288AFD6D880 /* image_u8_parallel.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8_parallel.c; path = common/image_u8_parallel.c; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-AprilFoolsAR.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AprilFoolsAR.release.xcconfig"; path = "Target Support Files/Pods-AprilFoolsAR/Pods-AprilFoolsAR.release.xcconfig"; sourceTree = "<group>"; };
+		5C7FF3418856ED718DC00C7B /* TagGravityOrientation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagGravityOrientation.swift; path = ARCapture/TagGravityOrientation.swift; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-AprilFoolsAR.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AprilFoolsAR.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DF00A1907A26462253BD5F7 /* getopt.c */ = {isa = PBXFileReference; includeInIndex = 1; name = getopt.c; path = common/getopt.c; sourceTree = "<group>"; };
 		636382146FA9AE4D734823C6 /* apriltag_quad_thresh.c */ = {isa = PBXFileReference; includeInIndex = 1; path = apriltag_quad_thresh.c; sourceTree = "<group>"; };
@@ -565,7 +565,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 32;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -580,7 +580,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.10.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -605,7 +605,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 32;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -619,7 +619,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.10.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

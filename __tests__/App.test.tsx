@@ -594,9 +594,7 @@ test('does not open a recording that is no longer finalized', async () => {
 });
 
 test('disables Play and Share for unfinished saved recordings', async () => {
-  engine.listSessions.mockResolvedValue([
-    { ...savedSession, finalized: false },
-  ]);
+  engine.listSessions.mockResolvedValue([{ ...savedSession, finalized: false }]);
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   await openSavedSessions();
   for (const action of ['Play', 'Share']) {
@@ -872,6 +870,11 @@ test('debug settings convert displayed millimeters and centimeters to native met
       .findByProps({ accessibilityLabel: 'Debug settings' })
       .props.onPress(),
   );
+  await act(async () =>
+    tree.root
+      .findByProps({ accessibilityLabel: 'Custom width' })
+      .props.onPress(),
+  );
   await act(async () => {
     tree.root
       .findByProps({ accessibilityLabel: 'Tag width (mm)' })
@@ -894,6 +897,7 @@ test('debug settings convert displayed millimeters and centimeters to native met
   expect(engine.setDebugSettings).toHaveBeenCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: 0.2,
+    tagSizeMode: 'custom',
     warningDepthDifferenceMeters: 0.08,
     rejectDepthDifferenceMeters: 0.12,
     distanceDeltaThresholdMeters: 0.215,
@@ -964,6 +968,7 @@ test('threshold-only edits preserve the full precision of an AR-measured width',
   engine.getDebugSettings.mockResolvedValue({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     tagSizeSource: 'ar-two-point-edge',
   });
   await act(async () => {
@@ -990,11 +995,12 @@ test('threshold-only edits preserve the full precision of an AR-measured width',
   expect(engine.setDebugSettings).toHaveBeenCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     maxDistanceMeters: 6,
   });
 });
 
-test('reset to FRC defaults replaces a measured width even when both display the same', async () => {
+test('reset to automatic defaults replaces a measured width even when both display the same', async () => {
   engine.getDebugSettings.mockResolvedValue({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: 0.16510000001,
@@ -1016,7 +1022,7 @@ test('reset to FRC defaults replaces a measured width even when both display the
   await act(async () =>
     tree.root
       .findByProps({
-        accessibilityLabel: 'Reset debug settings to FRC defaults',
+        accessibilityLabel: 'Reset debug settings to automatic defaults',
       })
       .props.onPress(),
   );
@@ -1033,6 +1039,7 @@ test('pose axes switch is opt-in and saves without rounding the measured tag wid
   engine.getDebugSettings.mockResolvedValue({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     tagSizeSource: 'ar-two-point-edge',
   });
   await act(async () => {
@@ -1057,6 +1064,7 @@ test('pose axes switch is opt-in and saves without rounding the measured tag wid
   expect(engine.setDebugSettings).toHaveBeenCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: measuredWidth,
+    tagSizeMode: 'custom',
     showPoseAxes: true,
   });
 });
@@ -1373,6 +1381,7 @@ test('English height units default on for legacy settings, cancel locally, and p
   const legacy = {
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: preciseWidth,
+    tagSizeMode: 'custom' as const,
     tagSizeSource: 'ar-two-point-edge',
   };
   delete legacy.showImperialHeight;
@@ -1425,6 +1434,7 @@ test('English height units default on for legacy settings, cancel locally, and p
   expect(engine.setDebugSettings).toHaveBeenLastCalledWith({
     ...DEFAULT_DEBUG_SETTINGS,
     tagSizeMeters: preciseWidth,
+    tagSizeMode: 'custom' as const,
     showImperialHeight: false,
   });
   expect(JSON.stringify(tree.toJSON())).toContain('142.0 cm');

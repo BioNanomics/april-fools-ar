@@ -98,10 +98,10 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         assertReadable()
     }
 
-    private func show(_ debug: [String: Any]?, frame: String = UUID().uuidString) {
+    private func show(_ debug: [String: Any]?, frame: String = UUID().uuidString, settings configured: TagDebugSettings? = nil) {
         panel.traitCollection.performAsCurrent {
             panel.show(debug: debug, frameID: frame, timestamp: ProcessInfo.processInfo.systemUptime,
-                       analysisHz: 29.7, latencyMilliseconds: 12, settings: settings)
+                       analysisHz: 29.7, latencyMilliseconds: 12, settings: configured ?? settings)
         }
         panel.setNeedsLayout(); panel.layoutIfNeeded()
     }
@@ -189,6 +189,77 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertTrue(labels().contains { ($0.text ?? "").contains("\nAge ") && ($0.text ?? "").contains("compute 12 ms") })
         assertReadable()
         try savePNG("panel-valid-390x290")
+    }
+
+    func testAutoSizeFooterUsesTheSelectedFTCWidthInsteadOfTheGlobalReferenceWidth() throws {
+        expandPanel()
+        var debug = validDebug()
+        debug["tagSizeMeters"] = 0.08255
+        debug["tagSizeSource"] = "sceneDepth-standard-match"
+        debug["tagSizeResolution"] = ["status": "selected", "source": "sceneDepth-standard-match",
+            "tagSizeMeters": 0.08255, "label": "FTC BIOBUZZ 3.25 in"]
+        show(debug)
+        let selectedWidth = String(format: "Edge %.1f mm", 82.55)
+        let footer = try XCTUnwrap(labels().first { ($0.text ?? "").contains(selectedWidth) })
+        XCTAssertTrue(footer.text?.contains("FTC") == true)
+        XCTAssertTrue(footer.text?.contains("Auto") == true)
+        XCTAssertFalse(labels().contains { isVisible($0) && ($0.text ?? "").contains("165.1 mm") })
+        assertReadable()
+        try savePNG("panel-auto-ftc-size-390x290")
+    }
+
+    func testUnavailableAutoSizeClearsThePreviousWidthAndDirectsTheUserToSettings() throws {
+        expandPanel()
+        var selected = validDebug()
+        selected["tagSizeMeters"] = 0.08255
+        selected["tagSizeSource"] = "sceneDepth-standard-match"
+        selected["tagSizeResolution"] = ["status": "selected", "source": "sceneDepth-standard-match",
+            "tagSizeMeters": 0.08255, "label": "FTC BIOBUZZ 3.25 in"]
+        show(selected)
+        var unavailable = validDebug()
+        unavailable["status"] = "sizeUnavailable"
+        unavailable["severity"] = "neutral"
+        unavailable["valid"] = false
+        unavailable["tagSizeMeters"] = NSNull()
+        unavailable["tagSizeResolution"] = ["status": "unavailable", "source": "sceneDepth-standard-match",
+            "tagSizeMeters": NSNull(), "label": "Auto", "reason": "Choose a tag width in Settings."]
+        for key in ["translationMeters", "eulerDegrees", "opticalPoseZMeters", "rangeMeters"] { unavailable[key] = NSNull() }
+        show(unavailable)
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Edge —") && ($0.text ?? "").contains("Auto") })
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Settings") })
+        XCTAssertFalse(labels().contains { isVisible($0) && (($0.text ?? "").contains("82.5 mm") || ($0.text ?? "").contains("82.6 mm") || ($0.text ?? "").contains("165.1 mm")) })
+        assertReadable()
+        try savePNG("panel-auto-size-unavailable-390x290")
+    }
+
+    func testExplicitCenterstageYearShowsPerIDWidthAndUnknownIDsCannotShowTheReferenceWidth() throws {
+        expandPanel()
+        let field = try settings.merging(["tagSizeMode": "ftc", "competitionYear": 2024])
+        var debug = validDebug()
+        debug["id"] = 7
+        debug["tagSizeMeters"] = 0.127
+        debug["tagSizeSource"] = "ftc-default"
+        debug["tagSizeResolution"] = ["status": "selected", "fieldType": "ftc", "competitionYear": 2024,
+            "source": "ftc-default", "tagSizeMeters": 0.127, "label": "FTC CENTERSTAGE 2024"]
+        show(debug, settings: field)
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Edge 127.0 mm (FTC 2024)") })
+        XCTAssertFalse(labels().contains { isVisible($0) && ($0.text ?? "").contains("50.8 mm") })
+        assertReadable()
+        try savePNG("panel-ftc-2024-large-tag-390x290")
+        debug["id"] = 42
+        debug["status"] = "sizeUnavailable"
+        debug["severity"] = "neutral"
+        debug["tagSizeMeters"] = NSNull()
+        debug["tagSizeResolution"] = ["status": "unavailable", "fieldType": "ftc", "competitionYear": 2024,
+            "source": "ftc-default", "tagSizeMeters": NSNull(), "label": "FTC CENTERSTAGE 2024"]
+        for key in ["translationMeters", "eulerDegrees", "opticalPoseZMeters", "rangeMeters"] { debug[key] = NSNull() }
+        show(debug, settings: field)
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Edge — (FTC 2024)") })
+        XCTAssertFalse(labels().contains { isVisible($0) && (($0.text ?? "").contains("50.8 mm") || ($0.text ?? "").contains("127.0 mm")) })
+        assertReadable()
+        try savePNG("panel-ftc-2024-unknown-tag-390x290")
+        show(nil, settings: field)
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("FTC 2024 · 29.7 Hz") })
     }
 
     func testAmbiguousAndMissingDepthStayReadable() throws {

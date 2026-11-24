@@ -8,15 +8,43 @@ enum TagDebugError: LocalizedError {
     var errorDescription: String? { if case .invalid(let text) = self { return text }; return nil }
 }
 
+enum TagFieldCatalog {
+    // FTC uses the season's ending year; FRC uses its calendar year.
+    static func referenceWidth(mode: String, year: Int) -> Double? {
+        if mode == "ftc" {
+            return [2024: 0.0508, 2025: 0.1016, 2026: 0.1651, 2027: 0.08255][year]
+        }
+        if mode == "frc", (2024...2026).contains(year) { return 0.1651 }
+        return nil
+    }
+    static func width(mode: String, year: Int, tagID: Int?) -> Double? {
+        if mode == "ftc", year == 2024 {
+            guard let tagID else { return nil }
+            if [7, 10].contains(tagID) { return 0.127 }
+            return [1, 2, 3, 4, 5, 6, 8, 9].contains(tagID) ? 0.0508 : nil
+        }
+        return referenceWidth(mode: mode, year: year)
+    }
+    static func label(mode: String, year: Int) -> String {
+        let games = mode == "ftc" ? [2024: "CENTERSTAGE", 2025: "INTO THE DEEP", 2026: "DECODE", 2027: "BIOBUZZ"] :
+            [2024: "CRESCENDO", 2025: "REEFSCAPE", 2026: "REBUILT"]
+        return "\(mode.uppercased()) \(games[year] ?? "") \(year)"
+    }
+}
+
 struct TagDebugSettings: Codable, Equatable {
-    var tagSizeMeters = 0.1651
+    static let frcTagSizeMeters = 0.1651
+    static let ftcTagSizeMeters = 0.08255 // BIOBUZZ black-border width, 3.25 inches.
+    var tagSizeMeters = frcTagSizeMeters
+    var tagSizeMode = "auto"
+    var competitionYear = 0
     var maxDistanceMeters = 5.0
     var maxPlaneAngleDegrees = 60.0
     var warningDepthDifferenceMeters = 0.10
     var rejectDepthDifferenceMeters = 0.15
     var distanceDeltaThresholdMeters = 0.15
     var maxReprojectionErrorPixels = 3.0
-    var tagSizeSource = "frc-default"
+    var tagSizeSource = "auto-default"
     var showPoseAxes = false
     var showImperialHeight = true
     var levelFloorWithGravity = false
@@ -24,7 +52,7 @@ struct TagDebugSettings: Codable, Equatable {
     static let tagSizeEvidenceKey = "AprilFoolsAR.TagSizeEvidence.v1"
 
     private enum CodingKeys: String, CodingKey {
-        case tagSizeMeters, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
+        case tagSizeMeters, tagSizeMode, competitionYear, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
         case rejectDepthDifferenceMeters, distanceDeltaThresholdMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes, showImperialHeight, levelFloorWithGravity
     }
     init() {}
@@ -38,14 +66,24 @@ struct TagDebugSettings: Codable, Equatable {
         rejectDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .rejectDepthDifferenceMeters) ?? rejectDepthDifferenceMeters
         distanceDeltaThresholdMeters = try values.decodeIfPresent(Double.self, forKey: .distanceDeltaThresholdMeters) ?? distanceDeltaThresholdMeters
         maxReprojectionErrorPixels = try values.decodeIfPresent(Double.self, forKey: .maxReprojectionErrorPixels) ?? maxReprojectionErrorPixels
-        tagSizeSource = try values.decodeIfPresent(String.self, forKey: .tagSizeSource) ?? tagSizeSource
+        tagSizeSource = try values.decodeIfPresent(String.self, forKey: .tagSizeSource) ?? "frc-default"
+        if let mode = try values.decodeIfPresent(String.self, forKey: .tagSizeMode) {
+            tagSizeMode = mode
+        } else if tagSizeSource == "frc-default", tagSizeMeters == Self.frcTagSizeMeters {
+            // Upgrade the former unconfigured FRC default; retain operator-supplied widths.
+            tagSizeMode = "auto"; tagSizeSource = "auto-default"
+        } else {
+            tagSizeMode = "custom"
+        }
+        competitionYear = try values.decodeIfPresent(Int.self, forKey: .competitionYear)
+            ?? (tagSizeMode == "ftc" ? 2027 : (tagSizeMode == "frc" ? 2026 : 0))
         showPoseAxes = try values.decodeIfPresent(Bool.self, forKey: .showPoseAxes) ?? false
         showImperialHeight = try values.decodeIfPresent(Bool.self, forKey: .showImperialHeight) ?? true
         levelFloorWithGravity = try values.decodeIfPresent(Bool.self, forKey: .levelFloorWithGravity) ?? false
     }
 
     var dictionary: [String: Any] {
-        ["tagSizeMeters": tagSizeMeters, "maxDistanceMeters": maxDistanceMeters,
+        ["tagSizeMeters": tagSizeMeters, "tagSizeMode": tagSizeMode, "competitionYear": competitionYear, "maxDistanceMeters": maxDistanceMeters,
          "maxPlaneAngleDegrees": maxPlaneAngleDegrees, "warningDepthDifferenceMeters": warningDepthDifferenceMeters,
          "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "distanceDeltaThresholdMeters": distanceDeltaThresholdMeters,
          "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
@@ -54,7 +92,24 @@ struct TagDebugSettings: Codable, Equatable {
     }
     func merging(_ changes: [String: Any]) throws -> TagDebugSettings {
         var result = self
+        let requestedMode: String?
+        if let value = changes["tagSizeMode"] {
+            guard let mode = value as? String, ["auto", "ftc", "frc", "custom"].contains(mode) else {
+                throw TagDebugError.invalid("Tag size mode must be auto, ftc, frc, or custom.")
+            }
+            requestedMode = mode
+        } else { requestedMode = nil }
+        let requestedYear: Int?
+        if let value = changes["competitionYear"] {
+            guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
+                  (0...9999).contains(number.doubleValue) else {
+                throw TagDebugError.invalid("Competition year must be a supported whole-number year, or 0 for Auto/custom.")
+            }
+            requestedYear = number.intValue
+        } else { requestedYear = nil }
         for (key, value) in changes {
+            if key == "tagSizeMode" || key == "competitionYear" { continue }
             if key == "showPoseAxes" || key == "showImperialHeight" || key == "levelFloorWithGravity" {
                 guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
                     throw TagDebugError.invalid("\(key) must be a boolean.")
@@ -70,7 +125,11 @@ struct TagDebugSettings: Codable, Equatable {
             let value = number.doubleValue
             switch key {
             case "tagSizeMeters":
-                if result.tagSizeMeters != value { result.tagSizeSource = "manual" }
+                if result.tagSizeMeters != value {
+                    result.tagSizeSource = "manual"
+                    result.tagSizeMode = "custom"
+                    result.competitionYear = 0
+                }
                 result.tagSizeMeters = value
             case "maxDistanceMeters": result.maxDistanceMeters = value
             case "maxPlaneAngleDegrees": result.maxPlaneAngleDegrees = value
@@ -81,7 +140,28 @@ struct TagDebugSettings: Codable, Equatable {
             default: throw TagDebugError.invalid("Unknown debug setting: \(key)")
             }
         }
+        if let mode = requestedMode {
+            result.tagSizeMode = mode
+            result.competitionYear = mode == tagSizeMode ? competitionYear : (mode == "ftc" ? 2027 : (mode == "frc" ? 2026 : 0))
+            if mode == "custom", tagSizeMode != "custom" { result.tagSizeSource = "manual" }
+        }
+        if let year = requestedYear { result.competitionYear = year }
+        if requestedMode != nil || requestedYear != nil {
+            switch result.tagSizeMode {
+            case "auto": result.tagSizeMeters = Self.frcTagSizeMeters; result.tagSizeSource = "auto-default"
+            case "ftc", "frc":
+                guard let width = TagFieldCatalog.referenceWidth(mode: result.tagSizeMode, year: result.competitionYear) else {
+                    throw TagDebugError.invalid("Choose a supported competition year for the selected field type.")
+                }
+                result.tagSizeMeters = width; result.tagSizeSource = "\(result.tagSizeMode)-default"
+            default: break
+            }
+        }
         guard (0.001...5).contains(result.tagSizeMeters), (0.05...50).contains(result.maxDistanceMeters),
+              ["auto", "ftc", "frc", "custom"].contains(result.tagSizeMode),
+              ((result.tagSizeMode == "custom" || result.tagSizeMode == "auto") ? result.competitionYear == 0 :
+                TagFieldCatalog.referenceWidth(mode: result.tagSizeMode, year: result.competitionYear) == result.tagSizeMeters),
+              (result.tagSizeMode != "auto" || result.tagSizeMeters == Self.frcTagSizeMeters),
               result.maxPlaneAngleDegrees > 0, result.maxPlaneAngleDegrees <= 90,
               result.warningDepthDifferenceMeters >= 0, result.rejectDepthDifferenceMeters > 0,
               result.warningDepthDifferenceMeters < result.rejectDepthDifferenceMeters, result.rejectDepthDifferenceMeters <= 10,
@@ -93,8 +173,7 @@ struct TagDebugSettings: Codable, Equatable {
     }
     static func load(from defaults: UserDefaults = .standard) -> TagDebugSettings {
         guard let data = defaults.data(forKey: defaultsKey), let saved = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
-        var numbers = saved.dictionary; numbers.removeValue(forKey: "tagSizeSource")
-        guard (try? Self().merging(numbers)) != nil else { return Self() }
+        guard (try? saved.merging([:])) != nil else { return Self() }
         return saved
     }
     func persist(to defaults: UserDefaults = .standard) {
@@ -129,6 +208,110 @@ struct TagDepthSamples {
 }
 
 enum TagDebugMath {
+    /// A decoded family/ID contains no physical scale or competition identity.
+    /// Compare independent same-frame optical LiDAR Z with a reference-size pose,
+    /// then select a supported nominal width separately for every detection.
+    static func resolveTagSize(_ detection: [String: Any], depth: TagDepthSamples,
+                               settings: TagDebugSettings, tracking: String) -> [String: Any] {
+        var result = detection
+        if settings.tagSizeMode != "auto" {
+            let explicitField = settings.tagSizeMode == "ftc" || settings.tagSizeMode == "frc"
+            let tagID = number(detection["id"]).flatMap { value -> Int? in
+                guard value >= 0, value <= 10000, value.rounded() == value else { return nil }; return Int(value)
+            }
+            guard let width = explicitField ? TagFieldCatalog.width(mode: settings.tagSizeMode, year: settings.competitionYear, tagID: tagID) : settings.tagSizeMeters else {
+                result.removeValue(forKey: "pose")
+                result["tagSizeResolution"] = ["status": "unavailable", "source": settings.tagSizeSource,
+                    "fieldType": settings.tagSizeMode, "competitionYear": settings.competitionYear,
+                    "tagSizeMeters": NSNull(), "label": TagFieldCatalog.label(mode: settings.tagSizeMode, year: settings.competitionYear),
+                    "reason": "Tag ID is not in the selected season's size map; choose the matching field/year or a custom width in Settings."]
+                return result
+            }
+            if let pose = detection["pose"] as? [String: Any] {
+                if let scaled = rescaledPose(pose, width: width, source: settings.tagSizeSource) { result["pose"] = scaled }
+                else { result.removeValue(forKey: "pose") }
+            }
+            let label = explicitField ? TagFieldCatalog.label(mode: settings.tagSizeMode, year: settings.competitionYear) :
+                (settings.tagSizeSource == "ar-two-point-edge" ? "AR estimate" : "manual")
+            result["tagSizeResolution"] = ["status": "selected", "source": settings.tagSizeSource,
+                "fieldType": settings.tagSizeMode, "competitionYear": explicitField ? settings.competitionYear as Any : NSNull(),
+                "tagSizeMeters": width, "label": label, "reason": explicitField ? "Operator-selected field type and competition year" : "Operator-selected tag width"]
+            return result
+        }
+        var evidence: [String: Any] = ["status": "unavailable", "source": "sceneDepth-standard-match",
+            "fieldType": "auto", "competitionYear": NSNull(),
+            "label": "Auto", "tagSizeMeters": NSNull(), "relativeTolerance": 0.10,
+            "centerDepthMeters": depth.centerDepthMeters.flatMap { $0.isFinite ? $0 : nil } as Any? ?? NSNull(),
+            "centerConfidence": depth.centerConfidence as Any? ?? NSNull()]
+        func unavailable(_ reason: String) -> [String: Any] {
+            result.removeValue(forKey: "pose")
+            evidence["reason"] = reason
+            result["tagSizeResolution"] = evidence
+            return result
+        }
+        guard tracking == "normal" else { return unavailable("Auto size needs normal AR tracking; choose a tag width in Settings.") }
+        guard depth.centerConfidence == 2, let lidarZ = depth.centerDepthMeters, lidarZ.isFinite,
+              lidarZ > 0, lidarZ <= settings.maxDistanceMeters else {
+            return unavailable("Auto size needs high-confidence LiDAR at the tag center; choose a tag width in Settings.")
+        }
+        guard var pose = detection["pose"] as? [String: Any],
+              let translation = numbers(pose["translation"], count: 3), translation[2] > 0,
+              let referenceWidth = number(pose["tagSizeMeters"]), referenceWidth > 0,
+              pose["ambiguous"] as? Bool == false,
+              let rms = number(pose["reprojectionRMSEPixels"]), rms >= 0, rms <= settings.maxReprojectionErrorPixels,
+              let angle = number(pose["planeAngleDegrees"]), angle >= 0, angle <= settings.maxPlaneAngleDegrees,
+              let margin = number(detection["decisionMargin"]), margin > 0,
+              number(detection["hamming"]) == 0 else {
+            return unavailable("Auto size needs a reliable, unambiguous tag pose; choose a tag width in Settings.")
+        }
+        let estimate = referenceWidth * lidarZ / translation[2]
+        guard estimate.isFinite, estimate > 0 else { return unavailable("Physical tag width could not be estimated.") }
+        evidence["estimatedEdgeMeters"] = estimate
+        evidence["referenceTagSizeMeters"] = referenceWidth
+        // FTC season widths; 6.5 inches is also used by FTC DECODE, so it is shared.
+        // Six-inch FTC sample prints need a separate candidate. Tighten the two
+        // nearby large sizes so a 6-inch print cannot silently become 6.5 inches.
+        let standards: [(Double, String, Double)] = [(0.0508, "FTC 2 in", 0.10), (0.08255, "FTC BIOBUZZ 3.25 in", 0.10),
+            (0.1016, "FTC 4 in", 0.10), (0.127, "FTC 5 in", 0.10),
+            (0.1524, "FTC sample 6 in", 0.03), (0.1651, "FRC / FTC 6.5 in", 0.03)]
+        let matches = standards.filter { abs(estimate - $0.0) / $0.0 <= $0.2 + 1e-12 }
+        guard matches.count == 1, let (width, label, tolerance) = matches.first else {
+            return unavailable("Tag width does not uniquely match a standard size; enter or measure it in Settings.")
+        }
+        // A uniform object scale leaves rotation, pixel residuals, pose-error ratio,
+        // and ambiguity unchanged. All metric pose fields must use the same scale.
+        guard let scaled = rescaledPose(pose, width: width, source: "sceneDepth-standard-match"),
+              let range = number(scaled["rangeMeters"]), range <= settings.maxDistanceMeters else {
+            return unavailable("Tag range exceeds the configured maximum for Auto size.")
+        }
+        pose = scaled
+        result["pose"] = pose
+        evidence["status"] = "selected"; evidence["tagSizeMeters"] = width; evidence["label"] = label
+        evidence["relativeTolerance"] = tolerance
+        evidence["reason"] = "Nominal width inferred from LiDAR; competition identity is not encoded by the tag."
+        result["tagSizeResolution"] = evidence
+        return result
+    }
+
+    private static func rescaledPose(_ pose: [String: Any], width: Double, source: String) -> [String: Any]? {
+        guard let reference = number(pose["tagSizeMeters"]), reference > 0, width.isFinite, width > 0,
+              let translation = numbers(pose["translation"], count: 3), translation[2] > 0 else { return nil }
+        let scale = width / reference
+        let scaledTranslation = translation.map { $0 * scale }
+        let range = hypot(hypot(scaledTranslation[0], scaledTranslation[1]), scaledTranslation[2])
+        guard scaledTranslation.allSatisfy(\.isFinite), range.isFinite else { return nil }
+        var result = pose
+        result["translation"] = scaledTranslation; result["rangeMeters"] = range
+        for key in ["poseError", "secondPoseError"] {
+            if let value = number(pose[key]) { result[key] = value * scale * scale }
+        }
+        if let separation = number(pose["candidateTranslationSeparationMeters"]) {
+            result["candidateTranslationSeparationMeters"] = separation * scale
+        }
+        result["tagSizeMeters"] = width; result["tagSizeSource"] = source
+        return result
+    }
+
     static func measuredTagSize(points: [[String: Any]], worldDistance: Double?, segmentID: String, tracking: String, frameAgeSeconds: Double) throws -> Double {
         let pointsUsable = points.allSatisfy {
             ($0["segmentId"] as? String) == segmentID && ($0["source"] as? String) == "sceneDepth"
@@ -215,7 +398,7 @@ enum TagDebugMath {
         }
         let severity = coreSeverity(quality.severity)
         let reasons = [reason]
-        let debug: [String: Any] = ["id": detection["id"] as Any? ?? NSNull(), "status": status, "severity": severity, "valid": status == "valid",
+        var debug: [String: Any] = ["id": detection["id"] as Any? ?? NSNull(), "status": status, "severity": severity, "valid": status == "valid",
             "reasons": reasons, "translationMeters": translation as Any? ?? NSNull(), "eulerDegrees": euler as Any? ?? NSNull(),
             "opticalPoseZMeters": poseZ as Any? ?? NSNull(), "rangeMeters": range as Any? ?? NSNull(),
             "planeAngleDegrees": plane as Any? ?? NSNull(), "centerBearingDegrees": bearing as Any? ?? NSNull(),
@@ -224,6 +407,15 @@ enum TagDebugMath {
             "meanDepthMeters": depth.meanDepthMeters as Any? ?? NSNull(), "centerConfidence": depth.centerConfidence as Any? ?? NSNull(),
             "validNeighborCount": depth.validNeighborCount, "depthDifferenceMeters": delta as Any? ?? NSNull(), "tracking": tracking,
             "angleConvention": "plane incidence normal-to-view; center bearing optical-axis offset", "coordinates": "camera optical +X right +Y down +Z forward"]
+        debug["tagSizeMeters"] = number(pose?["tagSizeMeters"]) as Any? ?? NSNull()
+        debug["tagSizeSource"] = pose?["tagSizeSource"] as Any? ?? settings.tagSizeSource
+        if let resolution = detection["tagSizeResolution"] as? [String: Any] {
+            debug["tagSizeResolution"] = resolution
+            if resolution["status"] as? String == "unavailable" {
+                debug["status"] = "sizeUnavailable"; debug["valid"] = false
+                debug["reasons"] = [resolution["reason"] as? String ?? "Choose a tag width in Settings."]
+            }
+        }
         result["depth"] = depth.dictionary; result["debug"] = debug
         return result
     }

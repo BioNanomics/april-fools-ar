@@ -253,6 +253,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let age = self.latestFrame.map { ProcessInfo.processInfo.systemUptime - $0.timestamp } ?? .infinity
                 let width = try TagDebugMath.measuredTagSize(points: self.points, worldDistance: distance, segmentID: self.segment, tracking: self.tracking, frameAgeSeconds: age)
                 var settings = try self.debugSettings.merging(["tagSizeMeters": width])
+                settings.tagSizeMode = "custom"
+                settings.competitionYear = 0
                 settings.tagSizeSource = "ar-two-point-edge"
                 self.updateDebugSettings(settings, source: "ar-two-point-edge", evidence: ["sourcePoints": self.points, "measuredEdgeMeters": width, "method": "Euclidean distance of two live sceneDepth world endpoints; no PnP-derived size"])
                 completion(.success(settings.dictionary))
@@ -855,7 +857,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 let detections = (result ?? []).map { detection -> [String: Any] in
                     let center = TagDebugMath.numbers(detection["center"], count: 2) ?? []
                     let depth = TagDebugMath.sampleDepth(depth: depthBuffer, confidence: confidenceBuffer, center: center, imageWidth: width, imageHeight: height)
-                    let enriched = TagDebugMath.enrich(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                    let sized = TagDebugMath.resolveTagSize(detection, depth: depth, settings: settings, tracking: sourceTracking)
+                    let enriched = TagDebugMath.enrich(sized, depth: depth, settings: settings, tracking: sourceTracking)
                     let ranged = TagCameraRanges.enrich(enriched, context: TagCameraRangesContext(intrinsics: k,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp))
                     let oriented = TagGravityOrientation.enrich(ranged, context: TagGravityOrientationContext(

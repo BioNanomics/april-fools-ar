@@ -170,7 +170,11 @@ final class TagDebugPanelView: UIView {
         guard age.isFinite, age <= 0.4 else { showUnavailable("Stale result · waiting for a current frame"); return }
         guard let debug else {
             showUnavailable("No tag in the current camera frame")
-            expandedRateText = String(format: "Edge %.1f mm · %.1f Hz\nFrame age %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
+            let edge: String
+            if settings.tagSizeMode == "auto" { edge = "Field Auto" }
+            else if settings.tagSizeMode == "ftc" || settings.tagSizeMode == "frc" { edge = "\(settings.tagSizeMode.uppercased()) \(settings.competitionYear)" }
+            else { edge = String(format: "Edge %.1f mm", settings.tagSizeMeters * 1000) }
+            expandedRateText = String(format: "%@ · %.1f Hz\nFrame age %.0f ms · compute %.0f ms", edge,
                 analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
             compactRateText = String(format: "%.1f Hz · age %.0f ms", analysisHz.isFinite ? analysisHz : 0,
                 max(0, age) * 1000)
@@ -183,7 +187,7 @@ final class TagDebugPanelView: UIView {
         let titles = ["valid": "VALID", "tooFar": "TOO FAR", "badAngle": "BAD ANGLE",
             "depthMismatch": severity == "warning" ? "CHECK DEPTH" : "DEPTH MISMATCH",
             "missingDepth": "MISSING DEPTH", "ambiguous": "AMBIGUOUS", "lowConfidence": "LOW CONFIDENCE",
-            "trackingLimited": "TRACKING LIMITED", "poseUnavailable": "POSE UNAVAILABLE"]
+            "trackingLimited": "TRACKING LIMITED", "poseUnavailable": "POSE UNAVAILABLE", "sizeUnavailable": "SET TAG SIZE"]
         let id = (debug["id"] as? NSNumber)?.intValue ?? -1
         compactTitleText = "TAG #\(id) · \(titles[status] ?? status.uppercased())"
         expandedTitleText = compactTitleText
@@ -232,9 +236,25 @@ final class TagDebugPanelView: UIView {
         let confidenceText = confidence.map { ["LOW", "MED", "HIGH"].indices.contains($0) ? ["LOW", "MED", "HIGH"][$0] : "?" } ?? "—"
         meanLabel.text = "3×3 mean \(scalar("meanDepthMeters")) m · \(confidenceText) · \(scalar("validNeighborCount", "%.0f"))/9"
         qualityLabel.text = "RMS \(scalar("reprojectionRMSEPixels", "%.2f"))px · margin \(scalar("decisionMargin", "%.1f")) · H\(scalar("hamming", "%.0f"))"
-        let source = settings.tagSizeSource == "ar-two-point-edge" ? "AR estimate" : (settings.tagSizeSource == "frc-default" ? "FRC" : "manual")
-        expandedRateText = String(format: "Edge %.1f mm (%@) · %.1f Hz\nAge %.0f ms · compute %.0f ms", settings.tagSizeMeters * 1000,
-            source, analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
+        let resolution = debug["tagSizeResolution"] as? [String: Any]
+        let width = resolution?["status"] as? String == "unavailable" ? nil :
+            (TagDebugMath.number(debug["tagSizeMeters"]) ?? TagDebugMath.number(resolution?["tagSizeMeters"])
+                ?? (settings.tagSizeMode == "auto" ? nil : settings.tagSizeMeters))
+        let sourceKey = debug["tagSizeSource"] as? String ?? settings.tagSizeSource
+        let source: String
+        if sourceKey == "sceneDepth-standard-match" {
+            let label = resolution?["label"] as? String ?? ""
+            source = label.contains("FRC") ? "Auto · FRC/FTC" : "Auto · FTC"
+        } else if settings.tagSizeMode == "auto" { source = "Auto" }
+        else if sourceKey == "ar-two-point-edge" { source = "AR estimate" }
+        else if sourceKey == "ftc-default" || sourceKey == "frc-default" {
+            source = "\(settings.tagSizeMode.uppercased()) \(settings.competitionYear)"
+        }
+        else { source = "manual" }
+        let edge = width.map { String(format: "Edge %.1f mm (%@)", $0 * 1000, source) } ?? "Edge — (\(source))"
+        expandedRateText = String(format: "%@ · %.1f Hz\nAge %.0f ms · compute %.0f ms", edge,
+            analysisHz.isFinite ? analysisHz : 0, max(0, age) * 1000, latencyMilliseconds ?? 0)
+        if status == "sizeUnavailable" { meanLabel.text = "Choose a preset or measured width in Settings" }
         compactRateText = String(format: "%.1f Hz · age %.0f ms", analysisHz.isFinite ? analysisHz : 0,
             max(0, age) * 1000)
         if let heightSource {

@@ -27,10 +27,12 @@
 		2EA8D21D0E15F01DD5B5C910 /* string_util.c in Sources */ = {isa = PBXBuildFile; fileRef = 8B743D7F395310A75BDE0593 /* string_util.c */; };
 		313464C10DE6FE2B48D4BE03 /* version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1AC29C7674788D7D0DE7FCF9 /* version.cpp */; };
 		326ED390E11DA8D6135C4FCC /* FloorBaseMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E57732AE93418E5DC1A8611 /* FloorBaseMarker.swift */; };
+		33F680C00698E0AD1AA1CAF6 /* TagMetricGlossaryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 201687EE0F5AF14A4DEE539E /* TagMetricGlossaryViewController.swift */; };
 		34C7BC10A1B2909961E81174 /* g2d.c in Sources */ = {isa = PBXBuildFile; fileRef = 3E65C29D4D082A77C20F9142 /* g2d.c */; };
 		357ABBDD1218E6353FF2B9D8 /* RecordingPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */; };
 		3A8785E1028B93B1DB2BB653 /* HeightDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2A6AE978282E6F0BA7848C /* HeightDisplayFormatter.swift */; };
 		3C87CD1F0004CC33310D9655 /* SpatialProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C953581979F4BA05C64FBA /* SpatialProjection.swift */; };
+		3FA9BC24B5703706788F26E2 /* MetricGlossaryLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1821430D80622512DAB7F71 /* MetricGlossaryLabel.swift */; };
 		40B3ADBE9B5EC5EEAEEDDD59 /* AFTagCore.c in Sources */ = {isa = PBXBuildFile; fileRef = E8B8A96D63698D4255EFFE75 /* AFTagCore.c */; };
 		419292C85561BB538BB90DF3 /* AFTagPoseConventions.c in Sources */ = {isa = PBXBuildFile; fileRef = F21D57571BFFC7949DCB1D41 /* AFTagPoseConventions.c */; };
 		470CF29463DF079EA40F9288 /* TagReadoutFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F0FC8935F8289FB9623CB5 /* TagReadoutFilter.swift */; };
@@ -93,6 +95,7 @@
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = AprilFoolsAR/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		13B0AD0700A69FF9735B2B07 /* TagFloorHeight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagFloorHeight.swift; path = ARCapture/TagFloorHeight.swift; sourceTree = "<group>"; };
 		1AC29C7674788D7D0DE7FCF9 /* version.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = version.cpp; path = SpatialCore/src/version.cpp; sourceTree = "<group>"; };
+		201687EE0F5AF14A4DEE539E /* TagMetricGlossaryViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagMetricGlossaryViewController.swift; path = ARCapture/TagMetricGlossaryViewController.swift; sourceTree = "<group>"; };
 		243818E4794C7EE0D5DA109D /* SavedRecordingStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SavedRecordingStore.swift; path = ArchiveModule/SavedRecordingStore.swift; sourceTree = "<group>"; };
 		2540CE28C05CEEFC3ABC83FF /* pnm.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pnm.c; path = common/pnm.c; sourceTree = "<group>"; };
 		2597B3319AD2D1C5517C152B /* pthreads_cross.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pthreads_cross.c; path = common/pthreads_cross.c; sourceTree = "<group>"; };
@@ -157,6 +160,7 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EEB15E8399E340DB97D2B81C /* RecordingPreview.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RecordingPreview.swift; path = ArchiveModule/RecordingPreview.swift; sourceTree = "<group>"; };
 		EEB2EF0D8CBAF081733145FB /* geometry.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; name = geometry.cpp; path = SpatialCore/src/geometry.cpp; sourceTree = "<group>"; };
+		F1821430D80622512DAB7F71 /* MetricGlossaryLabel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetricGlossaryLabel.swift; path = ARCapture/MetricGlossaryLabel.swift; sourceTree = "<group>"; };
 		F21D57571BFFC7949DCB1D41 /* AFTagPoseConventions.c */ = {isa = PBXFileReference; includeInIndex = 1; name = AFTagPoseConventions.c; path = AprilTag/AFTagPoseConventions.c; sourceTree = "<group>"; };
 		F269F8B9838764E8C24FDF92 /* PreviewZoom.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PreviewZoom.swift; path = ARCapture/PreviewZoom.swift; sourceTree = "<group>"; };
 		F65F24E17F0D91A4485AC78B /* image_u8.c */ = {isa = PBXFileReference; includeInIndex = 1; name = image_u8.c; path = common/image_u8.c; sourceTree = "<group>"; };
@@ -245,6 +249,8 @@
 				98EFF00BBB8C0C29F0ED6EA4 /* FieldTextCodec.swift */,
 				B39EEE6DE4D81A82F329537E /* fields.cpp */,
 				F21D57571BFFC7949DCB1D41 /* AFTagPoseConventions.c */,
+				F1821430D80622512DAB7F71 /* MetricGlossaryLabel.swift */,
+				201687EE0F5AF14A4DEE539E /* TagMetricGlossaryViewController.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -342,6 +348,7 @@
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
 				7FAFC1E0E9E1549DD5923002 /* Stamp app build metadata */,
 				0DBCB18EF24EC7F4B6AF6D99 /* Bundle field definitions */,
+				B5E319444D14ACA23CF6959A /* Bundle measurement glossary */,
 			);
 			buildRules = (
 			);
@@ -485,6 +492,28 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\nruby \"$SRCROOT/../scripts/bundle-legal.rb\" --check\n/bin/bash \"$SRCROOT/../scripts/stamp-build-info.sh\"";
 		};
+		B5E319444D14ACA23CF6959A /* Bundle measurement glossary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../scripts/bundle-metric-glossary.rb",
+				"$(SRCROOT)/../docs/tag-metric-glossary.md",
+			);
+			name = "Bundle measurement glossary";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/MetricGlossary",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nruby \"$SRCROOT/../scripts/bundle-metric-glossary.rb\" --output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/MetricGlossary\"";
+		};
 		C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -599,6 +628,8 @@
 				50B4567814FDA2B8A4C537AE /* FieldTextCodec.swift in Sources */,
 				A1F63622C42A35C4EA9D66F2 /* fields.cpp in Sources */,
 				419292C85561BB538BB90DF3 /* AFTagPoseConventions.c in Sources */,
+				3FA9BC24B5703706788F26E2 /* MetricGlossaryLabel.swift in Sources */,
+				33F680C00698E0AD1AA1CAF6 /* TagMetricGlossaryViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

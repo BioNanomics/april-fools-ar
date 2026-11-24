@@ -48,6 +48,9 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt 0.0° · Twist +0.0°")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("zero degrees is a vertical tag plane") == true)
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("positive is clockwise") == true)
+        XCTAssertTrue(try glossaryLink("tilt").accessibilityValue?.contains("zero degrees is a vertical tag plane") == true,
+                      "The accessible link must retain the reading's meaning")
+        XCTAssertTrue(try glossaryLink("twist").accessibilityValue?.contains("positive is clockwise") == true)
         _ = try label("Cam roll · °")
         _ = try label("Cam pitch · °")
         _ = try label("Cam yaw · °")
@@ -63,10 +66,14 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         show(debug)
         XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt 90.0° · Twist —")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("horizontal tag plane") == true)
+        XCTAssertTrue(try glossaryLink("twist").accessibilityValue?.contains("horizontal tag plane") == true,
+                      "VoiceOver must explain why horizontal-plane twist is unavailable")
         debug["gravityOrientation"] = ["available": false, "reason": "trackingLimited", "tiltFromVerticalDegrees": 12.0, "twistDegrees": 3.0]
         show(debug)
         XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("trackingLimited") == true)
+        XCTAssertTrue(try glossaryLink("tilt").accessibilityValue?.contains("trackingLimited") == true)
+        XCTAssertTrue(try glossaryLink("twist").accessibilityValue?.contains("trackingLimited") == true)
         debug.removeValue(forKey: "gravityOrientation")
         show(debug)
         XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
@@ -215,6 +222,33 @@ final class TagDebugPanelUIKitTests: XCTestCase {
             $0.accessibilityIdentifier == "tagDebugDetailsButton"
         })
     }
+    private func glossaryLinks() -> [UIButton] {
+        allViews(panel).compactMap { $0 as? UIButton }.filter {
+            ($0.accessibilityIdentifier ?? "").hasPrefix("tagMetricHelp-") && isVisible($0) &&
+                !$0.bounds.isEmpty
+        }
+    }
+    private func glossaryLink(_ anchor: String, named title: String? = nil) throws -> UIButton {
+        try XCTUnwrap(glossaryLinks().first {
+            $0.accessibilityIdentifier == "tagMetricHelp-\(anchor)" &&
+                (title == nil || $0.accessibilityLabel == "Definition of " + title!)
+        }, "Missing visible glossary link: \(anchor) \(title ?? "")")
+    }
+    private func assertWidthLinksOpenDefinition(_ titles: [String], file: StaticString = #filePath, line: UInt = #line) throws {
+        var opened = [String]()
+        panel.onOpenGlossary = { opened.append($0) }
+        for title in titles {
+            let link = try glossaryLink("edge", named: title)
+            XCTAssertTrue(link.accessibilityTraits.contains(.link), file: file, line: line)
+            let frame = link.convert(link.bounds, to: panel)
+            let hit = panel.hitTest(CGPoint(x: frame.midX, y: frame.midY), with: nil)
+            XCTAssertTrue(hit === link || hit?.isDescendant(of: link) == true,
+                          "\(title) must receive its own visible term tap", file: file, line: line)
+            link.sendActions(for: .touchUpInside)
+            XCTAssertEqual(opened.last, "edge", file: file, line: line)
+        }
+        XCTAssertEqual(opened.count, titles.count, file: file, line: line)
+    }
     private func label(_ text: String) throws -> UILabel {
         try XCTUnwrap(labels().first { $0.text == text && isVisible($0) }, "Missing visible value: \(text)")
     }
@@ -295,6 +329,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertTrue(footer.text?.contains("Auto") == true)
         XCTAssertFalse(labels().contains { isVisible($0) && ($0.text ?? "").contains("165.1 mm") })
         assertReadable()
+        try assertWidthLinksOpenDefinition(["Edge", "Tag width source", "Field type"])
         try savePNG("panel-auto-ftc-size-390x290")
     }
 
@@ -319,6 +354,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Settings") })
         XCTAssertFalse(labels().contains { isVisible($0) && (($0.text ?? "").contains("82.5 mm") || ($0.text ?? "").contains("82.6 mm") || ($0.text ?? "").contains("165.1 mm")) })
         assertReadable()
+        try assertWidthLinksOpenDefinition(["Edge", "Tag width source", "Tag width preset", "Measured tag width", "Tag width settings"])
         try savePNG("panel-auto-size-unavailable-390x290")
     }
 
@@ -335,6 +371,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Edge 127.0 mm (FTC 2024)") })
         XCTAssertFalse(labels().contains { isVisible($0) && ($0.text ?? "").contains("50.8 mm") })
         assertReadable()
+        try assertWidthLinksOpenDefinition(["Edge", "Field type", "Competition year"])
         try savePNG("panel-ftc-2024-large-tag-390x290")
         debug["id"] = 42
         debug["status"] = "sizeUnavailable"
@@ -350,6 +387,14 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         try savePNG("panel-ftc-2024-unknown-tag-390x290")
         show(nil, settings: field)
         XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("FTC 2024 · 29.7 Hz") })
+        try assertWidthLinksOpenDefinition(["Field type", "Competition year"])
+        let frc = try settings.merging(["tagSizeMode": "frc", "competitionYear": 2026])
+        show(nil, settings: frc)
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("FRC 2026 · 29.7 Hz") })
+        try assertWidthLinksOpenDefinition(["Field type", "Competition year"])
+        show(nil)
+        XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Field Auto · 29.7 Hz") })
+        try assertWidthLinksOpenDefinition(["Tag width source"])
     }
 
     func testAmbiguousAndMissingDepthStayReadable() throws {
@@ -479,9 +524,10 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertFalse(panel.isExpanded)
     }
 
-    func testOnly44PointDetailsButtonInterceptsTouches() throws {
+    func testOnlyDisclosureAndExpandedGlossaryLinksInterceptTouches() throws {
         for expanded in [false,true] {
             panel.setExpanded(expanded); resizePanel(to:panel.preferredHeight)
+            show(validDebug())
             let button=try detailsButton()
             XCTAssertGreaterThanOrEqual(button.bounds.width,44)
             XCTAssertGreaterThanOrEqual(button.bounds.height,44)
@@ -490,16 +536,83 @@ final class TagDebugPanelUIKitTests: XCTestCase {
             let center=CGPoint(x:buttonFrame.midX,y:buttonFrame.midY)
             let hit=try XCTUnwrap(panel.hitTest(center,with:nil))
             XCTAssertTrue(hit === button || hit.isDescendant(of:button))
-            // All metric/title/background taps must continue to the camera view.
+            // Expanded labels own their links; remaining taps continue to tag selection.
+            let linkFrames = glossaryLinks().map { $0.convert($0.bounds, to: panel) }
+            if !expanded { XCTAssertTrue(linkFrames.isEmpty, "Compact telemetry must keep camera touch passthrough") }
             for y in stride(from:CGFloat(5),to:panel.bounds.height,by:17) {
                 for x in stride(from:CGFloat(5),to:panel.bounds.width,by:23) {
                     let point=CGPoint(x:x,y:y)
-                    if !buttonFrame.contains(point) {
+                    if !buttonFrame.contains(point) && !linkFrames.contains(where: { $0.contains(point) }) {
                         XCTAssertNil(panel.hitTest(point,with:nil),"Panel swallowed camera tap at \(point)")
                     }
                 }
             }
         }
+    }
+
+    func testEachMetricHeadingOpensItsOwnDefinitionAndExposesLinkAccessibility() throws {
+        expandPanel()
+        show(validDebug())
+        var opened = [String]()
+        panel.onOpenGlossary = { opened.append($0) }
+        let anchors = ["x-right", "y-down", "z-forward", "camera-roll", "camera-pitch", "camera-yaw",
+                       "gravity", "tilt", "twist", "pnp-z", "lidar-z", "delta-z", "distance", "plane", "bearing",
+                       "depth-mean", "depth-confidence", "depth-neighbors", "rms", "decision-margin", "hamming",
+                       "edge", "analysis-rate", "frame-age", "compute-time"]
+        for anchor in anchors {
+            let link = try glossaryLink(anchor)
+            XCTAssertTrue(link.accessibilityTraits.contains(.link), "\(anchor) must expose a native link role")
+            XCTAssertFalse((link.accessibilityLabel ?? "").isEmpty)
+            XCTAssertFalse((link.accessibilityHint ?? "").isEmpty)
+            let frame = link.convert(link.bounds, to: panel)
+            XCTAssertTrue(panel.bounds.contains(frame), "\(anchor) link must fit its visible label")
+            let hit = panel.hitTest(CGPoint(x: frame.midX, y: frame.midY), with: nil)
+            XCTAssertTrue(hit === link || hit?.isDescendant(of: link) == true, "\(anchor) must receive its label tap")
+            link.sendActions(for: .touchUpInside)
+            XCTAssertEqual(opened.last, anchor)
+        }
+        XCTAssertEqual(opened, anchors)
+        XCTAssertTrue(try glossaryLink("tilt").accessibilityActivate(), "VoiceOver must be able to open a term")
+        XCTAssertEqual(opened.last, "tilt")
+        XCTAssertTrue(panel.isExpanded, "Definition navigation must preserve the expanded readout")
+        for text in ["+0.123", "1.234", "28.4"] {
+            let value = try label(text)
+            let frame = value.convert(value.bounds, to: panel)
+            XCTAssertNil(panel.hitTest(CGPoint(x: frame.midX, y: frame.midY), with: nil),
+                         "Raw measurement values must retain camera passthrough")
+        }
+    }
+
+    func testIdentityAndHeightSourceLabelsOpenMatchingDefinitions() throws {
+        expandPanel()
+        var debug = validDebug()
+        debug["floorHeight"] = ["available": true, "meters": 1.42, "source": "sceneDepth"]
+        show(debug)
+        var opened = [String]()
+        panel.onOpenGlossary = { opened.append($0) }
+        for anchor in ["tag-id", "status", "height", "height-source", "units"] {
+            try glossaryLink(anchor).sendActions(for: .touchUpInside)
+            XCTAssertEqual(opened.last, anchor)
+        }
+    }
+
+    func testDefinitionsRemainAvailableWithMissingMeasurementsAndNoTagTelemetry() throws {
+        expandPanel()
+        panel.showUnavailable("Waiting for a visible tag")
+        panel.layoutIfNeeded()
+        var opened = [String]()
+        panel.onOpenGlossary = { opened.append($0) }
+        for anchor in ["tilt", "twist", "pnp-z", "lidar-z", "delta-z", "plane", "bearing"] {
+            try glossaryLink(anchor).sendActions(for: .touchUpInside)
+            XCTAssertEqual(opened.last, anchor)
+        }
+        show(nil)
+        for anchor in ["edge", "analysis-rate", "frame-age", "compute-time"] {
+            try glossaryLink(anchor).sendActions(for: .touchUpInside)
+            XCTAssertEqual(opened.last, anchor)
+        }
+        XCTAssertFalse(glossaryLinks().contains { $0.accessibilityIdentifier == "tagMetricHelp-decision-margin" },
+                       "The waiting instruction must not retain stale decoder links")
     }
 
     func testLongStatusesRemainReadableInCompactAndExpanded() throws {
@@ -574,7 +687,8 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         resizePanel(to: panel.preferredHeight)
         XCTAssertFalse(scroll.isScrollEnabled)
         XCTAssertEqual(scroll.contentOffset, .zero, "Growing the viewport must restore all metric rows")
-        XCTAssertNil(panel.hitTest(CGPoint(x: 20, y: 100), with: nil), "Unconstrained readout returns taps to tag selection")
+        XCTAssertNil(panel.hitTest(CGPoint(x: panel.bounds.width - 4, y: 100), with: nil),
+                     "Unconstrained panel background returns taps to tag selection")
         scroll.contentOffset.y = -12
         panel.setNeedsLayout(); panel.layoutIfNeeded()
         XCTAssertEqual(scroll.contentOffset, .zero, "Resize cannot retain an overscrolled offset")

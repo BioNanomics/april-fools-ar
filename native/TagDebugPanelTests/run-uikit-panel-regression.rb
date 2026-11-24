@@ -36,10 +36,17 @@ host = project.new_target(:application, 'PanelTestHost', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'TagDebugPanelRegressionTests', :ios, '17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 ['native/ARCapture/TagDebugPanelView.swift', 'native/ARCapture/TagDebugMath.swift',
+ 'native/ARCapture/MetricGlossaryLabel.swift', 'native/ARCapture/TagMetricGlossaryViewController.swift',
  'native/ARCapture/HeightDisplayFormatter.swift', 'native/ARCapture/TagReadoutFilter.swift',
- 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift'].each do |relative|
+ 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift',
+ 'native/TagDebugPanelTests/TagMetricGlossaryUIKitTests.swift'].each do |relative|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(root,relative)))
 end
+glossary_resources = File.join(work, 'MetricGlossary')
+system('ruby', File.join(root, 'scripts/bundle-metric-glossary.rb'), '--output', glossary_resources, exception: true)
+glossary_reference = project.main_group.new_file(glossary_resources)
+glossary_reference.last_known_file_type = 'folder'
+host.resources_build_phase.add_file_reference(glossary_reference)
 tests.add_dependency(host)
 project.targets.each do |target|
   target.build_configurations.each do |config|
@@ -75,12 +82,12 @@ puts command.shelljoin
 $stdout.flush
 log = File.join(work,'xcodebuild.log')
 success = system(*command,out:log,err:[:child,:out])
-puts File.readlines(log).select { |line| line.match?(/error:|Test Case|Executed |\*\* TEST|Testing failed|PANEL_PNG|uncaught exception/) }.last(100).join
+puts File.readlines(log).select { |line| line.match?(/error:|Test Case|Executed |\*\* TEST|Testing failed|(?:PANEL|GLOSSARY)_PNG|uncaught exception/) }.last(100).join
 artifacts = File.join(work,'artifacts')
 FileUtils.mkdir_p(artifacts)
 # xcodebuild may shut the simulator down before returning; use exact paths
 # emitted by our test rather than requiring an actively booted container lookup.
-File.readlines(log).map { |line| line[/PANEL_PNG (.+\.png)/,1] }.compact.uniq.each do |file|
+File.readlines(log).map { |line| line[/(?:PANEL|GLOSSARY)_PNG (.+\.png)/,1] }.compact.uniq.each do |file|
   FileUtils.cp(file,artifacts) if File.file?(file)
 end
 puts "PNG artifacts: #{artifacts}"

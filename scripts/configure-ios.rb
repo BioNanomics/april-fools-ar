@@ -28,6 +28,14 @@ field_phase.shell_script = "set -e\nruby \"$SRCROOT/../scripts/field-definitions
 field_phase.input_paths = ['$(SRCROOT)/../fields/catalog.yaml', '$(SRCROOT)/../fields/size-standards.yaml', '$(SRCROOT)/../scripts/field-definitions/field_tool.rb']
 field_phase.output_paths = ['$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FieldDefinitions/catalog.json']
 field_phase.always_out_of_date = '1'
+glossary_phase = target.shell_script_build_phases.find { |phase| phase.name == 'Bundle measurement glossary' }
+glossary_phase ||= target.new_shell_script_build_phase('Bundle measurement glossary')
+glossary_phase.shell_script = "set -e\nruby \"$SRCROOT/../scripts/bundle-metric-glossary.rb\" --output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/MetricGlossary\""
+glossary_phase.input_paths = ['$(SRCROOT)/../scripts/bundle-metric-glossary.rb', '$(SRCROOT)/../docs/tag-metric-glossary.md']
+# Always run so edits, additions and removals of Markdown diagram references are
+# reflected without regenerating the Xcode project first.
+glossary_phase.output_paths = ['$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/MetricGlossary']
+glossary_phase.always_out_of_date = '1'
 notes = project.main_group.files.find { |file| file.path == '../release-notes.json' } || project.main_group.new_file('../release-notes.json')
 target.resources_build_phase.add_file_reference(notes, true)
 native = project.main_group.groups.find { |group| group.name == 'Native' }

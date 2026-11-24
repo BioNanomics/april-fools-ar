@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="465" viewBox="0 0 640 465" role="img" aria-labelledby="title desc">
+  <title id="title">The 3-by-3 scene-depth neighborhood</title>
+  <desc id="desc">Nine squares around the detected center pixel contain seven accepted depth samples and two rejected samples. Accepted center and neighbors contribute to the mean; rejected LOW confidence, invalid or missing samples do not. The center depth is checked separately for LiDAR Z.</desc>
+  <rect width="640" height="465" rx="18" fill="#f4f7fb"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
+    <text x="28" y="40" font-size="25" font-weight="700">3×3 mean and center confidence</text>
+    <text x="28" y="71" font-size="19" fill="#465873">Example only: seven accepted depth samples</text>
+    <g stroke="#8b9aaf" stroke-width="2">
+      <path d="M40 102H119V181H40ZM126 102H205V181H126ZM212 102H291V181H212Z" fill="#dcf0e5"/>
+      <path d="M40 188H119V267H40Z" fill="#f8e2df"/>
+      <path d="M126 188H205V267H126Z" fill="#e1edfc" stroke="#2563b8" stroke-width="5"/>
+      <path d="M212 188H291V267H212ZM40 274H119V353H40ZM126 274H205V353H126Z" fill="#dcf0e5"/>
+      <path d="M212 274H291V353H212Z" fill="#f8e2df"/>
+    </g>
+    <g font-size="24" text-anchor="middle">
+      <text x="80" y="151">2.01</text><text x="166" y="151">2.02</text><text x="252" y="151">2.00</text>
+      <text x="80" y="238">×</text><text x="166" y="238" font-weight="700">2.01</text><text x="252" y="238">2.03</text>
+      <text x="80" y="324">2.00</text><text x="166" y="324">1.99</text><text x="252" y="324">×</text>
+    </g>
+    <text x="334" y="136" font-size="22" font-weight="600">Accepted (green)</text>
+    <text x="334" y="167" font-size="20">Finite, positive depth</text>
+    <text x="334" y="194" font-size="20">MED or HIGH confidence</text>
+    <text x="334" y="241" font-size="22" font-weight="600" fill="#2563b8">Center (blue)</text>
+    <text x="334" y="272" font-size="20">Used separately for LiDAR Z</text>
+    <text x="334" y="319" font-size="22" font-weight="600">Rejected (×)</text>
+    <text x="334" y="350" font-size="20">Excluded from the mean</text>
+    <text x="28" y="407" font-size="21">3×3 mean = sum of seven depths / 7 ≈ 2.009 m</text>
+    <text x="28" y="439" font-size="21">n/9 = 7/9. Center confidence is a separate category.</text>
+  </g>
+</svg>

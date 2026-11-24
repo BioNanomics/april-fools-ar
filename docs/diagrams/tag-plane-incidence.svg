@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="455" viewBox="0 0 640 455" role="img" aria-labelledby="title desc">
+  <title id="title">Plane incidence differs from center bearing</title>
+  <desc id="desc">A top-view schematic has a camera at left and a slanted tag surface at right. Bearing is at the camera between the forward optical axis and the line to the tag. Plane incidence is at the tag between the direction to the camera and a perpendicular surface normal. Plane zero is a head-on view; ninety is edge-on.</desc>
+  <defs><marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L7 4L0 8" fill="#2563b8"/></marker><marker id="gray" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L7 4L0 8" fill="#465873"/></marker></defs>
+  <rect width="640" height="455" rx="18" fill="#f4f7fb"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
+    <text x="28" y="40" font-size="25" font-weight="700">Plane measures the viewing angle</text>
+    <text x="28" y="71" font-size="19" fill="#465873">Top view; a normal is perpendicular to the printed plane</text>
+    <path d="M85 285H353" stroke="#2563b8" stroke-width="3" marker-end="url(#blue)"/>
+    <path d="M85 285L477 170" stroke="#19734b" stroke-width="4"/>
+    <path d="M477 170L312 128" stroke="#465873" stroke-width="3" marker-end="url(#gray)"/>
+    <path d="M451 272L498 88" stroke="#182638" stroke-width="9"/>
+    <path d="M471 194L447 188L453 164" fill="none" stroke="#8b9aaf" stroke-width="2"/>
+    <path d="M397 150A82 82 0 0 0 398 193" stroke="#ad6920" stroke-width="3" fill="none"/>
+    <path d="M177 285A92 92 0 0 0 174 259" stroke="#ad6920" stroke-width="3" fill="none"/>
+    <circle cx="85" cy="285" r="7" fill="#182638"/>
+    <circle cx="477" cy="170" r="7" fill="#182638"/>
+    <text x="37" y="320" font-size="21" font-weight="600">Camera</text>
+    <text x="222" y="313" font-size="20" fill="#2563b8">Optical axis</text>
+    <text x="190" y="270" font-size="21" fill="#ad6920">Bearing</text>
+    <text x="325" y="179" font-size="21" fill="#ad6920">Plane</text>
+    <text x="293" y="109" font-size="20" fill="#465873">Surface normal</text>
+    <text x="510" y="200" font-size="20">Printed</text>
+    <text x="510" y="225" font-size="20">plane</text>
+    <text x="28" y="380" font-size="22">Plane 0°: head-on. Plane 90°: edge-on.</text>
+    <text x="28" y="419" font-size="20" fill="#465873">Tilt instead compares the tag plane with gravity.</text>
+  </g>
+</svg>

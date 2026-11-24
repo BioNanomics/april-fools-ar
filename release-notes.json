@@ -348,6 +348,16 @@
         "Keep the triangle aligned with gravity and show whether the second point is higher or lower.",
         "Show the same distance components during recorded playback, including older saved measurements."
       ]
+    },
+    {
+      "version": "0.10.1",
+      "build": "33",
+      "title": "Linked measurement glossary",
+      "changes": [
+        "Tap any Details metric label to open its definition in the app.",
+        "Explain tag tilt, twist, camera coordinates, pose and LiDAR depth, distance, bearing and quality metrics with diagrams.",
+        "Keep definitions and diagrams available offline from a Markdown glossary bundled with the app."
+      ]
     }
   ]
 }

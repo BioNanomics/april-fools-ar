@@ -181,29 +181,130 @@ Share source code/data contracts, compiling separate binaries for Apple, Systemc
 
 Never export moving/unknown targets as fixed WPILib poses. Keep any later calibrated candidate map a separate reviewed artifact; a walk inventory must not overwrite the official reference or deploy changes to a robot.
 
-## 7. Implementation sequence and completion checks
+## 7. Milestone checklist for a junior developer
 
-All items below are proposed, unchecked work. The existing [M0 field-data/review gate and later roadmap](PLAN.md) remain in effect. This plan overlaps M1/M3, later candidate export in M5 and optional camera visualization in M7/M8; agree on the bounded implementation slice after that review.
+All implementation tasks below are proposed and unchecked. The existing [M0 field-data/review gate and later roadmap](PLAN.md) remain in effect; this checklist does not authorize implementation before that gate. It refines the field-definition work within M1/M3, later candidate export in M5 and optional visualization in M7/M8.
 
-1. **FD.1 — Pin sources and define packages.** Import FRC 2026 welded/AndyMark and FTC 2025–2026/2026–2027 metadata into normalized YAML fixtures. Define YAML/default and JSON input/output support, source-to-YAML conversion, and YAML storage/display. Record source hashes, family/size, frame basis, static/dynamic eligibility and cluster geometry. Keep FRC 2027 unavailable until published. Resolve redistribution attribution before bundling assets.
-   - Completion: reviewed source inventory; known tag counts/poses/sizes match sources; YAML/JSON semantic round trips preserve those values; placeholder SDK coordinates cannot become valid anchors; image-only entries cannot pass as tag layouts.
+### How to use this checklist
 
-2. **FD.2 — Specify and verify shared geometry.** Add versioned models/adapters and portable field operations, preserving the existing ABI contracts. Define exact WPILib/FTC tag/camera/robot basis conversions and quaternion handling. Detect IDs first, then apply per-tag metric sizes.
-   - Completion: independently calculated head-on, translated, rotated and inverse/composition cases agree across C++, Swift and JNI. Cover matrix order, tag normals/corner order, inches/meters and FTC/FRC origins. Include mixed sizes and invalid/missing metadata.
+The junior developer owns implementation, automated checks, reproducible demos and fixes. A technical reviewer checks schema decisions, coordinate math, registration policy and camera/clock conventions. The tester supplies physical captures and independent measurements; field construction and surveying are not assigned to the developer. Ordinary implementation continues within the reviewed contract without repeated approval requests.
 
-3. **FD.3 — Deliver the saved-walk inventory.** Derive unique tag rows and nominal positions from native observations and selected packages. Add cluster/member semantics, unknown IDs, timestamps, evidence links and YAML summaries with JSON/CSV exports. Integrate YAML package snapshots with export/extraction and field-definition display.
-   - Completion: replaying a saved walk produces the same summary; repeated UI updates do not inflate counts; rejected poses still preserve seen-ID evidence; partially observed clusters do not fabricate seen members; resets preserve history without merging incompatible coordinates.
+Target roughly half a day to two developer days per implementation checkbox as a planning guide, not a delivery promise. Split larger work into additional stable subtask IDs before starting it. Keep FD.1–FD.7 and existing task IDs stable. Use focused commits such as `feat(FD.3.4): retain native walk observations`.
 
-4. **FD.4 — Add provisional registration and expected AR tags.** Implement native alignment state, fixed-reference registration and expected plane/ID rendering using existing projection. Recheck multi-tag agreement and drift. Support timestamped moving-target overlays when geometry is available.
-   - Completion: independent geometry/replay cases exercise predicted placements, zoom/orientation, stale source jobs, tracking loss, resets, layout changes and out-of-view persistence. A moving/anchor-dependent target cannot receive an independent placement pass. Check accessible native controls in simulator before physical validation.
+For each checked item, record its commit/PR, exact validation command or procedure, result and remaining limitations in `docs/validation/FD.<milestone>.md`. These are proposed evidence files. Reference large captures by location/checksum rather than committing them. Check the item in the same commit as its deliverable. A milestone's `.G` exit stays unchecked until its required tasks and exit demonstration pass; compilation, fixture success and physical accuracy are separate results. Record unavailable data/hardware against the affected task and leave that task pending.
 
-5. **FD.5 — Prove robot interoperability.** Run identical YAML and JSON package/observation fixtures through the existing FRC C++ and Java consumers and a new FTC Android sample. Round-trip FRC legacy/integrated JSON exports through actual readers; verify FTC package conversion through our adapter and SDK singleton/cluster Builders. Verify camera mounting and clock conventions.
-   - Completion: matching geometry and explicit unsupported states across platforms; real target builds and ABI inspection. Demonstrate FTC member-inspection behavior separately from normal cluster aiming. Cross-compilation alone is not hardware localization evidence.
+| Milestone | Prerequisites | Demonstrable result |
+| --- | --- | --- |
+| FD.1 | Existing M0 review gate | Reproducible YAML catalog with JSON compatibility and validated sources. |
+| FD.2 | FD.1 schema/fixtures | Shared lookup, per-tag pose geometry and checked frame conversions. |
+| FD.3 | FD.1 and FD.2.1–FD.2.2; may run alongside remaining FD.2 work | Saved walk lists actually seen tags and their nominal positions without registration or LiDAR. |
+| FD.4 | FD.2 and FD.3 | Registered expected tag overlays with explicit lifetime and comparison status. |
+| FD.5 | FD.1/FD.2 for loaders; FD.3/FD.4 for full parity | FRC and FTC consumers load the same definitions and reproduce supported results. |
+| FD.6 | Required FD.3–FD.5 software slices for the platform being tested | Independent physical evidence and reviewed limits for each tested capability. |
+| FD.7 | FD.1 import contract; official FRC 2027 publication for season tasks | New season data; optional visual layers tracked separately. |
 
-6. **FD.6 — Validate a real field walk and review results.** After simulator/offline checks, use a short physical session for camera/AR behavior and independent position checks. Revisit controls to quantify drift; include both FRC fixed tags and FTC moving/cluster cases where available. Set accuracy/coverage thresholds from the intended use and independent evidence before making pass/fail claims.
-   - Completion: readable exports, stable/rejected placement behavior as appropriate, honest nominal-versus-observed reporting, documented uncertainty/limitations and user review. Follow the shared [iOS testing skill](/Users/horner/.codex/skills/ios-testing/SKILL.md) and [device-session guard](/Users/horner/.codex/skills/ios-testing/references/device-session-guard.md), including global lease ownership and verified release before other work or handoff.
+### FD.1 — Build the YAML field catalog
 
-7. **FD.7 — Add FRC 2027 and optional visual layers.** When published, import official 2027 layouts with a source-diff review and the same contract checks. Add richer map/mesh/ForceField layers only when their source frames, variants and licenses are known.
-   - Completion: a new season requires data/importer work rather than another phone/robot geometry implementation; existing sessions retain their original package hashes and behavior.
+**Deliverable:** versioned packages under a proposed `fields/` directory and documented import/validation commands. Start with data and command-line validation before app UI.
 
-The first useful deliverable is the shared catalog plus a persistent, exportable list of actually seen tags and their nominal positions. Registration adds correctly placed AR geometry; independent registration and validation add defensible measured field positions. FTC moving targets remain time-dependent observations throughout that sequence.
+- [ ] **FD.1.1 — Create small examples.** Draft `manifest.yaml`, `tags.yaml` and `clusters.yaml` examples covering a fixed tag, an unknown field pose and a moving cluster. Include equivalent JSON examples with the same values.
+- [ ] **FD.1.2 — Write the schema contract.** Define required/optional fields, version handling, units, quaternion order, placement/anchor semantics and source/package hash rules. The technical reviewer checks this contract before consumers depend on it.
+- [ ] **FD.1.3 — Select serialization dependencies.** Document YAML 1.2 support, Android/native compatibility and licenses for the proposed Swift, C++ and Java adapters. Write one agreed valid/invalid sample set for all parsers; keep parsing outside AFSC math.
+- [ ] **FD.1.4 — Add a validator.** Report filename and field path for invalid input. Cover duplicate IDs/keys, missing size, unsupported family/version, bad units/transforms and broken cluster references; preserve explicit unavailable poses.
+- [ ] **FD.1.5 — Add conversion commands.** Accept YAML/default and JSON, validate through one model, and emit normalized YAML by default or JSON explicitly. Document commands and prove null/false/zero, precision and semantic identities survive round trips.
+- [ ] **FD.1.6 — Import FRC 2026 welded.** Convert the pinned source, record hashes/family/size, and compare all tag records plus dimensions to the source; independently spot-check representative poses.
+- [ ] **FD.1.7 — Import FRC 2026 AndyMark.** Create a distinct package and verify it retains its own geometry/dimensions. Make choosing a variant explicit; demonstrate that the two packages cannot be confused by year alone.
+- [ ] **FD.1.8 — Import FTC DECODE.** Preserve IDs 20–24 and explicit fixed-target versus Obelisk eligibility. Verify sizes, source units and unavailable global poses without promoting SDK placeholders to anchors.
+- [ ] **FD.1.9 — Import FTC BIOBUZZ.** Preserve all four named clusters, member IDs/sizes and local transforms. Verify moving-target eligibility, aiming origins and unavailable fixed field positions.
+- [ ] **FD.1.10 — Make imports reproducible.** Record pinned downloads/artifact hashes and extraction/conversion commands. Regenerate the packages and compare normalized output; document attribution before bundling assets. List FRC 2027 as unavailable rather than adding invented geometry.
+- [ ] **FD.1.G — Exit demonstration.** From a clean checkout, run the documented imports and validator; load equivalent YAML/JSON and show the same catalog. Invalid fixtures fail with useful errors. Reviewer confirms source comparisons and anchor semantics; save the commands/results in the milestone evidence file.
+
+### FD.2 — Implement portable tag lookup and geometry
+
+**Deliverable:** small shared APIs and bindings, with independent numeric examples. Reuse `native/SpatialCore/`, `native/AprilTag/` and existing Swift/JNI consumers. This milestone does not require a field-registration optimizer.
+
+- [ ] **FD.2.1 — Define neutral inputs/results.** Add bounded tag/pose representations and explicit frame, package, source-observation and unavailable-reason fields. Describe memory ownership and additive C ABI/JNI changes.
+- [ ] **FD.2.2 — Add indexed lookup.** Resolve tags by package/family/ID, including cluster members. Verify known, unknown and duplicate identities; return unavailable size/pose explicitly.
+- [ ] **FD.2.3 — Establish independent geometry examples.** Write expected numeric results for head-on, translated, rotated and inverse/composed transforms. Have the reviewer check frame directions, printed corner order and quaternion ordering before using these as expected results.
+- [ ] **FD.2.4 — Implement rigid transform helpers.** Compose/invert transforms and convert named quaternion/matrix representations. Reject invalid rotations/nonfinite inputs. Check against FD.2.3 rather than generating expected results with the helper under test.
+- [ ] **FD.2.5 — Implement ARKit/optical and WPILib conversions.** Exercise the camera-axis conversion and the distinct tag-basis conversion separately; verify expected centers, printed-up vectors and normals.
+- [ ] **FD.2.6 — Implement FTC conversions.** Preserve FTC's centered field frame; distinguish raw optical pose, `ftcPose`, cluster frame and tag frame. Verify inch-to-meter conversion and explicit member/aiming-origin transforms.
+- [ ] **FD.2.7 — Resolve pose size per detection.** Detect IDs/corners once and call the existing corner solver with each tag's size. Cover mixed sizes, unresolved pose candidates and unknown-size ID-only observations.
+- [ ] **FD.2.8 — Connect Swift and JNI bindings.** Send the same fixtures through C++, Swift and Java/JNI. Run the appropriate existing spatial-core checks and confirm the established +Y-up floor APIs retain their meaning.
+- [ ] **FD.2.G — Exit demonstration.** Load one FRC and one FTC YAML/JSON fixture through the bindings and compare lookup, transform and per-tag pose results within a reviewer-documented numerical tolerance. Record rejected cases and ABI compatibility results.
+
+### FD.3 — Ship the saved-walk tag list
+
+**Deliverable:** the first useful phone workflow: select a field, record a walk, reopen its tag list and export it. Reuse FD.1 packages and FD.2.1–FD.2.2 neutral types/lookup; measured-position fields may remain explicitly unavailable while the remaining FD.2 geometry and FD.4 registration work are in progress.
+
+- [ ] **FD.3.1 — Add catalog selection.** Expose program, full season and variant with package revision and unsupported/unavailable status. Check small/large layouts and accessible labels using the simulator.
+- [ ] **FD.3.2 — Add the YAML definition viewer/store.** Load YAML or JSON input, persist the validated field package as YAML and display formatted YAML. If database persistence is used, store the YAML document with identity/hash and demonstrate reload without losing semantic values.
+- [ ] **FD.3.3 — Pin the package to a walk.** Snapshot exact YAML bytes/hash at recording start, retain their identity on observations and require a new walk to change the field. Check preview/start/stop/background boundaries.
+- [ ] **FD.3.4 — Maintain the native inventory.** Implement a deterministic reducer in the portable core with a native Swift adapter. Consume completed source observations once, keyed by package/family/ID; retain first/last times, counts, quality/rejection counts and evidence references. Keep geometry inputs optional so registration math is not a prerequisite. Repeated UI status reads must not add observations.
+- [ ] **FD.3.5 — Handle unknowns and clusters.** Preserve decoded IDs when metric pose is rejected. Show null nominal positions with reasons for unknown/moving tags; cluster-only input must not mark individual members seen.
+- [ ] **FD.3.6 — Add the visible tag list.** Show each seen tag's identity, nominal XYZ/frame and observed-position status. Link to its representative frame/bookmark; distinguish not-seen reference tags from seen rows.
+- [ ] **FD.3.7 — Save and reopen summaries.** Write versioned `field-walk-summary.yaml`; reopen saved sessions and offer JSON/CSV export. Preserve per-segment evidence and keep moving-target positions timestamped.
+- [ ] **FD.3.8 — Extend transport and replay.** Include YAML packages/summaries in the inventory/MP4 export, restore them byte-for-byte through extraction, and reproduce the summary from original events. Older recordings retain explicit missing package/registration state.
+- [ ] **FD.3.9 — Verify walk edge cases.** Exercise empty/failed analysis, repeated/late results, unknown IDs, rejected metric poses, recording restarts, segment resets and partial clusters. Demonstrate that UI throttling and missing LiDAR do not change the seen list.
+- [ ] **FD.3.G — Exit demonstration.** Select each supported package, replay a saved walk, then save/export/reopen it. Compare IDs, nominal positions, counts, hashes and evidence references. The list works with no field registration and no depth stream; measured positions are honestly unavailable.
+
+### FD.4 — Place expected tags in AR
+
+**Deliverable:** a bounded registration and overlay workflow built on the reviewed equations in section 4. The junior implements the agreed baseline; a full calibration/bundle-adjustment solver remains separate M5 work.
+
+- [ ] **FD.4.1 — Define registration state.** Represent transform, field/segment identity, source times, generation, assumed anchors and unaligned/provisional/checked/degraded/invalid reasons. Write the state-transition table and have the reviewer check acceptance/rejection policy.
+- [ ] **FD.4.2 — Initialize from one fixed tag.** Use the matching source-frame transform and a qualified operator-selected anchor. Label the result provisional/anchor-dependent; reject moving targets, bad sizes, stale or ambiguous poses.
+- [ ] **FD.4.3 — Enforce lifetime and concurrency.** Invalidate or suspend registration on reset, interruption, tracking loss and package changes. Check delayed jobs against their source segment/package/generation before accepting them.
+- [ ] **FD.4.4 — Project expected centers and IDs.** Transform reference geometry into the AR world and reuse `SpatialProjection`. Verify near-plane/offscreen clipping and current-camera projection separately from source-observation math.
+- [ ] **FD.4.5 — Draw squares and normals.** Add oriented tag edges and optional axes/normals. Verify phone rotation, preview modes, 1×/2×/4× zoom and tags outside the view; apply display magnification once.
+- [ ] **FD.4.6 — Expose status and controls.** Provide accessible align/recheck/clear controls and distinct expected/currently-seen/previously-seen/unresolved states. Expected geometry may persist out of view only while registration remains usable.
+- [ ] **FD.4.7 — Check agreement and drift.** Under reviewer-specified thresholds/method, compare additional fixed-tag observations and return-to-anchor observations with the provisional registration. Record residuals and rejection/degradation reasons; do not silently snap or average conflicting poses.
+- [ ] **FD.4.8 — Add independent comparison status.** Track which tags contributed to initialization and realignment. Exclude the tag under inspection from its registration chain, or label the comparison assumed/unresolved. Demonstrate that a planted moved tag cannot certify itself.
+- [ ] **FD.4.9 — Handle moving-target observations.** Display fresh tag/cluster estimates with timestamps in the camera/AR frame, or the field frame only with independent registration. Expire old placements and never feed them into fixed-anchor registration.
+- [ ] **FD.4.10 — Save and replay overlay state.** Record registration changes with effective source times and reconstruct them during playback, pause and seek. Verify resets, stale jobs and unavailable historical registration using the simulator/replay harness.
+- [ ] **FD.4.G — Exit demonstration.** Run independent geometry and recorded-walk cases through alignment, expected rendering, tracking loss/recovery and playback. Reviewer checks the comparison/anchor behavior; the evidence labels simulator/replay results separately from physical accuracy.
+
+### FD.5 — Prove phone/robot compatibility
+
+**Deliverable:** separately verifiable FRC C++, FRC Java and FTC Android consumers. Loading/packaging can proceed after FD.1/FD.2; observation parity follows FD.3/FD.4. Keep platform results separate so unavailable hardware does not prevent completed software slices from being recorded.
+
+- [ ] **FD.5.1 — Publish shared consumer fixtures.** Define expected lookup, pose, registration and summary outputs plus numerical tolerances. Specify camera-mount direction, clock conversion and missing-data cases with the reviewer.
+- [ ] **FD.5.2 — Add the FRC C++ loader.** Accept YAML/default and JSON, validate the neutral model and call AFSC. Compare the fixture outputs and reject wrong variants or unsupported data explicitly.
+- [ ] **FD.5.3 — Add the FRC Java loader.** Load the same packages through Java/JNI and compare with C++/phone outputs. Verify library loading and explicit error reporting on the pinned toolchain.
+- [ ] **FD.5.4 — Verify legacy interchange.** Export only eligible fixed tags as legacy WPILib JSON. Read the result with actual 2026 Java/C++ APIs and check IDs, dimensions, pose axes and source identity in the companion YAML manifest.
+- [ ] **FD.5.5 — Verify integrated interchange.** Import/export the alpha-8 Fields format separately, preserving its geometry/metadata. Pass generated JSON to its actual readers; verify it is not confused with legacy JSON or the competition season.
+- [ ] **FD.5.6 — Package the FTC binding.** Pin Robot Controller SDK/hardware and implement a compatible Android build, adding required ABIs/API support. Inspect packaged libraries and resolve JNI/STL/AprilTag conflicts before connecting a camera.
+- [ ] **FD.5.7 — Build FTC libraries from packages.** Load YAML/default or JSON and populate SDK singleton/cluster Builders. Compare size/unit/member geometry and anchor eligibility with the package; handle duplicate and unsupported declarations explicitly.
+- [ ] **FD.5.8 — Ingest fresh FTC observations.** Preserve acquisition time, frame/calibration identity and raw/converted pose conventions. Re-reading a previous SDK result must not increment the walk inventory or refresh stale geometry.
+- [ ] **FD.5.9 — Demonstrate member inspection.** Verify a member-only SDK inspection mode separately from cluster aiming. If it cannot supply required evidence, leave this task pending and split a custom VisionProcessor implementation into reviewed subtasks. Cluster-only detections retain unknown individual-member visibility.
+- [ ] **FD.5.10 — Build target consumers and compare parity.** Produce the actual FRC C++/Java and FTC artifacts, inspect ABI/dependencies and run supported fixtures on appropriate host/emulator/target harnesses. Record compilation and execution separately; cross-compilation is not proof of hardware localization.
+- [ ] **FD.5.G — Exit demonstration.** Load identical YAML/JSON packages in all three consumers, reproduce supported reference outputs and inspect the native format conversions. Record unavailable capabilities explicitly; all required software tasks must pass before this gate closes. Physical camera/localization acceptance remains in FD.6.
+
+### FD.6 — Validate physical walks and report limits
+
+**Deliverable:** physical evidence and a reproducible report for each claimed platform/capability. The junior prepares builds and analysis; the tester owns field access, independent control/measurements and captures. Pending FTC hardware or future-season data does not block recording a completed FRC test slice, but it keeps the corresponding overall acceptance task open.
+
+- [ ] **FD.6.1 — Prepare the acceptance matrix.** List FRC fixed tags, FTC fixed tags and FTC moving/partial-cluster cases separately. With the reviewer/tester, define independent controls, intended accuracy/coverage thresholds and pass/unresolved conditions before inspecting acceptance results.
+- [ ] **FD.6.2 — Prepare builds and the run sheet.** Complete simulator/replay checks, package builds and concise tester instructions before starting any physical session. Include version/package hashes and how to export the complete recording.
+- [ ] **FD.6.3 — Verify physical-session cleanup.** For every physical iOS action, follow the [iOS testing skill](/Users/horner/.codex/skills/ios-testing/SKILL.md) and [device-session guard](/Users/horner/.codex/skills/ios-testing/references/device-session-guard.md). Record the owned global lease/session and complete verified release before coding, analysis, waiting or handoff; an unverified release remains open work.
+- [ ] **FD.6.4 — Tester: capture fixed-tag cases.** Walk FRC 2026 and FTC DECODE cases using independent references, varied views, a return to starting controls and an interruption/reset. Include an independently known placement discrepancy where available. Record unperformed cases separately.
+- [ ] **FD.6.5 — Tester: capture moving/cluster cases.** Observe BIOBUZZ target movement and partial visibility. Check per-member versus cluster-only evidence, timestamps and unavailable global position without independent registration. Keep this task pending if the necessary field/hardware is unavailable.
+- [ ] **FD.6.6 — Reproduce and compare.** Verify exported hashes/extraction, replay the original observations and compare coverage, independent position/orientation differences and drift to the predetermined criteria. Produce separate FRC/FTC and phone/robot results with missing/rejected data visible.
+- [ ] **FD.6.7 — Review and fix findings.** Attach the report and exact reproduction steps to focused repair tasks. The reviewer checks claims against evidence; rerun affected checks after repairs. Reserve fresh acceptance data if earlier results were used to tune the implementation.
+- [ ] **FD.6.G — Exit demonstration.** Required physical cases and repairs pass with reviewed limitations, readable exports and verified device release. Record user review. Partial software/physical slices may be reported as complete individually; pending required cases prevent an overall accuracy claim.
+
+### FD.7 — Add FRC 2027; track optional visuals separately
+
+**Deliverable:** another official season package using the same tools. Future-source availability and optional visualization work must not block FD.1–FD.6 results for available seasons.
+
+- [ ] **FD.7.1 — Pin the official FRC 2027 release when available.** Record source revision, variant list, family/size and geometry changes. Until then, retain an unavailable catalog entry and leave this task pending.
+- [ ] **FD.7.2 — Convert and verify the season.** Regenerate committed YAML through the existing importer; add independent representative geometry and YAML/JSON round-trip cases. Split any new schema/family requirement into a scoped task before implementing it.
+- [ ] **FD.7.3 — Run the consumer regressions.** Load the new package on the phone and FRC C++/Java consumers; verify identities and native-format exports. Reopen an older walk to demonstrate its package bytes/hash and positions remain unchanged. Add new-season physical cases to FD.6 rather than claiming accuracy from import checks.
+- [ ] **FD.7.G — Season exit demonstration.** Reviewer accepts source/geometry comparisons and reproducible consumer results. The new season imports without another geometry implementation; any new platform capability is documented separately.
+
+The following optional tasks require their own scope selection and are not part of FD.7.G:
+
+- [ ] **FD.7.O1 — Calibrated top-down map.** Adapt the ForceField image/crop approach after checking attribution, units, variant and image-to-field alignment. Show nominal and observed symbols distinctly; verify against known field points.
+- [ ] **FD.7.O2 — Richer visualization.** Propose a separate checklist for meshes, occlusion, force arrows/heatmaps or virtual robot-camera views after selecting one deliverable and its data source. Keep driving-assist forces separate from localization confidence.
+
+The earliest usable handoff is FD.1, FD.2.1–FD.2.2 and FD.3: a saved, exportable list of actually seen tags and their nominal positions. The remaining FD.2 work and FD.4 add registered AR geometry and defensible comparison states, followed by robot and physical evidence. FTC moving targets remain time-dependent observations throughout the checklist.

@@ -1,5 +1,19 @@
 # April Fools AR by The REFINERY
 
+Watch our inaugural test on the practice field at **The REFINERY**.
+
+[<img src="docs/images/first-field-test/video-thumbnail.jpg" alt="Watch the inaugural April Fools AR practice-field test at The REFINERY on YouTube" width="560">](https://www.youtube.com/shorts/Z98nUAI7hSo)
+
+**Watch:** [YouTube Shorts](https://www.youtube.com/shorts/Z98nUAI7hSo) · [The same video on Instagram](https://www.instagram.com/reel/DgGpNEgTw8_/)
+
+Three views from the practice-field test. Select a photo to view it at full size.
+
+| Camera with recorded overlays | LiDAR depth | Depth confidence |
+| :---: | :---: | :---: |
+| [<img src="docs/images/first-field-test/camera-overlays.jpg" alt="Recorded camera view of the practice field with AprilTag outlines, pose axes, tag heights and the recorded floor" width="260">](docs/images/first-field-test/camera-overlays.jpg) | [<img src="docs/images/first-field-test/depth.jpg" alt="LiDAR depth view of the practice field with recorded tag axes, heights and floor overlays" width="260">](docs/images/first-field-test/depth.jpg) | [<img src="docs/images/first-field-test/confidence.jpg" alt="Red, yellow and green depth-confidence view of the practice field with recorded tag and floor overlays" width="260">](docs/images/first-field-test/confidence.jpg) |
+
+---
+
 A project from [The REFINERY](https://refineryrobotics.org/), owned by **BioNanomics**. Original app code is © 2026 BioNanomics and available under the [MIT license](LICENSE). Third-party code retains its own [licenses and notices](THIRD_PARTY_NOTICES.md). The REFINERY and BioNanomics names and logos identify the project; the software license does not grant trademark rights.
 
 Read the [privacy policy](docs/PRIVACY.md) and [TestFlight preparation](docs/TESTFLIGHT.md). The app also includes its policy, license and notices offline under **by The REFINERY · About**. Apple account setup and TestFlight upload follow owner sign-off.

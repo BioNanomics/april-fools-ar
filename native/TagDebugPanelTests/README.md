@@ -1,6 +1,6 @@
 # Debug panel readability regression
 
-This standalone UIKit/XCTest host compiles the real `TagDebugPanelView.swift` and `TagDebugMath.swift`. Synthetic debug records exist only in this test bundle. It does not launch ARKit, simulate physical accuracy, or add any product demo behavior.
+This standalone UIKit/XCTest host compiles the real debug panel, glossary link labels, and native glossary sheet. It bundles the same Markdown-generated HTML and diagrams as the app. Synthetic debug records exist only in this test bundle. It does not launch ARKit, simulate physical accuracy, or add any product demo behavior.
 
 From the repository root, with the same Ruby/xcodeproj environment used by the iOS configuration scripts:
 
@@ -10,7 +10,9 @@ ruby native/TagDebugPanelTests/run-uikit-panel-regression.rb --device-id YOUR_AP
 
 Required `--device-id` explicitly selects a task-owned simulator. Optional `--work-dir` retains a named build directory, and `--only-testing TARGET/CLASS/METHOD` reruns a focused case. The harness never selects an unrelated simulator automatically.
 
-Checks cover the **default 390×44-point translucent overlay**, its selected-ID/status and compact timing readout, and its explicit Details button. Repeated depth/pose values stay hidden until expanded. Tests verify a button target of at least 44 points, camera-touch passthrough everywhere else, expansion/collapse and preferred-height callbacks. Full metric tests explicitly expand to 390×270 points and check row/label bounds, text fit including both footer lines, independent green/amber/red depth-difference colors and threshold tolerance, no-tag live telemetry, and reuse of view/label/layer identities over 600 updates. Long `TAG #587 · POSE UNAVAILABLE` and `TRACKING LIMITED` titles are checked and captured in both modes.
+Checks cover the **default 390×44-point translucent overlay**, its selected-ID/status and compact timing readout, and its explicit Details button. Repeated depth/pose values stay hidden until expanded. Tests verify a disclosure target of at least 44 points, expanded glossary links for individual terms, native link accessibility, camera-touch passthrough over values/background and throughout the compact readout, expansion/collapse and preferred-height callbacks. Links remain usable while measurements are missing, and every metric label opens its own definition. Full metric tests explicitly expand to 390×290 points and check row/label bounds, text fit including both footer lines, independent green/amber/red depth-difference colors and threshold tolerance, no-tag live telemetry, and reuse of view/label/layer identities over 600 updates. Long `TAG #587 · POSE UNAVAILABLE` and `TRACKING LIMITED` titles are checked and captured in both modes.
+
+Glossary tests verify every linked definition exists in the bundled document, load the real offline page in WebKit at a requested section, confirm local SVG diagrams render with alt text, and exercise the native Done action while preserving the expanded readout.
 
 Compact valid/no-tag and expanded valid/ambiguous/missing-depth screenshots use UIKit `drawHierarchy(afterScreenUpdates:true)`, are attached to the xcresult, and are copied to the printed `/tmp/.../artifacts` directory. Images render at 3× pixel density (1170×132 for compact, 1170×810 for expanded). The test-only navy backdrop demonstrates translucency without adding fake camera imagery to the product.
 

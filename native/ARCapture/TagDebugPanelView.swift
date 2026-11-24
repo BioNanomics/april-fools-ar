@@ -5,17 +5,49 @@ final class TagDebugPanelView: UIView {
     private(set) var isExpanded = false
     var preferredHeight: CGFloat { isExpanded ? 290 : 44 }
     var onPreferredHeightChanged: ((CGFloat) -> Void)?
-    private let titleLabel = UILabel()
+    var onOpenGlossary: ((String) -> Void)?
+    private let titleLabel = MetricGlossaryLabel(links: [
+        .init("Tag ID", anchor: "tag-id", pattern: "TAG(?: #\\d+| DEBUG)?"),
+        .init("Status", anchor: "status", pattern: "(?<= · )[^\\n]+"),
+        .init("Height", anchor: "height", pattern: "↑|Height"),
+        .init("Height units", anchor: "units", pattern: "cm")
+    ])
     private let detailsButton = UIButton(type: .system)
     private let metricsScrollView = UIScrollView()
-    private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"], valueSize: 19)
-    private let rotationRow = DebugMetricRow(titles: ["Cam roll · °", "Cam pitch · °", "Cam yaw · °"], valueSize: 18)
-    private let gravityOrientationLabel = UILabel()
-    private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"], valueSize: 21)
-    private let geometryRow = DebugMetricRow(titles: ["Distance · m", "Plane · °", "Bearing · °"], valueSize: 18)
-    private let meanLabel = UILabel()
-    private let qualityLabel = UILabel()
-    private let rateLabel = UILabel()
+    private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"],
+        anchors: ["x-right", "y-down", "z-forward"], valueSize: 19)
+    private let rotationRow = DebugMetricRow(titles: ["Cam roll · °", "Cam pitch · °", "Cam yaw · °"],
+        anchors: ["camera-roll", "camera-pitch", "camera-yaw"], valueSize: 18)
+    private let gravityOrientationLabel = MetricGlossaryLabel(links: [
+        .init("Gravity", anchor: "gravity"), .init("Tilt", anchor: "tilt"), .init("Twist", anchor: "twist")
+    ])
+    private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"],
+        anchors: ["pnp-z", "lidar-z", "delta-z"], valueSize: 21)
+    private let geometryRow = DebugMetricRow(titles: ["Distance · m", "Plane · °", "Bearing · °"],
+        anchors: ["distance", "plane", "bearing"], valueSize: 18)
+    private let meanLabel = MetricGlossaryLabel(links: [
+        .init("3×3 mean", anchor: "depth-mean"),
+        .init("Depth confidence", anchor: "depth-confidence", pattern: "LOW|MED|HIGH|(?<=m · )[—?]"),
+        .init("Valid depth neighbors", anchor: "depth-neighbors", pattern: "[0-9—]+/9"),
+        .init("Tag width preset", anchor: "edge", pattern: "preset"),
+        .init("Measured tag width", anchor: "edge", pattern: "measured width"),
+        .init("Tag width settings", anchor: "edge", pattern: "Settings")
+    ])
+    private let qualityLabel = MetricGlossaryLabel(links: [
+        .init("RMS", anchor: "rms"), .init("Decision margin", anchor: "decision-margin", pattern: "margin"),
+        .init("Hamming corrected bits", anchor: "hamming", pattern: "(?<= · )H")
+    ])
+    private let rateLabel = MetricGlossaryLabel(links: [
+        .init("Edge", anchor: "edge"),
+        .init("Tag width source", anchor: "edge", pattern: "Field Auto|Auto|AR estimate|manual"),
+        .init("Field type", anchor: "edge", pattern: "(?:FRC|FTC)(?:/FTC)?"),
+        .init("Competition year", anchor: "edge", pattern: "[0-9]{4}"),
+        .init("Analysis rate", anchor: "analysis-rate", pattern: "Hz"),
+        .init("Frame age", anchor: "frame-age", pattern: "(?:Frame age|Age|age)"),
+        .init("Compute time", anchor: "compute-time", pattern: "compute"),
+        .init("Height source", anchor: "height-source", pattern: "LiDAR|Pose"),
+        .init("Height", anchor: "height", pattern: "height"), .init("Kalman", anchor: "kalman")
+    ])
     private var compactRateText = "No current tag measurement"
     private var expandedRateText = "No current tag measurement"
     private var compactTitleText = "TAG DEBUG · WAITING"
@@ -29,6 +61,7 @@ final class TagDebugPanelView: UIView {
         layer.cornerRadius = 12
         layer.borderWidth = 1
         isUserInteractionEnabled = true
+        titleLabel.linkColor = nil // Keep validity colors while underlines identify title links.
         titleLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         titleLabel.numberOfLines = 2
         titleLabel.adjustsFontSizeToFitWidth = true
@@ -61,6 +94,9 @@ final class TagDebugPanelView: UIView {
         detailsButton.accessibilityIdentifier = "tagDebugDetailsButton"
         detailsButton.addTarget(self, action: #selector(toggleDetails), for: .touchUpInside)
         addSubview(detailsButton)
+        for label in glossaryLabels {
+            label.onOpenGlossary = { [weak self] anchor in self?.openGlossary(anchor) }
+        }
         updateExpansion()
         showUnavailable("Waiting for a visible tag")
     }
@@ -104,7 +140,16 @@ final class TagDebugPanelView: UIView {
         onPreferredHeightChanged?(preferredHeight)
     }
     @objc private func toggleDetails() { setExpanded(!isExpanded) }
+    private var glossaryLabels: [MetricGlossaryLabel] {
+        [titleLabel, gravityOrientationLabel, meanLabel, qualityLabel, rateLabel]
+            + [translationRow, rotationRow, depthRow, geometryRow].flatMap(\.headings)
+    }
+    private func openGlossary(_ anchor: String) {
+        if let onOpenGlossary { onOpenGlossary(anchor) }
+        else { TagMetricGlossaryViewController.present(anchor: anchor, from: self) }
+    }
     private func updateExpansion() {
+        glossaryLabels.forEach { $0.linksEnabled = isExpanded }
         [translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
         metricsScrollView.isHidden = !isExpanded
         if isExpanded { metricsScrollView.addSubview(rateLabel) }
@@ -124,17 +169,20 @@ final class TagDebugPanelView: UIView {
     private func updateTitleText() {
         titleLabel.text = isExpanded ? expandedTitleText : compactTitleText
         titleLabel.accessibilityLabel = titleAccessibilityText
+        titleLabel.setAccessibilityValue(titleAccessibilityText, for: "status")
+        titleLabel.setAccessibilityValue(titleAccessibilityText, for: "height")
     }
-    /// Readout taps pass through unless a constrained expanded panel needs scrolling.
+    /// Links own their taps; values and background still pass through to tag selection.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
         let localPoint = detailsButton.convert(point, from: self)
         if detailsButton.point(inside: localPoint, with: event) {
             return detailsButton.hitTest(localPoint, with: event)
         }
-        if isExpanded && metricsScrollView.isScrollEnabled {
+        if isExpanded {
+            if let hit = super.hitTest(point, with: event), hit is UIControl { return hit }
             let scrollPoint = metricsScrollView.convert(point, from: self)
-            if metricsScrollView.bounds.contains(scrollPoint) {
+            if metricsScrollView.isScrollEnabled && metricsScrollView.bounds.contains(scrollPoint) {
                 return metricsScrollView.hitTest(scrollPoint, with: event)
             }
         }
@@ -206,7 +254,6 @@ final class TagDebugPanelView: UIView {
                 detail = height["reason"] as? String == "floorNotSelected" ? "Height — · set floor" : "Height — · unavailable"
             }
             expandedTitleText += "\n" + detail
-            titleLabel.isAccessibilityElement = true
         }
         titleAccessibilityText = expandedTitleText
         if let heightSource { titleAccessibilityText += ". Height source: \(heightSource)." }
@@ -290,19 +337,21 @@ final class TagDebugPanelView: UIView {
             : "Reason: \(available ? "No valid twist in this frame" : reason)."
         let twistAccessibility = twist.map { "Twist from upright \(String(format: "%+.1f", $0)) degrees; positive is clockwise when viewing the printed front." }
             ?? "Twist from upright unavailable. \(twistReason)"
-        gravityOrientationLabel.isAccessibilityElement = true
         gravityOrientationLabel.accessibilityLabel = "Gravity-relative tag orientation"
         gravityOrientationLabel.accessibilityValue = tiltAccessibility + " " + twistAccessibility
+        gravityOrientationLabel.setAccessibilityValue(tiltAccessibility, for: "tilt")
+        gravityOrientationLabel.setAccessibilityValue(twistAccessibility, for: "twist")
     }
 }
 
 private final class DebugMetricRow: UIView {
-    private var headings = [UILabel]()
+    private(set) var headings = [MetricGlossaryLabel]()
     private var values = [UILabel]()
-    init(titles: [String], valueSize: CGFloat) {
+    init(titles: [String], anchors: [String], valueSize: CGFloat) {
         super.init(frame: .zero)
-        for title in titles {
-            let heading = UILabel()
+        for (title, anchor) in zip(titles, anchors) {
+            let heading = MetricGlossaryLabel(links: [.init(title.components(separatedBy: " · ")[0], anchor: anchor,
+                pattern: NSRegularExpression.escapedPattern(for: title))])
             heading.text = title
             heading.font = .systemFont(ofSize: 10, weight: .medium)
             heading.textColor = .lightGray

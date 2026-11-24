@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.10.1",
+      "build": "33",
+      "title": "Linked measurement glossary",
+      "changes": [
+        "Tap any Details metric label to open its definition in the app.",
+        "Explain tag tilt, twist, camera coordinates, pose and LiDAR depth, distance, bearing and quality metrics with diagrams.",
+        "Keep definitions and diagrams available offline from a Markdown glossary bundled with the app."
+      ]
+    },
+    {
       "version": "0.10.0",
       "build": "32",
       "title": "Field and competition year detection",
@@ -117,7 +127,7 @@
       "changes": [
         "Group LiDAR and tag-geometry readings under Distance with aligned numbers for direct comparison.",
         "Show LiDAR delta only above a saved, configurable distance difference threshold; default 15 cm.",
-        "Draw each usable tag’s vertical height from the confirmed floor to its center, with the height label midway along the vector.",
+        "Draw each usable tag\u2019s vertical height from the confirmed floor to its center, with the height label midway along the vector.",
         "Show the detected floor tilt and optionally level the measurement floor with gravity while preserving original measurements."
       ]
     },
@@ -179,7 +189,7 @@
       "title": "Single-line camera controls",
       "changes": [
         "Combine tracking status, depth status and view zoom on one compact line over the camera.",
-        "Retain pinch zoom and the 1×, 2× and 4× controls while freeing vertical camera space."
+        "Retain pinch zoom and the 1\u00d7, 2\u00d7 and 4\u00d7 controls while freeing vertical camera space."
       ]
     },
     {
@@ -187,7 +197,7 @@
       "build": "7",
       "title": "Camera view zoom",
       "changes": [
-        "Pinch to magnify the live view from 1× to 4×, or use the 1×, 2× and 4× buttons.",
+        "Pinch to magnify the live view from 1\u00d7 to 4\u00d7, or use the 1\u00d7, 2\u00d7 and 4\u00d7 buttons.",
         "Keep tag outlines and pose axes aligned, with measurement taps mapped back to the original image.",
         "Keep original camera frames, LiDAR samples and pose calculations unchanged; view zoom does not switch lenses or add optical detail."
       ]

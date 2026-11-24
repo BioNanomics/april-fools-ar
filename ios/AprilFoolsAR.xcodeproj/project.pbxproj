@@ -35,6 +35,7 @@
 		493E2B21D726B34BB0493700 /* image_u8x4.c in Sources */ = {isa = PBXBuildFile; fileRef = 2E3A4C79448974334F594FA9 /* image_u8x4.c */; };
 		49BB24AF4BB5FD8625AE7AE3 /* FloorDepthSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788F9F179B42A6E3336AC67E /* FloorDepthSampler.swift */; };
 		4F14051DCE23E152A6ED7597 /* LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = EA83DAE678B40D531BAF2FFD /* LICENSE.md */; };
+		5AC6DDDA2D5B24C8CC37AFAE /* TagMetricGlossaryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B2EF764577AE1B44455A5C /* TagMetricGlossaryViewController.swift */; };
 		5C2DF5D875E29B27A0A4A838 /* SessionMP4Writer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA622697B4AA163505CE0A1 /* SessionMP4Writer.swift */; };
 		5DDFA3666B7B838AA2F47CF0 /* ArchiveModuleBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E6DDB04829654A3469E2AA17 /* ArchiveModuleBridge.m */; };
 		5F59B54D8B242E409BEC4A6E /* ARCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEEAF8115F0865E9B5C98FAA /* ARCaptureCoordinator.swift */; };
@@ -62,6 +63,7 @@
 		B00D8DF342D0024D8567A150 /* unionfind.c in Sources */ = {isa = PBXBuildFile; fileRef = 7F8DD804A45F21BC7D954794 /* unionfind.c */; };
 		B29F69AB46FBD16EFC019A73 /* image_u8.c in Sources */ = {isa = PBXBuildFile; fileRef = F65F24E17F0D91A4485AC78B /* image_u8.c */; };
 		BB27464AB65284AF3500CFE1 /* pthreads_cross.c in Sources */ = {isa = PBXBuildFile; fileRef = 2597B3319AD2D1C5517C152B /* pthreads_cross.c */; };
+		BB58CA42B75B4411CE974B06 /* MetricGlossaryLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB04066FF3EA64F8AA5172B /* MetricGlossaryLabel.swift */; };
 		CA9D8486E41D82AF33B6601A /* apriltag_pose.c in Sources */ = {isa = PBXBuildFile; fileRef = F8E33A9E46C7BB1561A197FD /* apriltag_pose.c */; };
 		CF00F5589ADEF5F3FD483A3B /* homography.c in Sources */ = {isa = PBXBuildFile; fileRef = 78CED63F155DCD2DD5BCCAC8 /* homography.c */; };
 		D1D2FA6D793879C11F03BF1F /* apriltag.c in Sources */ = {isa = PBXBuildFile; fileRef = E58DC96727684DC98AB58CE2 /* apriltag.c */; };
@@ -127,6 +129,8 @@
 		9959BA1C7D343658916BEE71 /* NOTICE.md */ = {isa = PBXFileReference; includeInIndex = 1; path = NOTICE.md; sourceTree = "<group>"; };
 		A6CB1DA96C032BA169C26943 /* FloorPlaneFit.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FloorPlaneFit.swift; path = ARCapture/FloorPlaneFit.swift; sourceTree = "<group>"; };
 		AF54B392AF6AF22FF9C87B16 /* workerpool.c */ = {isa = PBXFileReference; includeInIndex = 1; name = workerpool.c; path = common/workerpool.c; sourceTree = "<group>"; };
+		B5B2EF764577AE1B44455A5C /* TagMetricGlossaryViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TagMetricGlossaryViewController.swift; path = ARCapture/TagMetricGlossaryViewController.swift; sourceTree = "<group>"; };
+		BBB04066FF3EA64F8AA5172B /* MetricGlossaryLabel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetricGlossaryLabel.swift; path = ARCapture/MetricGlossaryLabel.swift; sourceTree = "<group>"; };
 		BC9AB4B7CE616FF1D8B634D3 /* SpatialMeasurementOverlayView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpatialMeasurementOverlayView.swift; path = ARCapture/SpatialMeasurementOverlayView.swift; sourceTree = "<group>"; };
 		BFE5AB4C89A6209CDF6E8F3E /* pam.c */ = {isa = PBXFileReference; includeInIndex = 1; name = pam.c; path = common/pam.c; sourceTree = "<group>"; };
 		C163298A0F6DC8A250C20E13 /* time_util.c */ = {isa = PBXFileReference; includeInIndex = 1; name = time_util.c; path = common/time_util.c; sourceTree = "<group>"; };
@@ -227,6 +231,8 @@
 				2A82C4E605AEB15B5A42379A /* VideoOrientation.swift */,
 				66981AB7881E49092B514059 /* RecordingPlaybackOverlayView.swift */,
 				CA37155F0B3202487D32839D /* RecordingPlaybackTimeline.swift */,
+				BBB04066FF3EA64F8AA5172B /* MetricGlossaryLabel.swift */,
+				B5B2EF764577AE1B44455A5C /* TagMetricGlossaryViewController.swift */,
 			);
 			name = Native;
 			path = ../native;
@@ -323,6 +329,7 @@
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
 				7FAFC1E0E9E1549DD5923002 /* Stamp app build metadata */,
+				A35420DCE8994DE523EAF96B /* Bundle measurement glossary */,
 			);
 			buildRules = (
 			);
@@ -443,6 +450,28 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\nruby \"$SRCROOT/../scripts/bundle-legal.rb\" --check\n/bin/bash \"$SRCROOT/../scripts/stamp-build-info.sh\"";
 		};
+		A35420DCE8994DE523EAF96B /* Bundle measurement glossary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../scripts/bundle-metric-glossary.rb",
+				"$(SRCROOT)/../docs/tag-metric-glossary.md",
+			);
+			name = "Bundle measurement glossary";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/MetricGlossary",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nruby \"$SRCROOT/../scripts/bundle-metric-glossary.rb\" --output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/MetricGlossary\"";
+		};
 		C38B50BA6285516D6DCD4F65 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -551,6 +580,8 @@
 				D4BF948E8DED71377F81B159 /* VideoOrientation.swift in Sources */,
 				EF5BA93AAA6D2A4E15907A2A /* RecordingPlaybackOverlayView.swift in Sources */,
 				27F0E25F88387DE1E9D35F9B /* RecordingPlaybackTimeline.swift in Sources */,
+				BB58CA42B75B4411CE974B06 /* MetricGlossaryLabel.swift in Sources */,
+				5AC6DDDA2D5B24C8CC37AFAE /* TagMetricGlossaryViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -565,7 +596,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
@@ -580,7 +611,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.0;
+				MARKETING_VERSION = 0.10.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -605,7 +636,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -619,7 +650,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.0;
+				MARKETING_VERSION = 0.10.1;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

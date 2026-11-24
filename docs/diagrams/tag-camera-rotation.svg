@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">Camera-relative Euler rotation components</title>
+  <desc id="desc">Roll is the rotation component about optical X, pitch about optical Y, and yaw about optical Z. Each isolated schematic uses a curved arrow around the axis. The complete convention is R equals Rz yaw times Ry pitch times Rx roll.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L7 4L0 8" fill="#465873"/></marker></defs>
+  <rect width="640" height="420" rx="18" fill="#f4f7fb"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638" text-anchor="middle">
+    <text x="320" y="40" font-size="25" font-weight="700">Tag rotation relative to the camera</text>
+    <g transform="translate(112 180)">
+      <path d="M-74 0H74" stroke="#b83232" stroke-width="4"/>
+      <path d="M-29 -44A34 54 0 1 1-32 35" fill="none" stroke="#465873" stroke-width="3" marker-end="url(#arrow)"/>
+      <text y="-74" font-size="24" font-weight="600">Cam roll</text>
+      <text y="90" font-size="22" fill="#b83232">about X</text>
+    </g>
+    <g transform="translate(320 180)">
+      <path d="M0-61V65" stroke="#19734b" stroke-width="4"/>
+      <path d="M-45 -24A56 32 0 1 1-36 23" fill="none" stroke="#465873" stroke-width="3" marker-end="url(#arrow)"/>
+      <text y="-74" font-size="24" font-weight="600">Cam pitch</text>
+      <text y="90" font-size="22" fill="#19734b">about Y</text>
+    </g>
+    <g transform="translate(528 180)">
+      <circle r="9" fill="#2563b8"/><circle r="19" fill="none" stroke="#2563b8" stroke-width="3"/>
+      <path d="M-44 -24A50 50 0 1 1-43 27" fill="none" stroke="#465873" stroke-width="3" marker-end="url(#arrow)"/>
+      <text y="-74" font-size="24" font-weight="600">Cam yaw</text>
+      <text y="90" font-size="22" fill="#2563b8">about Z</text>
+    </g>
+    <text x="320" y="332" font-size="23">R = Rz(yaw) · Ry(pitch) · Rx(roll)</text>
+    <text x="320" y="372" font-size="19" fill="#465873">Schematic components; angles are not phone attitude.</text>
+    <text x="320" y="398" font-size="19" fill="#465873">The rotation matrix is authoritative at Euler singularities.</text>
+  </g>
+</svg>

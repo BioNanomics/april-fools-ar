@@ -47,6 +47,7 @@ host = project.new_target(:application, 'OverlayTestHost', :ios, '17.0')
 tests = project.new_target(:unit_test_bundle, 'OverlayRegressionTests', :ios, '17.0')
 host.source_build_phase.add_file_reference(project.main_group.new_file(host_source))
 [source, File.join(root, 'native/ARCapture/TagDebugMath.swift'), File.join(root, 'native/ARCapture/TagDebugPanelView.swift'),
+ File.join(root, 'native/ARCapture/MetricGlossaryLabel.swift'), File.join(root, 'native/ARCapture/TagMetricGlossaryViewController.swift'),
  File.join(root, 'native/ARCapture/HeightDisplayFormatter.swift'), File.join(root, 'native/ARCapture/PreviewZoom.swift'),
  File.join(root, 'native/ARCapture/SpatialMeasurements.swift'), File.join(root, 'native/ARCapture/TagFloorHeight.swift'),
  File.join(root, 'native/ARCapture/TagCameraRanges.swift'),
@@ -62,9 +63,15 @@ host.source_build_phase.add_file_reference(project.main_group.new_file(host_sour
  File.join(__dir__, 'FloorBaseMarkerUIKitTests.swift'),
  File.join(root, 'native/SpatialMeasurementTests/SpatialMeasurementTests.swift'),
  File.join(root, 'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift'),
- File.join(root, 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift')].each do |path|
+ File.join(root, 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift'),
+ File.join(root, 'native/TagDebugPanelTests/TagMetricGlossaryUIKitTests.swift')].each do |path|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
 end
+glossary_resources = File.join(work, 'MetricGlossary')
+system('ruby', File.join(root, 'scripts/bundle-metric-glossary.rb'), '--output', glossary_resources, exception: true)
+glossary_reference = project.main_group.new_file(glossary_resources)
+glossary_reference.last_known_file_type = 'folder'
+host.resources_build_phase.add_file_reference(glossary_reference)
 tests.add_dependency(host)
 project.targets.each do |target|
   target.build_configurations.each do |config|
@@ -104,7 +111,7 @@ success = system(*command, out: log, err: [:child, :out])
 puts File.readlines(log).select { |line| line.match?(/error:|Test Case|Executed |\*\* TEST|Testing failed|uncaught exception|NSInvalidArgumentException/) }.last(100).join
 artifacts = File.join(work, 'artifacts')
 FileUtils.mkdir_p(artifacts)
-File.readlines(log).map { |line| line[/(?:OVERLAY|PANEL)_PNG[ =](.+\.png)/, 1] }.compact.uniq.each do |file|
+File.readlines(log).map { |line| line[/(?:OVERLAY|PANEL|GLOSSARY)_PNG[ =](.+\.png)/, 1] }.compact.uniq.each do |file|
   FileUtils.cp(file, artifacts) if File.file?(file)
 end
 puts "PNG artifacts: #{artifacts}"

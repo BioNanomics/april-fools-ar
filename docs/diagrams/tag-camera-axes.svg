@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="450" viewBox="0 0 640 450" role="img" aria-labelledby="title desc">
+  <title id="title">Optical camera coordinates</title>
+  <desc id="desc">The origin is the camera optical center. X points right and Y down in the captured sensor image; Z points forward into the scene. A dashed image rectangle illustrates the camera's image orientation.</desc>
+  <defs>
+    <marker id="red" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#b83232"/></marker>
+    <marker id="green" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#19734b"/></marker>
+    <marker id="blue" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#2563b8"/></marker>
+  </defs>
+  <rect width="640" height="450" rx="18" fill="#f4f7fb"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
+    <text x="28" y="39" font-size="25" font-weight="700">Camera optical axes</text>
+    <path d="M104 110H366V329H104Z" fill="#e9eef6" stroke="#8b9aaf" stroke-width="2" stroke-dasharray="7 6"/>
+    <text x="112" y="99" font-size="19" fill="#465873">Captured-image orientation</text>
+    <path d="M185 190H445" stroke="#b83232" stroke-width="4" marker-end="url(#red)"/>
+    <path d="M185 190V354" stroke="#19734b" stroke-width="4" marker-end="url(#green)"/>
+    <path d="M185 190L482 107" stroke="#2563b8" stroke-width="4" marker-end="url(#blue)"/>
+    <circle cx="185" cy="190" r="7" fill="#182638"/>
+    <text x="459" y="197" font-size="23" font-weight="600" fill="#b83232">+X right</text>
+    <text x="119" y="387" font-size="23" font-weight="600" fill="#19734b">+Y down</text>
+    <text x="430" y="82" font-size="23" font-weight="600" fill="#2563b8">+Z forward</text>
+    <text x="26" y="221" font-size="19">Camera origin</text>
+    <text x="28" y="426" font-size="19" fill="#465873">Directions use the sensor image before UI rotation.</text>
+    <path d="M463 123L520 108V166L463 183Z" fill="#fff" stroke="#465873" stroke-width="2"/>
+    <path d="M475 130L505 122V158L475 168Z" fill="#182638"/>
+    <text x="499" y="238" font-size="19">Scene</text>
+  </g>
+</svg>

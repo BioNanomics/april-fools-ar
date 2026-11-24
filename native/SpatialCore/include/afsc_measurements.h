@@ -14,7 +14,12 @@ typedef struct {
     uint32_t translation_available;
     AFSCVec3 translation;
     uint32_t orientation_available;
-    AFSCOptionalDouble range_m, plane_angle_rad, bearing_rad, reprojection_rms_px;
+    /* ABI-1 member names remain stable. These are raw optical diagnostics,
+     * independent of any FTC SDK / FRC pose presentation profile. */
+    AFSCOptionalDouble range_m; /* Euclidean 3-D camera-to-tag-center distance. */
+    AFSCOptionalDouble plane_angle_rad; /* Unsigned viewing incidence. */
+    AFSCOptionalDouble bearing_rad; /* Unsigned optical-axis offset; NOT FTC bearing. */
+    AFSCOptionalDouble reprojection_rms_px;
     AFSCOptionalDouble decision_margin, corrected_bits;
     int32_t ambiguous; /* -1 unknown, 0 resolved, 1 ambiguous */
 } AFSCPoseObservation;
@@ -23,7 +28,7 @@ typedef struct {
     AFSCOptionalDouble confidence; /* accepted categories exactly 1 or 2, not covariance */
 } AFSCDepthObservation;
 typedef struct {
-    double max_range_m, max_plane_angle_rad, max_reprojection_rms_px;
+    double max_range_m, max_plane_angle_rad, max_reprojection_rms_px; /* 3-D distance / viewing-incidence gates. */
     double warning_depth_difference_m, reject_depth_difference_m;
 } AFSCMeasurementSettings;
 

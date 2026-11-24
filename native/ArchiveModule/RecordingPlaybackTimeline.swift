@@ -21,6 +21,8 @@ struct RecordingPlaybackSnapshot {
     let lines: [Line]
     let polygons: [Polygon]
     let message: String?
+    var recordedPreviewMode: String? = nil
+    var rasterSample: RecordingPlaybackRasterSample? = nil
 }
 
 /// Immutable, seekable interpretation of the captured observations. Playback
@@ -44,6 +46,7 @@ final class RecordingPlaybackTimeline {
     private struct Frame {
         let time: Double, timestamp: Double, id: String, segment: String, size: CGSize
         let tracking: String
+        let previewMode: String?
         let geometry: Geometry?
         let ordinal: Int
     }
@@ -82,6 +85,9 @@ final class RecordingPlaybackTimeline {
     private let detections: [String: [Event]]
     private let expectedFieldTags: [ExpectedFieldTag]
     private let fieldFrameBoundaries: [Double]
+    let rasterIndex: RecordingPlaybackRasterIndex
+    var hasDepthSamples: Bool { rasterIndex.samples.contains { $0.depthFile != nil } }
+    var hasConfidenceSamples: Bool { rasterIndex.samples.contains { $0.confidenceFile != nil } }
     private static let stride = 64
     private static let metadataLimit = 16 * 1024 * 1024
     private static let recordLimit = 100_000
@@ -117,16 +123,18 @@ final class RecordingPlaybackTimeline {
                 throw TimelineError.invalid("field-definition.yaml does not match the saved field package")
             }
         }
-        return try Self.init(manifest: manifest, frames: records(frameData), events: records(eventData))
+        return try Self.init(manifest: manifest, frames: records(frameData), events: records(eventData), folderURL: folderURL)
     }
 
-    init(manifest: [String: Any], frames: [[String: Any]], events: [[String: Any]]) throws {
+    init(manifest: [String: Any], frames: [[String: Any]], events: [[String: Any]], folderURL: URL? = nil) throws {
         guard Self.flag(manifest["finalized"]) == true, let origin = Self.number(manifest["firstARFrameTimestamp"]),
               frames.count <= Self.recordLimit, events.count <= Self.recordLimit else {
             throw TimelineError.invalid("missing finalized capture clock or too many records")
         }
         self.origin = origin
         self.expectedFieldTags = try Self.fieldTags(manifest)
+        self.rasterIndex = RecordingPlaybackRasterIndex(manifest: manifest, frames: frames, events: events,
+                                                       origin: origin, folderURL: folderURL)
         let accepted: [Frame] = frames.enumerated().compactMap { ordinal, row in
             guard Self.flag(row["videoAppended"]) == true,
                   let time = Self.number(row["videoPTSSeconds"]), time >= 0,
@@ -134,7 +142,8 @@ final class RecordingPlaybackTimeline {
                   let id = Self.identifier(row["frameId"]), let segment = Self.identifier(row["segmentId"]),
                   let size = Self.imageSize(row) else { return nil }
             return Frame(time: time, timestamp: timestamp, id: id, segment: segment, size: size,
-                         tracking: row["tracking"] as? String ?? "unavailable", geometry: Self.geometry(row), ordinal: ordinal)
+                         tracking: row["tracking"] as? String ?? "unavailable", previewMode: Self.previewMode(row["previewMode"]),
+                         geometry: Self.geometry(row), ordinal: ordinal)
         }.sorted { $0.time == $1.time ? $0.ordinal < $1.ordinal : $0.time < $1.time }
         guard !accepted.isEmpty else { throw TimelineError.invalid("no indexed video frames") }
         self.frames = accepted
@@ -324,7 +333,10 @@ final class RecordingPlaybackTimeline {
         else if projection == nil { message = "Recorded camera geometry is unavailable." }
         else { message = state.fieldMessage }
         return RecordingPlaybackSnapshot(imageSize: frame.size, frameID: frame.id, segmentID: frame.segment,
-                                         tags: tags, lines: lines, polygons: polygons, message: message)
+                                         tags: tags, lines: lines, polygons: polygons, message: message,
+                                         recordedPreviewMode: frame.previewMode,
+                                         rasterSample: sameSegment ? rasterIndex.sample(at: seconds, segment: frame.segment,
+                                                                                      imageSize: frame.size) : nil)
     }
 
     private static func apply(_ event: Event, to state: inout State) {
@@ -537,11 +549,11 @@ final class RecordingPlaybackTimeline {
            let source = recorded["source"] as? String, ["sceneDepth", "tagPose"].contains(source),
            let meters = number(recorded["meters"]), (0...30).contains(meters) { rows.append("Height \(height(meters, imperial: imperial))") }
         if let ranges = detection["cameraRanges"] as? [String: Any] {
-            for (key, available, label) in [("lidarRangeMeters","lidarAvailable","LiDAR"), ("tagRangeMeters","tagAvailable","Tag")] {
+            for (key, available, label) in [("lidarRangeMeters","lidarAvailable","Depth 3D"), ("tagRangeMeters","tagAvailable","Pose 3D")] {
                 if flag(ranges[available]) == true, let meters = number(ranges[key]), meters > 0 { rows.append("\(label) \(height(meters, imperial: imperial))") }
             }
             let threshold = number(settings["distanceDeltaThresholdMeters"]) ?? 0.15
-            if let delta = number(ranges["distanceDeltaMeters"]), delta > threshold { rows.append("LiDAR Δ \(height(delta, imperial: imperial))") }
+            if let delta = number(ranges["distanceDeltaMeters"]), delta > threshold { rows.append("Δ 3D \(height(delta, imperial: imperial))") }
         }
         let orientation = detection["gravityOrientation"] as? [String: Any] ?? [:]
         let contextMatches = ["frameId", "segmentId"].allSatisfy { key in
@@ -549,13 +561,13 @@ final class RecordingPlaybackTimeline {
             guard let recorded = identifier(raw), let source = identifier(event[key]) else { return false }
             return recorded == source
         }
-        let tilt = flag(orientation["available"]) == true && contextMatches
-            ? number(orientation["tiltFromVerticalDegrees"]).flatMap { (0...90).contains($0) ? $0 : nil } : nil
-        let twist = tilt == nil ? nil
-            : number(orientation["twistDegrees"]).flatMap { (-180...180).contains($0) ? $0 : nil }
-        let tiltText = tilt.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
-        let twistText = twist.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
-        rows.append("Tilt \(tiltText) · Twist \(twistText)")
+        let planeLean = flag(orientation["available"]) == true && contextMatches
+            ? number(orientation["planeLeanFromVerticalDegrees"] ?? orientation["tiltFromVerticalDegrees"]).flatMap { (0...90).contains($0) ? $0 : nil } : nil
+        let uprightRotation = planeLean == nil ? nil
+            : number(orientation["uprightRotationClockwiseDegrees"] ?? orientation["twistDegrees"]).flatMap { (-180...180).contains($0) ? $0 : nil }
+        let leanText = planeLean.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        let uprightText = uprightRotation.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        rows.append("Lean \(leanText) · Upright \(uprightText)")
         return rows.joined(separator: "\n")
     }
     private static func height(_ meters: Double, imperial: Bool) -> String {
@@ -602,6 +614,10 @@ final class RecordingPlaybackTimeline {
     }
     private static func finite(_ point: SIMD3<Float>) -> Bool { point.x.isFinite && point.y.isFinite && point.z.isFinite }
     private static func identifier(_ raw: Any?) -> String? { guard let value = raw as? String, !value.isEmpty else { return nil }; return value }
+    private static func previewMode(_ raw: Any?) -> String? {
+        guard let value = raw as? String, ["camera", "depth", "confidence"].contains(value) else { return nil }
+        return value
+    }
     private static func number(_ raw: Any?) -> Double? {
         guard let value = raw as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite else { return nil }
         return value.doubleValue

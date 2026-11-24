@@ -23,7 +23,7 @@ final class MetricGlossaryLabel: UILabel {
         }
     }
 
-    private let links: [Link]
+    private var links: [Link]
     private var buttons = [LinkButton]()
     private var ranges = [NSRange?]()
     private var accessibilityValues = [String: String]()
@@ -48,13 +48,16 @@ final class MetricGlossaryLabel: UILabel {
         textContainer.lineFragmentPadding = 0
         layoutManager.addTextContainer(textContainer)
         textStorage.addLayoutManager(layoutManager)
-        for link in links {
+        for (index, link) in links.enumerated() {
             let button = LinkButton(type: .custom)
             button.accessibilityIdentifier = "tagMetricHelp-" + link.anchor
             button.accessibilityLabel = "Definition of " + link.title
             button.accessibilityHint = "Opens the glossary at this term, with explanations and diagrams"
             button.accessibilityTraits = [.link]
-            button.activate = { [weak self] in self?.onOpenGlossary?(link.anchor) }
+            button.activate = { [weak self] in
+                guard let self else { return }
+                self.onOpenGlossary?(self.links[index].anchor)
+            }
             button.addTarget(self, action: #selector(openLink(_:)), for: .touchUpInside)
             addSubview(button)
             buttons.append(button)
@@ -63,6 +66,17 @@ final class MetricGlossaryLabel: UILabel {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// A convention change changes link semantics without allocating a new readout hierarchy.
+    func setLinks(_ definitions: [Link]) {
+        precondition(definitions.count == buttons.count)
+        links = definitions
+        for (index, link) in links.enumerated() {
+            buttons[index].accessibilityIdentifier = "tagMetricHelp-" + link.anchor
+            buttons[index].accessibilityLabel = "Definition of " + link.title
+        }
+        updateLinks()
+    }
 
     @objc private func openLink(_ sender: UIButton) {
         guard let index = buttons.firstIndex(where: { $0 === sender }) else { return }

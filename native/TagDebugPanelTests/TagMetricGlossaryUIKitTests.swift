@@ -60,19 +60,23 @@ final class TagMetricGlossaryUIKitTests: XCTestCase {
     }
 
     func testBundledDocumentDefinesEveryLinkedTermAndContainsLocalDiagrams() throws {
-        let anchors = ["x-right", "y-down", "z-forward", "camera-roll", "camera-pitch", "camera-yaw",
-                       "gravity", "tilt", "twist", "pnp-z", "lidar-z", "delta-z", "distance", "plane", "bearing",
+        let anchors = ["pose-profile", "pose-x", "pose-y", "pose-z", "pose-roll", "pose-pitch", "pose-yaw",
+                       "optical-rotation-x", "optical-rotation-y", "optical-rotation-z",
+                       "gravity", "tag-lean", "upright-rotation", "pose-depth", "scene-depth", "delta-z", "distance", "viewing-incidence", "optical-axis-offset",
+                       "planar-range", "horizontal-bearing", "elevation",
                        "depth-mean", "depth-confidence", "depth-neighbors", "rms", "decision-margin", "hamming",
                        "edge", "analysis-rate", "frame-age", "compute-time", "height", "height-source", "kalman",
                        "tag-id", "status", "units"]
-        for anchor in anchors {
+        let historicalAnchors = ["x-right", "y-down", "z-forward", "camera-roll", "camera-pitch", "camera-yaw",
+                                 "tilt", "twist", "pnp-z", "lidar-z", "plane", "bearing"]
+        for anchor in anchors + historicalAnchors {
             let url = try XCTUnwrap(TagMetricGlossaryViewController.documentURL(anchor: anchor))
             XCTAssertTrue(url.isFileURL, "Glossary definitions must be available offline")
             XCTAssertEqual(url.fragment, anchor)
             let document = try String(contentsOf: url, encoding: .utf8)
             XCTAssertTrue(document.contains("id=\"\(anchor)\""), "Missing glossary definition: \(anchor)")
         }
-        let url = try XCTUnwrap(TagMetricGlossaryViewController.documentURL(anchor: "tilt"))
+        let url = try XCTUnwrap(TagMetricGlossaryViewController.documentURL(anchor: "tag-lean"))
         let directory = url.deletingLastPathComponent().appendingPathComponent("diagrams")
         let diagrams = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         XCTAssertGreaterThanOrEqual(diagrams.filter { $0.pathExtension == "svg" }.count, 3)
@@ -80,10 +84,10 @@ final class TagMetricGlossaryUIKitTests: XCTestCase {
 
     func testTermSheetLoadsDiagramDeepLinkAndDoneReturnsToExpandedReadout() throws {
         let source = try XCTUnwrap(window.rootViewController)
-        let panel = TagDebugPanelView(frame: CGRect(x: 0, y: 100, width: 390, height: 290))
+        let panel = TagDebugPanelView(frame: CGRect(x: 0, y: 100, width: 390, height: 350))
         panel.setExpanded(true)
         source.view.addSubview(panel)
-        TagMetricGlossaryViewController.present(anchor: "tilt", from: panel)
+        TagMetricGlossaryViewController.present(anchor: "tag-lean", from: panel)
         let sheet = try XCTUnwrap(source.presentedViewController as? UINavigationController)
         let glossary = try XCTUnwrap(sheet.topViewController as? TagMetricGlossaryViewController)
         glossary.loadViewIfNeeded()
@@ -99,14 +103,14 @@ final class TagMetricGlossaryUIKitTests: XCTestCase {
         loading.invalidate()
         let rendered = try XCTUnwrap(try evaluate("""
             ({ fragment: location.hash,
-               heading: document.getElementById('tilt') !== null,
+               heading: document.getElementById('tag-lean') !== null,
                pictures: Array.from(document.images).map(image => ({
                  loaded: image.complete && image.naturalWidth > 0,
                  description: image.alt,
                  local: new URL(image.src).protocol === 'file:'
                })) })
             """, in: glossary.webView) as? [String: Any])
-        XCTAssertEqual(rendered["fragment"] as? String, "#tilt")
+        XCTAssertEqual(rendered["fragment"] as? String, "#tag-lean")
         XCTAssertEqual(rendered["heading"] as? Bool, true)
         let pictures = try XCTUnwrap(rendered["pictures"] as? [[String: Any]])
         XCTAssertGreaterThanOrEqual(pictures.count, 3)
@@ -115,10 +119,10 @@ final class TagMetricGlossaryUIKitTests: XCTestCase {
             XCTAssertEqual(picture["local"] as? Bool, true)
             XCTAssertFalse((picture["description"] as? String ?? "").isEmpty, "Each diagram needs accessible alt text")
         }
-        let position = try evaluate("document.getElementById('tilt').getBoundingClientRect().top", in: glossary.webView) as? Double
+        let position = try evaluate("document.getElementById('tag-lean').getBoundingClientRect().top", in: glossary.webView) as? Double
         XCTAssertGreaterThanOrEqual(try XCTUnwrap(position), -1, "Deep link must scroll to the requested definition")
         XCTAssertLessThanOrEqual(try XCTUnwrap(position), 60, "Deep link must scroll to the requested definition")
-        try savePNG("glossary-tilt-offline", webView: glossary.webView)
+        try savePNG("glossary-tag-lean-offline", webView: glossary.webView)
         let done = try XCTUnwrap(glossary.navigationItem.leftBarButtonItem)
         XCTAssertEqual(done.accessibilityIdentifier, "tagMetricGlossaryDone")
         let action = try XCTUnwrap(done.action)

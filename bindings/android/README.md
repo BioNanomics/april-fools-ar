@@ -19,3 +19,13 @@ up; AprilTag camera poses use optical +X right, +Y down, +Z forward. A platform
 adapter must convert ARCore coordinates, supply frame/calibration identities,
 and enforce observation quality before displaying accepted measurements. The
 geometric `floorHeight` binding by itself makes no tracking-quality guarantee.
+
+The iOS pose display profiles do not change this Java/JNI contract. FTC SDK
+camera coordinates are X right/Y forward/Z up; FRC / PhotonVision uses X
+forward/Y left/Z up and an outward-facing tag basis. A matching profile requires
+transforming the full optical rotation and translation, not renaming Euler
+components. FTC range is a camera-XY-plane projection, distinct from full 3D
+camera distance. Camera mounting extrinsics and field alignment remain the
+consumer's responsibility. Auto tag sizing cannot infer the desired display
+convention or competition identity. See [decision 004](../../docs/decisions/004-pose-conventions.md)
+for exact transforms, versions and field meanings.

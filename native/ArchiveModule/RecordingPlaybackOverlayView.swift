@@ -8,6 +8,12 @@ final class RecordingPlaybackOverlayView: UIView {
     private var naturalSize = CGSize.zero
     private var preferredTransform = CGAffineTransform.identity
     private var labels: [String: UILabel] = [:]
+    var showsTags = true {
+        didSet {
+            guard oldValue != showsTags else { return }
+            updateLabels(); setNeedsDisplay()
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -97,7 +103,7 @@ final class RecordingPlaybackOverlayView: UIView {
                 UIBezierPath(ovalIn: CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)).fill()
             }
         }
-        for tag in snapshot.tags.prefix(64) {
+        for tag in snapshot.tags.prefix(showsTags ? 64 : 0) {
             let points = mapped(tag.corners)
             guard points.count == 4 else { continue }
             let color = Self.color(tag.severity), path = UIBezierPath()
@@ -171,7 +177,7 @@ final class RecordingPlaybackOverlayView: UIView {
             label.frame = frame; label.isHidden = false
             occupied.append(frame)
         }
-        for tag in snapshot.tags.prefix(64) {
+        for tag in snapshot.tags.prefix(showsTags ? 64 : 0) {
             let points = mapped(tag.corners)
             guard points.count == 4, let extent = Self.enclosing(points), extent.intersects(videoRect) else { continue }
             place("tag.\(tag.id)", tag.label, CGPoint(x: extent.midX, y: extent.maxY + 7), Self.color(tag.severity),

@@ -660,6 +660,38 @@ test('opens a tag observation at its recorded time after the field modal finishe
   expect(NativeModules.ArchiveModule.previewSession).not.toHaveBeenCalled();
 });
 
+test('field tools retain the live camera, block background tag taps and return to floor setup', async () => {
+  await act(async () => {
+    tree = Renderer.create(<App />);
+  });
+  const camera = tree.root.findByProps({ testID: 'capture.native-camera' });
+  const navigation = tree.root.findByProps({ testID: 'capture.navigation' });
+  await act(async () =>
+    navigation
+      .findByProps({ accessibilityLabel: 'Field definitions and tags seen' })
+      .props.onPress(),
+  );
+  expect(tree.root.findByType(FieldDefinitionsPanel).props.visible).toBe(true);
+  await act(async () => {
+    DeviceEventEmitter.emit('ARCaptureTagSelected', { id: 4 });
+  });
+  expect(
+    tree.root.findAllByProps({ testID: 'capture.tagReadout' }),
+  ).toHaveLength(0);
+  await act(async () =>
+    tree.root.findByType(FieldDefinitionsPanel).props.onSetFloor(),
+  );
+  expect(tree.root.findByType(FieldDefinitionsPanel).props.visible).toBe(false);
+  expect(tree.root.findByProps({ testID: 'capture.native-camera' })).toBe(
+    camera,
+  );
+  expect(engine.setSpatialMode).toHaveBeenCalledWith('selectFloor');
+  expect(engine.setDebugMode).toHaveBeenCalledWith(false);
+  expect(tree.root.findByProps({ testID: 'capture.toolSheet' })).toBeTruthy();
+  expect(JSON.stringify(tree.toJSON())).toContain('Floor setup');
+  expect(engine.startSession).not.toHaveBeenCalled();
+});
+
 test('shares the reusable native MP4 from a finalized saved session', async () => {
   engine.listSessions.mockResolvedValue([savedSession]);
   engine.exportSession.mockResolvedValue({
@@ -1708,7 +1740,7 @@ test('threshold-only edits preserve the full precision of an AR-measured width',
   ).toBe('172.3457');
   await act(async () =>
     tree.root
-      .findByProps({ accessibilityLabel: 'Maximum range (m)' })
+      .findByProps({ accessibilityLabel: 'Maximum 3D distance (m)' })
       .props.onChangeText('6'),
   );
   await act(async () =>

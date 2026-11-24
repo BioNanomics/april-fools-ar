@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="465" viewBox="0 0 640 465" role="img" aria-labelledby="title desc">
-  <title id="title">Forward depth, straight-line range and bearing</title>
-  <desc id="desc">A top-view triangle places the camera at the left, a tag center forward and to the right, and its projection on the optical axis below. Forward Z depth is the horizontal leg, transverse offset is the vertical leg and Distance is the diagonal. Bearing is the camera angle between Z and the diagonal. PnP and LiDAR provide separate estimates of forward Z.</desc>
+  <title id="title">Forward optical depth, 3D distance and optical-axis offset</title>
+  <desc id="desc">A top-view triangle places the camera at the left, a tag center forward and to the right, and its projection on the optical axis below. Forward Z depth is the horizontal leg, transverse offset is the vertical leg and Distance is the diagonal. Optical-axis offset is the unsigned angle between Z and the diagonal, separate from signed horizontal bearing. Pose and ARKit scene depth provide estimates of forward optical Z.</desc>
   <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L7 4L0 8" fill="#2563b8"/></marker></defs>
   <rect width="640" height="465" rx="18" fill="#f4f7fb"/>
   <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
-    <text x="28" y="40" font-size="25" font-weight="700">Depth is one component of distance</text>
+    <text x="28" y="40" font-size="25" font-weight="700">Optical Z is one component of 3D distance</text>
     <text x="28" y="71" font-size="19" fill="#465873">Schematic: one transverse offset, any image direction</text>
     <path d="M88 318H578" stroke="#2563b8" stroke-width="3" marker-end="url(#arrow)"/>
     <path d="M88 318L500 134" stroke="#19734b" stroke-width="5"/>
@@ -15,11 +15,11 @@
     <circle cx="500" cy="134" r="7" fill="#182638"/>
     <text x="39" y="354" font-size="21" font-weight="600">Camera</text>
     <text x="453" y="112" font-size="21" font-weight="600">Tag center</text>
-    <text x="218" y="229" font-size="23" font-weight="600" fill="#19734b" transform="rotate(-24 218 229)">Distance (range)</text>
-    <text x="198" y="293" font-size="21" fill="#ad6920">Bearing</text>
+    <text x="218" y="229" font-size="23" font-weight="600" fill="#19734b" transform="rotate(-24 218 229)">3D distance</text>
+    <text x="198" y="293" font-size="21" fill="#ad6920">Axis offset</text>
     <text x="291" y="350" font-size="22" fill="#2563b8">Forward Z depth</text>
     <text x="519" y="225" font-size="19" fill="#465873">Offset</text>
-    <text x="28" y="401" font-size="21">PnP Z and LiDAR Z estimate the forward component.</text>
-    <text x="28" y="436" font-size="21">|Δ Z| = absolute difference of those two Z estimates.</text>
+    <text x="28" y="401" font-size="21">Pose Z and Scene Z estimate forward optical depth.</text>
+    <text x="28" y="436" font-size="21">|Δ Z| = abs(Scene Z − Pose Z), in every pose profile.</text>
   </g>
 </svg>

@@ -113,6 +113,14 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
     private let recordedOverlay = RecordingPlaybackOverlayView()
     private let overlayToggle = UIButton(type: .system)
     private let overlayStatus = UILabel()
+    private let viewModeControl = UISegmentedControl(items: ["Recorded", "Camera", "Depth", "Confidence"])
+    private let rasterView = UIImageView()
+    private let rasterStatus = UILabel()
+    private let rasterQueue = DispatchQueue(label: "com.aprilfoolsar.playback-raster", qos: .userInitiated)
+    private var rasterGeneration = 0
+    private var rasterLoadInFlight = false
+    private var desiredRaster: (sample: RecordingPlaybackRasterSample, mode: String, key: String)?
+    private var resolvedRasterKey: String?
     private var timeline: RecordingPlaybackTimeline?
     private var unavailableMessage: String?
     private var frameOverlayMessage: String?
@@ -134,6 +142,13 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         if let content = contentOverlayView {
+            rasterView.isUserInteractionEnabled = false
+            rasterView.contentMode = .scaleToFill
+            rasterView.alpha = 0.88
+            rasterView.isHidden = true
+            rasterView.layer.anchorPoint = .zero
+            rasterView.accessibilityIdentifier = "recording.preview.depth-image"
+            content.addSubview(rasterView)
             recordedOverlay.frame = content.bounds
             recordedOverlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             content.addSubview(recordedOverlay)
@@ -148,7 +163,7 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
         overlayToggle.translatesAutoresizingMaskIntoConstraints = false
         overlayToggle.accessibilityIdentifier = "recording.preview.overlay-toggle"
         overlayToggle.accessibilityLabel = "Recorded overlays"
-        overlayToggle.accessibilityHint = "Shows or hides the tag and measurement data saved with this recording."
+        overlayToggle.accessibilityHint = "Shows or hides saved annotations and sensor views."
         overlayToggle.addTarget(self, action: #selector(toggleRecordedOverlays), for: .touchUpInside)
         view.addSubview(overlayToggle)
         overlayStatus.translatesAutoresizingMaskIntoConstraints = false
@@ -161,6 +176,26 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
         overlayStatus.layer.cornerRadius = 5; overlayStatus.clipsToBounds = true
         overlayStatus.accessibilityIdentifier = "recording.preview.overlay-unavailable"
         view.addSubview(overlayStatus)
+        viewModeControl.translatesAutoresizingMaskIntoConstraints = false
+        viewModeControl.selectedSegmentIndex = 0
+        viewModeControl.backgroundColor = UIColor.black.withAlphaComponent(0.78)
+        viewModeControl.selectedSegmentTintColor = .systemBlue
+        viewModeControl.setTitleTextAttributes([.foregroundColor: UIColor.white], for: .normal)
+        viewModeControl.accessibilityIdentifier = "recording.preview.view-mode"
+        viewModeControl.accessibilityLabel = "Playback view"
+        viewModeControl.accessibilityHint = "Recorded follows saved view changes. Choose Camera, Depth, or Confidence to inspect saved data."
+        viewModeControl.addTarget(self, action: #selector(changePlaybackView), for: .valueChanged)
+        view.addSubview(viewModeControl)
+        rasterStatus.translatesAutoresizingMaskIntoConstraints = false
+        rasterStatus.font = .preferredFont(forTextStyle: .caption1)
+        rasterStatus.adjustsFontForContentSizeCategory = true
+        rasterStatus.numberOfLines = 0
+        rasterStatus.textAlignment = .center
+        rasterStatus.textColor = .white
+        rasterStatus.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+        rasterStatus.accessibilityIdentifier = "recording.preview.raster-status"
+        rasterStatus.isHidden = true
+        view.addSubview(rasterStatus)
         NSLayoutConstraint.activate([
             // AVKit reserves its first safe-area row for Close/AirPlay. Keep
             // the custom control in a separate row even in narrow windows.
@@ -170,7 +205,14 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
             overlayToggle.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             overlayToggle.widthAnchor.constraint(greaterThanOrEqualToConstant: 156),
             overlayToggle.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -24),
-            overlayStatus.topAnchor.constraint(equalTo: overlayToggle.bottomAnchor, constant: 6),
+            viewModeControl.topAnchor.constraint(equalTo: overlayToggle.bottomAnchor, constant: 8),
+            viewModeControl.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            viewModeControl.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            viewModeControl.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            rasterStatus.topAnchor.constraint(equalTo: viewModeControl.bottomAnchor, constant: 6),
+            rasterStatus.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
+            rasterStatus.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -32),
+            overlayStatus.topAnchor.constraint(equalTo: rasterStatus.bottomAnchor, constant: 6),
             overlayStatus.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
             overlayStatus.widthAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.widthAnchor, constant: -32),
         ])
@@ -184,6 +226,8 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
         // and changes in the visibility of its own controls.
         refreshRecordedOverlays()
         view.bringSubviewToFront(overlayToggle)
+        view.bringSubviewToFront(viewModeControl)
+        view.bringSubviewToFront(rasterStatus)
         view.bringSubviewToFront(overlayStatus)
     }
 
@@ -195,17 +239,31 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
         UIAccessibility.post(notification: .announcement, argument: overlaysEnabled ? "Recorded overlays on" : "Recorded overlays off")
     }
 
+    @objc private func changePlaybackView() {
+        invalidateRaster()
+        refreshRecordedOverlays()
+    }
+
     private func updateOverlayControl() {
         let available = timeline != nil && unavailableMessage == nil
         overlayToggle.isEnabled = available
         overlayToggle.configuration?.title = available ? (overlaysEnabled ? "Overlays on" : "Overlays off") : "Overlays unavailable"
         overlayToggle.accessibilityValue = available ? (overlaysEnabled ? "On" : "Off") : "Unavailable"
         overlayToggle.isSelected = available && overlaysEnabled
+        viewModeControl.isEnabled = available && overlaysEnabled
+        viewModeControl.setEnabled(available, forSegmentAt: 0)
+        viewModeControl.setEnabled(available, forSegmentAt: 1)
+        viewModeControl.setEnabled(available && timeline?.hasDepthSamples == true, forSegmentAt: 2)
+        viewModeControl.setEnabled(available && timeline?.hasConfidenceSamples == true, forSegmentAt: 3)
         let message = unavailableMessage ?? (overlaysEnabled ? frameOverlayMessage : nil)
         overlayStatus.text = message.map { " \($0) " }
         overlayStatus.isHidden = message == nil
         recordedOverlay.isHidden = !available || !overlaysEnabled
-        if !available || !overlaysEnabled { recordedOverlay.clear() }
+        if !available || !overlaysEnabled {
+            recordedOverlay.clear()
+            invalidateRaster()
+            setRasterStatus(nil)
+        }
     }
 
     private func installOverlayObservers() {
@@ -224,6 +282,7 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
             object: item, queue: .main) { [weak self] _ in
                 // A seek must replace the previous snapshot even while paused.
                 self?.recordedOverlay.clear()
+                self?.invalidateRaster()
                 self?.refreshRecordedOverlays()
             }
         let asset = item.asset
@@ -251,27 +310,122 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
               isReadyForDisplay, let timeline, let geometry,
               let content = contentOverlayView, let player else {
             setFrameOverlayMessage(nil)
+            invalidateRaster()
+            setRasterStatus(nil)
             recordedOverlay.clear(); return
         }
         let seconds = CMTimeGetSeconds(time ?? player.currentTime())
         guard seconds.isFinite, seconds >= 0, let snapshot = timeline.snapshot(at: seconds) else {
             setFrameOverlayMessage(nil)
+            invalidateRaster()
+            setRasterStatus(nil)
             recordedOverlay.clear(); return
         }
         recordedOverlay.frame = content.bounds
         let rect = content.convert(videoBounds, from: view)
         guard rect.width.isFinite, rect.height.isFinite, rect.width > 0, rect.height > 0 else {
             setFrameOverlayMessage(nil)
+            invalidateRaster()
             recordedOverlay.clear(); return
         }
         guard RecordingPlaybackOverlayView.imagePoint(.zero, imageSize: snapshot.imageSize,
             naturalSize: geometry.size, preferredTransform: geometry.transform, videoRect: rect) != nil else {
             setFrameOverlayMessage("Recorded overlays are unavailable for this frame's image geometry.")
+            invalidateRaster()
             recordedOverlay.clear(); return
         }
         setFrameOverlayMessage(nil)
+        let choices = [snapshot.recordedPreviewMode ?? "camera", "camera", "depth", "confidence"]
+        let selection = min(max(viewModeControl.selectedSegmentIndex, 0), choices.count - 1)
+        let mode = choices[selection]
+        viewModeControl.accessibilityValue = selection == 0 ? "Recorded, \(mode.capitalized)" : viewModeControl.titleForSegment(at: selection)
+        recordedOverlay.showsTags = mode == "camera"
+        if mode == "camera" {
+            invalidateRaster()
+            setRasterStatus(selection == 0 && snapshot.recordedPreviewMode == nil
+                ? "Original view changes unavailable. Choose a view to inspect saved maps." : nil)
+        } else if let sample = snapshot.rasterSample {
+            if alignRaster(sample.imageSize, naturalSize: geometry.size, transform: geometry.transform, videoRect: rect) {
+                requestRaster(sample: sample, mode: mode)
+            } else {
+                invalidateRaster()
+                setRasterStatus("Saved maps cannot be aligned with this frame's image.")
+            }
+        } else {
+            invalidateRaster()
+            setRasterStatus("No saved \(mode == "depth" ? "depth" : "confidence") sample at this point.")
+        }
         recordedOverlay.show(snapshot: snapshot, videoRect: rect,
                              naturalSize: geometry.size, preferredTransform: geometry.transform)
+    }
+
+    private func alignRaster(_ imageSize: CGSize, naturalSize: CGSize, transform: CGAffineTransform, videoRect: CGRect) -> Bool {
+        func mapped(_ point: CGPoint) -> CGPoint? {
+            RecordingPlaybackOverlayView.imagePoint(point, imageSize: imageSize, naturalSize: naturalSize,
+                preferredTransform: transform, videoRect: videoRect)
+        }
+        guard let origin = mapped(.zero), let x = mapped(CGPoint(x: imageSize.width, y: 0)),
+              let y = mapped(CGPoint(x: 0, y: imageSize.height)), imageSize.width > 0, imageSize.height > 0 else {
+            return false
+        }
+        rasterView.bounds = CGRect(origin: .zero, size: imageSize)
+        rasterView.layer.position = .zero
+        rasterView.transform = CGAffineTransform(a: (x.x-origin.x)/imageSize.width, b: (x.y-origin.y)/imageSize.width,
+            c: (y.x-origin.x)/imageSize.height, d: (y.y-origin.y)/imageSize.height, tx: origin.x, ty: origin.y)
+        return true
+    }
+
+    private func setRasterStatus(_ message: String?) {
+        rasterStatus.text = message.map { " \($0) " }
+        rasterStatus.isHidden = message == nil
+    }
+
+    private func invalidateRaster() {
+        if desiredRaster != nil || resolvedRasterKey != nil { rasterGeneration += 1 }
+        desiredRaster = nil
+        resolvedRasterKey = nil
+        rasterView.image = nil
+        rasterView.isHidden = true
+    }
+
+    private func requestRaster(sample: RecordingPlaybackRasterSample, mode: String) {
+        let key = mode + ":" + sample.id
+        if desiredRaster?.key != key {
+            invalidateRaster()
+            rasterGeneration += 1
+            desiredRaster = (sample, mode, key)
+            setRasterStatus("Loading saved \(mode == "depth" ? "depth" : "confidence")…")
+        }
+        startRasterLoadIfNeeded()
+    }
+
+    private func startRasterLoadIfNeeded() {
+        guard !stopped, !rasterLoadInFlight, let request = desiredRaster,
+              resolvedRasterKey != request.key, let timeline else { return }
+        rasterLoadInFlight = true
+        let generation = rasterGeneration
+        rasterQueue.async { [weak self] in
+            let result = Result { try autoreleasepool { try timeline.rasterImage(for: request.sample, mode: request.mode) } }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.rasterLoadInFlight = false
+                guard !self.stopped else { return }
+                if generation == self.rasterGeneration, self.desiredRaster?.key == request.key {
+                    self.resolvedRasterKey = request.key
+                    switch result {
+                    case .success(let image):
+                        self.rasterView.image = image
+                        self.rasterView.isHidden = false
+                        self.setRasterStatus(nil)
+                    case .failure:
+                        self.rasterView.image = nil
+                        self.rasterView.isHidden = true
+                        self.setRasterStatus("Saved \(request.mode == "depth" ? "depth" : "confidence") data is unavailable for this sample.")
+                    }
+                }
+                self.startRasterLoadIfNeeded()
+            }
+        }
     }
 
     private func setFrameOverlayMessage(_ message: String?) {
@@ -285,6 +439,8 @@ private final class RecordingPlayerViewController: AVPlayerViewController {
     func stopRecordedOverlays() {
         guard !stopped else { return }
         stopped = true
+        invalidateRaster()
+        setRasterStatus(nil)
         geometryTask?.cancel(); geometryTask = nil
         if let token = timeObserver, let observedPlayer { observedPlayer.removeTimeObserver(token) }
         timeObserver = nil; observedPlayer = nil

@@ -1868,7 +1868,7 @@ const s = StyleSheet.create({
   toolContent: { paddingBottom: 8 },
   moreActions: { gap: 2 },
   menuAction: { minHeight: 44, paddingHorizontal: 8, justifyContent: 'center' },
-  tagReadout: { height: 290, width: '100%' },
+  tagReadout: { height: 350, width: '100%' },
   passiveStatus: {
     flexDirection: 'row',
     justifyContent: 'space-between',

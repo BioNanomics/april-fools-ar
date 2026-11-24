@@ -36,9 +36,9 @@ The core uses the pinned [two-solution orthogonal-iteration API](../../third_par
 | --- | --- |
 | `translation: [x,y,z]` | Tag center in optical-camera meters: x right, y down, z forward. |
 | `rotationRowMajor: [9]` | Tag-to-camera rotation; `p_camera = R * p_tag + translation`. Tag x right, y down, z into the printed tag. |
-| `eulerDegrees: [rollX,pitchY,yawZ]` | ZYX decomposition with `R = Rz(yawZ) * Ry(pitchY) * Rx(rollX)`. These are tag-relative camera-optical orientation angles, not robot/field yaw. |
+| `eulerDegrees: [rollX,pitchY,yawZ]` | ZYX decomposition with `R = Rz(yawZ) * Ry(pitchY) * Rx(rollX)`. These are legacy raw optical Euler components, shown as Rot X / Rot Y / Rot Z. They are not FTC or FRC pose angles, phone attitude, robot pose or field yaw. |
 | `rangeMeters` | Euclidean center range `sqrt(x²+y²+z²)`, distinct from optical Z for depth comparison. |
-| `opticalAxisAngleDegrees` | Unsigned center-ray bearing `atan2(hypot(x,y),z)`, zero on the camera optical axis. |
+| `opticalAxisAngleDegrees` | Unsigned optical-axis offset `atan2(hypot(x,y),z)`, not signed horizontal bearing, zero on the camera optical axis. |
 | `planeAngleDegrees` | Incidence `acos(abs(normal dot normalized center ray))`, in `[0,90]`; zero when viewing the tag plane head-on. This includes off-axis viewing direction. |
 | `reprojectionRMSEPixels` | Actual pinhole corner error: reproject the four physical corners through this pose/intrinsics, then `sqrt(sum((du²+dv²))/4)`. It is a 2D per-corner RMS, not a per-coordinate RMS. |
 | `poseError` | Upstream **object-space sum of squared distances from transformed corners to their image rays, in m²**. It is neither pixels nor RMS. |
@@ -53,7 +53,20 @@ If a second finite positive-depth candidate exists, also return `secondPoseError
 
 The tag-plane corner order used for projection is `(-s/2,+s/2,0)`, `(+s/2,+s/2,0)`, `(+s/2,-s/2,0)`, `(-s/2,-s/2,0)`, matching upstream `p[0...3]`. A head-on upright tag has near-identity rotation under these conventions. ARKit's camera axes differ: perform the explicit camera-frame conversion in the AR integration, not inside this portable solver.
 
-Build the two local implementation files (`AFTagCore.c`, `AFTagDetector.m`) plus every production C path in `third_party/apriltag/sources.txt`. Header search paths: `native/AprilTag` and `third_party/apriltag`. Import `AFTagDetector.h` from the app's bridging header and link Foundation/CoreVideo (system pthread/math are used by the portable dependency). Exclude `tests/` from app compilation.
+## Explicit camera-relative readout adapters
+
+`AFTagPoseConventions.h/.c` adds `AFTagConvertOpticalPoseToFTC` and `AFTagConvertOpticalPoseToFRC`. They derive the selected convention from the **full optical translation and rotation**, not cached Euler/range fields. `AFTagPose` and its established raw optical ABI retain their numerical meanings. These helpers consume row-major matrices, meter lengths and degree angles, validate a proper rotation/positive optical depth and leave inputs unchanged. They have no SDK runtime dependency. The shared spatial-core CMake package includes their implementation and installs `AFTagPoseConventions.h` under `include/afsc/` beside `AFTagCore.h`.
+
+- **FTC SDK:** translation `(rawX,rawZ,−rawY)`, with matching camera/tag basis conversion `RFTC = C Rraw Cᵀ`. Rotation follows SDK intrinsic YXZ extraction of the raw matrix, mapping yaw = −first, pitch = second, roll = third, including float intermediates, alternate angle sets, wrapping and singularity behavior. Its matrix is `Rz(yaw) Rx(pitch) Ry(roll)`. FTC range is `hypot(ftcX,ftcY)`, bearing `atan2(−ftcX,ftcY)` and elevation `atan2(ftcZ,ftcY)`. Range excludes vertical displacement; elevation does not use range as its denominator.
+- **FRC / PhotonVision:** translation `(rawZ,−rawX,−rawY)`, followed by a full transform basis change with PhotonVision's tag-local `Ry(π)` correction: `RFRC = B Rraw Ry(π) Bᵀ`. Its camera is X forward/Y left/Z up; the tag is X out of print/Y printed right/Z printed up. A raw head-on identity becomes pose yaw 180°. Angles use WPILib extrinsic XYZ, `Rz(yaw) Ry(pitch) Rx(roll)`.
+
+The default iOS presentation is FRC / PhotonVision, with independent FTC SDK and Raw optical profiles. A size preset, inferred width, tag family or ID cannot select a pose convention. Profile matrices map their named tag basis into their named camera basis. Neither profile supplies camera-to-robot extrinsics or field coordinates. The optional tag-axis gizmo continues to show raw tag-local axes.
+
+The FRC adapter targets PhotonVision 2026.3.3 and WPILib 2026.2.2; the FTC adapter matches published Vision/RobotCore 11.1.0 and 12.0.0. Low-level WPILib AprilTagPoseEstimator itself returns the raw optical transform, so its return type alone does not imply the PhotonVision correction. See [decision 004](../../docs/decisions/004-pose-conventions.md) for full matrices, primary sources, singularities and interoperability examples.
+
+The iOS `poseReadout` record names convention/version, camera/tag frames, units and matrix order. Its `rollPitchYawDegrees` is always `[roll,pitch,yaw]`, even though the FTC UI displays Pitch / Roll / Yaw. Existing optical fields and old capture records remain unchanged. The old visible labels PnP Z / LiDAR Z / Plane / Bearing become Pose Z / Scene Z / Incidence / Axis offset; the underlying raw metrics retain their meaning.
+
+Build the local implementation files (`AFTagCore.c`, `AFTagPoseConventions.c`, `AFTagDetector.m`) plus every production C path in `third_party/apriltag/sources.txt`. Header search paths: `native/AprilTag` and `third_party/apriltag`. Import `AFTagDetector.h` from the app's bridging header and link Foundation/CoreVideo (system pthread/math are used by the portable dependency). Exclude `tests/` from app compilation.
 
 ## Actual detector smoke test
 
@@ -63,7 +76,7 @@ sh native/AprilTag/tests/run-smoke.sh
 
 The host test compiles the actual pinned C detector without React, ARKit, or OpenCV. It renders genuine tag36h11 ID 42 using upstream `apriltag_to_image`, enlarges it into a white grayscale fixture with padded stride, then asserts ID/family/hamming, full-resolution center/corners and blank-image zero detections. It also checks a calibrated detected pose, detection-only fallback with invalid size, the legacy no-pose path, and invalid stride rejection.
 
-The second executable projects independently defined frontal, off-axis, oblique and near-frontal tag poses through known intrinsics and solves those corners using the real upstream solver. It checks translation, rotation, Euler conventions, center bearing/incidence, positive-corner depth, candidate metrics, duplicate-frontal non-ambiguity, and explicit scale changes. Noisy corners are independently reprojected to verify the actual pixel RMS; doubling tag size doubles translation/range and quadruples object-space error while leaving pixel reprojection unchanged. Missing/invalid calibration and degenerate/nonfinite corners must fail without fabricated poses.
+The second executable projects independently defined frontal, off-axis, oblique and near-frontal tag poses through known intrinsics and solves those corners using the real upstream solver. It checks translation, rotation, Euler conventions, optical-axis offset/viewing incidence, positive-corner depth, candidate metrics, duplicate-frontal non-ambiguity, and explicit scale changes. Noisy corners are independently reprojected to verify the actual pixel RMS; doubling tag size doubles translation/range and quadruples object-space error while leaving pixel reprojection unchanged. Missing/invalid calibration and degenerate/nonfinite corners must fail without fabricated poses.
 
 These are synthetic parser/numerical tests; they do **not** establish physical-camera detection rate, corner accuracy, print quality, or field-calibration accuracy. A low reprojection error also cannot validate the physical tag size. Real iPhone and independently measured geometry tests are still required.
 

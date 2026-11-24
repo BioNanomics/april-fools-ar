@@ -28,17 +28,17 @@ enum TagCameraRanges {
             "segmentId": context.segmentID, "timestamp": context.timestamp.isFinite ? context.timestamp as Any : NSNull(),
             "coordinateFrame": "camera-optical-x-right-y-down-z-forward",
             "rangeConvention": "Euclidean camera-to-center distance; optical-axis Z is reported separately"]
-        var pose = AFSCPoseObservation()
-        if let dictionary = detection["pose"] as? [String: Any], let translation = vector(dictionary["translation"], count: 3) {
-            pose.translation_available = 1
-            pose.translation = TagDebugMath.coreVector(translation)
+        var opticalPoseObservation = AFSCPoseObservation()
+        if let dictionary = detection["pose"] as? [String: Any], let opticalTranslationMeters = vector(dictionary["translation"], count: 3) {
+            opticalPoseObservation.translation_available = 1
+            opticalPoseObservation.translation = TagDebugMath.coreVector(opticalTranslationMeters)
         }
         let depth = detection["depth"] as? [String: Any] ?? [:]
         var depthObservation = TagDebugMath.coreDepthObservation(depth: scalar(depth["centerDepthMeters"]),
                                                                  confidence: scalar(depth["centerConfidence"]))
         let center = vector(detection["center"], count: 2)
         var intrinsics = TagDebugMath.coreIntrinsics(context.intrinsics)
-        let ranges = afsc_camera_ranges(&pose, &depthObservation, &intrinsics, center == nil ? 0 : 1,
+        let ranges = afsc_camera_ranges(&opticalPoseObservation, &depthObservation, &intrinsics, center == nil ? 0 : 1,
                                        AFSCVec2(x: center?[0] ?? 0, y: center?[1] ?? 0))
         result["tagDepthZMeters"] = TagDebugMath.coreValue(ranges.pose_z_m) as Any? ?? NSNull()
         result["tagRangeMeters"] = TagDebugMath.coreValue(ranges.pose_range_m) as Any? ?? NSNull()

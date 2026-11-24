@@ -3,7 +3,7 @@ import UIKit
 /// Native, reusable readouts. Frame-critical updates never cross the JS bridge.
 final class TagDebugPanelView: UIView {
     private(set) var isExpanded = false
-    var preferredHeight: CGFloat { isExpanded ? 290 : 44 }
+    var preferredHeight: CGFloat { isExpanded ? 350 : 44 }
     var onPreferredHeightChanged: ((CGFloat) -> Void)?
     var onOpenGlossary: ((String) -> Void)?
     private let titleLabel = MetricGlossaryLabel(links: [
@@ -14,17 +14,22 @@ final class TagDebugPanelView: UIView {
     ])
     private let detailsButton = UIButton(type: .system)
     private let metricsScrollView = UIScrollView()
-    private let translationRow = DebugMetricRow(titles: ["X right · m", "Y down · m", "Z forward · m"],
-        anchors: ["x-right", "y-down", "z-forward"], valueSize: 19)
-    private let rotationRow = DebugMetricRow(titles: ["Cam roll · °", "Cam pitch · °", "Cam yaw · °"],
-        anchors: ["camera-roll", "camera-pitch", "camera-yaw"], valueSize: 18)
+    private let poseProfileLabel = MetricGlossaryLabel(links: [.init("Pose coordinate convention", anchor: "pose-profile", pattern: ".+")])
+    private let translationRow = DebugMetricRow(titles: ["X forward · m", "Y left · m", "Z up · m"],
+        anchors: ["pose-x", "pose-y", "pose-z"], valueSize: 19)
+    private let rotationRow = DebugMetricRow(titles: ["Roll · °", "Pitch · °", "Yaw · °"],
+        anchors: ["pose-roll", "pose-pitch", "pose-yaw"], valueSize: 18)
     private let gravityOrientationLabel = MetricGlossaryLabel(links: [
-        .init("Gravity", anchor: "gravity"), .init("Tilt", anchor: "tilt"), .init("Twist", anchor: "twist")
+        .init("Gravity", anchor: "gravity"), .init("Tag-plane lean", anchor: "tag-lean", pattern: "Lean"),
+        .init("Printed rotation from upright", anchor: "upright-rotation", pattern: "Upright")
     ])
-    private let depthRow = DebugMetricRow(titles: ["PnP Z · m", "LiDAR Z · m", "|Δ Z| · m"],
-        anchors: ["pnp-z", "lidar-z", "delta-z"], valueSize: 21)
-    private let geometryRow = DebugMetricRow(titles: ["Distance · m", "Plane · °", "Bearing · °"],
-        anchors: ["distance", "plane", "bearing"], valueSize: 18)
+    private let depthRow = DebugMetricRow(titles: ["Pose Z · m", "Scene Z · m", "|Δ Z| · m"],
+        anchors: ["pose-depth", "scene-depth", "delta-z"], valueSize: 21)
+    private let geometryRow = DebugMetricRow(titles: ["3D dist · m", "Incidence · °", "Axis offset · °"],
+        anchors: ["distance", "viewing-incidence", "optical-axis-offset"], valueSize: 18)
+    private let ftcAimingRow = DebugMetricRow(titles: ["XY range · m", "Bearing · °", "Elevation · °"],
+        anchors: ["planar-range", "horizontal-bearing", "elevation"], valueSize: 18)
+    private var poseConvention = TagPoseConvention.frcPhotonVision
     private let meanLabel = MetricGlossaryLabel(links: [
         .init("3×3 mean", anchor: "depth-mean"),
         .init("Depth confidence", anchor: "depth-confidence", pattern: "LOW|MED|HIGH|(?<=m · )[—?]"),
@@ -70,6 +75,10 @@ final class TagDebugPanelView: UIView {
         meanLabel.font = .monospacedSystemFont(ofSize: 13, weight: .medium)
         qualityLabel.font = .monospacedSystemFont(ofSize: 14, weight: .medium)
         gravityOrientationLabel.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
+        poseProfileLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        poseProfileLabel.adjustsFontSizeToFitWidth = true
+        poseProfileLabel.minimumScaleFactor = 0.8
+        poseProfileLabel.accessibilityIdentifier = "tagDebugPoseProfile"
         gravityOrientationLabel.accessibilityIdentifier = "tagDebugGravityOrientation"
         [meanLabel, qualityLabel, gravityOrientationLabel].forEach {
             $0.textColor = .white
@@ -87,7 +96,7 @@ final class TagDebugPanelView: UIView {
         metricsScrollView.showsHorizontalScrollIndicator = false
         metricsScrollView.contentInsetAdjustmentBehavior = .never
         addSubview(metricsScrollView)
-        [translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, meanLabel, qualityLabel].forEach(metricsScrollView.addSubview)
+        [poseProfileLabel, translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, ftcAimingRow, meanLabel, qualityLabel].forEach(metricsScrollView.addSubview)
         detailsButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
         detailsButton.tintColor = .white
         detailsButton.backgroundColor = UIColor.white.withAlphaComponent(0.10)
@@ -99,6 +108,7 @@ final class TagDebugPanelView: UIView {
             label.onOpenGlossary = { [weak self] anchor in self?.openGlossary(anchor) }
         }
         updateExpansion()
+        configurePoseConvention(.frcPhotonVision)
         showUnavailable("Waiting for a visible tag")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -115,8 +125,10 @@ final class TagDebugPanelView: UIView {
         }
         titleLabel.frame = CGRect(x: 12, y: 8, width: max(0, width - disclosureWidth), height: 42)
         metricsScrollView.frame = CGRect(x: 0, y: 52, width: bounds.width, height: max(0, bounds.height - 54))
-        let rows: [(UIView, CGFloat)] = [(translationRow, 36), (rotationRow, 34), (gravityOrientationLabel, 17),
-            (depthRow, 38), (geometryRow, 34), (meanLabel, 17), (qualityLabel, 17), (rateLabel, 28)]
+        var rows: [(UIView, CGFloat)] = [(poseProfileLabel, 17), (translationRow, 36), (rotationRow, 34),
+            (gravityOrientationLabel, 17), (depthRow, 38), (geometryRow, 34)]
+        if poseConvention == .ftcSdk { rows.append((ftcAimingRow, 34)) }
+        rows += [(meanLabel, 17), (qualityLabel, 17), (rateLabel, 28)]
         var y: CGFloat = 0
         for (view, height) in rows {
             view.frame = CGRect(x: 12, y: y, width: width, height: height)
@@ -152,8 +164,8 @@ final class TagDebugPanelView: UIView {
     }
     @objc private func toggleDetails() { setExpanded(!isExpanded) }
     private var glossaryLabels: [MetricGlossaryLabel] {
-        [titleLabel, gravityOrientationLabel, meanLabel, qualityLabel, rateLabel]
-            + [translationRow, rotationRow, depthRow, geometryRow].flatMap(\.headings)
+        [titleLabel, poseProfileLabel, gravityOrientationLabel, meanLabel, qualityLabel, rateLabel]
+            + [translationRow, rotationRow, depthRow, geometryRow, ftcAimingRow].flatMap(\.headings)
     }
     private func openGlossary(_ anchor: String) {
         if let onOpenGlossary { onOpenGlossary(anchor) }
@@ -161,7 +173,8 @@ final class TagDebugPanelView: UIView {
     }
     private func updateExpansion() {
         glossaryLabels.forEach { $0.linksEnabled = isExpanded }
-        [translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        [poseProfileLabel, translationRow, rotationRow, gravityOrientationLabel, depthRow, geometryRow, meanLabel, qualityLabel].forEach { $0.isHidden = !isExpanded }
+        ftcAimingRow.isHidden = !isExpanded || poseConvention != .ftcSdk
         metricsScrollView.isHidden = !isExpanded
         if isExpanded { metricsScrollView.addSubview(rateLabel) }
         else { addSubview(rateLabel); metricsScrollView.contentOffset = .zero }
@@ -177,6 +190,33 @@ final class TagDebugPanelView: UIView {
         setNeedsLayout()
     }
     private func updateRateText() { rateLabel.text = isExpanded ? expandedRateText : compactRateText }
+    private func configurePoseConvention(_ convention: TagPoseConvention) {
+        let changed = poseConvention != convention || poseProfileLabel.text == nil
+        poseConvention = convention
+        poseProfileLabel.text = "\(convention.label) · Tag pose relative to camera"
+        guard changed else { return }
+        let axes: [String]
+        let rotations: [String]
+        let anchors: [String]
+        switch convention {
+        case .rawOptical:
+            axes = ["X right · m", "Y down · m", "Z forward · m"]
+            rotations = ["Rot X · °", "Rot Y · °", "Rot Z · °"]
+            anchors = ["optical-rotation-x", "optical-rotation-y", "optical-rotation-z"]
+        case .ftcSdk:
+            axes = ["X right · m", "Y forward · m", "Z up · m"]
+            rotations = ["Pitch · °", "Roll · °", "Yaw · °"]
+            anchors = ["pose-pitch", "pose-roll", "pose-yaw"]
+        case .frcPhotonVision:
+            axes = ["X forward · m", "Y left · m", "Z up · m"]
+            rotations = ["Roll · °", "Pitch · °", "Yaw · °"]
+            anchors = ["pose-roll", "pose-pitch", "pose-yaw"]
+        }
+        translationRow.setTitles(axes, anchors: ["pose-x", "pose-y", "pose-z"])
+        rotationRow.setTitles(rotations, anchors: anchors)
+        ftcAimingRow.isHidden = !isExpanded || convention != .ftcSdk
+        setNeedsLayout()
+    }
     private func updateTitleText() {
         titleLabel.text = isExpanded ? expandedTitleText : compactTitleText
         titleLabel.accessibilityLabel = titleAccessibilityText
@@ -215,7 +255,7 @@ final class TagDebugPanelView: UIView {
         updateTitleText()
         titleLabel.textColor = .lightGray
         layer.borderColor = UIColor.darkGray.cgColor
-        [translationRow, rotationRow, depthRow, geometryRow].forEach { $0.setValues(["—", "—", "—"]) }
+        [translationRow, rotationRow, depthRow, geometryRow, ftcAimingRow].forEach { $0.setValues(["—", "—", "—"]) }
         showGravityOrientation(nil, unavailableReason: reason)
         meanLabel.text = reason
         qualityLabel.text = "Point at a tag · tap its outline to select"
@@ -225,6 +265,7 @@ final class TagDebugPanelView: UIView {
     }
     func show(debug: [String: Any]?, frameID: String, timestamp: Double, analysisHz: Double,
               latencyMilliseconds: Double?, settings: TagDebugSettings) {
+        configurePoseConvention(TagPoseConvention(rawValue: settings.poseConvention) ?? .frcPhotonVision)
         let age = ProcessInfo.processInfo.systemUptime - timestamp
         guard age.isFinite, age >= 0, age <= 0.4 else { showUnavailable("Stale result · waiting for a current frame"); return }
         guard let debug else {
@@ -275,25 +316,37 @@ final class TagDebugPanelView: UIView {
         updateTitleText()
         titleLabel.textColor = Self.color(severity)
         layer.borderColor = Self.color(severity).cgColor
-        func scalar(_ key: String, _ format: String = "%.3f") -> String {
-            TagDebugMath.number(debug[key]).map { String(format: format, $0) } ?? "—"
+        func scalar(_ key: String, _ format: String = "%.3f", legacy: String? = nil) -> String {
+            let value = debug[key] ?? legacy.flatMap { debug[$0] }
+            return TagDebugMath.number(value).map { String(format: format, $0) } ?? "—"
         }
-        func triple(_ key: String, _ format: String) -> [String] {
-            TagDebugMath.numbers(debug[key], count: 3)?.map { String(format: format, $0) } ?? ["—", "—", "—"]
+        if let record = debug["poseReadout"] as? [String: Any],
+           let readout = TagPoseReadout.decode(record: record), readout.convention == poseConvention {
+            translationRow.setValues(readout.translationMeters.map { String(format: "%+.3f", $0) })
+            rotationRow.setValues(readout.displayRotationDegrees.map { String(format: "%+.1f", $0) })
+            ftcAimingRow.setValues([readout.planarRangeMeters.map { String(format: "%.3f", $0) } ?? "—",
+                readout.horizontalBearingDegrees.map { String(format: "%+.1f", $0) } ?? "—",
+                readout.elevationDegrees.map { String(format: "%+.1f", $0) } ?? "—"])
+        } else {
+            translationRow.setValues(["—", "—", "—"])
+            rotationRow.setValues(["—", "—", "—"])
+            ftcAimingRow.setValues(["—", "—", "—"])
         }
-        translationRow.setValues(triple("translationMeters", "%+.3f"))
-        rotationRow.setValues(triple("eulerDegrees", "%+.1f"))
         showGravityOrientation(debug["gravityOrientation"] as? [String: Any])
-        depthRow.setValues([scalar("opticalPoseZMeters"), scalar("centerDepthMeters"), scalar("depthDifferenceMeters")])
+        depthRow.setValues([scalar("poseOpticalDepthMeters", legacy: "opticalPoseZMeters"),
+            scalar("sceneOpticalDepthMeters", legacy: "centerDepthMeters"),
+            scalar("absoluteOpticalDepthDifferenceMeters", legacy: "depthDifferenceMeters")])
         var deltaColor = UIColor.lightGray
-        if let delta = TagDebugMath.number(debug["depthDifferenceMeters"]) {
+        if let delta = TagDebugMath.number(debug["absoluteOpticalDepthDifferenceMeters"] ?? debug["depthDifferenceMeters"]) {
             deltaColor = Self.color(delta > settings.rejectDepthDifferenceMeters + 1e-9 ? "bad" :
                 (delta > settings.warningDepthDifferenceMeters + 1e-9 ? "warning" : "good"))
         }
         depthRow.setColor(deltaColor, at: 2)
-        geometryRow.setValues([scalar("rangeMeters"), scalar("planeAngleDegrees", "%.1f"), scalar("centerBearingDegrees", "%.1f")])
-        geometryRow.setColor((TagDebugMath.number(debug["rangeMeters"]) ?? 0) > settings.maxDistanceMeters ? .systemRed : .white, at: 0)
-        geometryRow.setColor((TagDebugMath.number(debug["planeAngleDegrees"]) ?? 0) > settings.maxPlaneAngleDegrees ? .systemRed : .white, at: 1)
+        geometryRow.setValues([scalar("cameraDistanceMeters", legacy: "rangeMeters"),
+            scalar("viewingIncidenceDegrees", "%.1f", legacy: "planeAngleDegrees"),
+            scalar("opticalAxisOffsetDegrees", "%.1f", legacy: "centerBearingDegrees")])
+        geometryRow.setColor((TagDebugMath.number(debug["cameraDistanceMeters"] ?? debug["rangeMeters"]) ?? 0) > settings.maxDistanceMeters ? .systemRed : .white, at: 0)
+        geometryRow.setColor((TagDebugMath.number(debug["viewingIncidenceDegrees"] ?? debug["planeAngleDegrees"]) ?? 0) > settings.maxViewingIncidenceDegrees ? .systemRed : .white, at: 1)
         let confidence = (debug["centerConfidence"] as? NSNumber)?.intValue
         let confidenceText = confidence.map { ["LOW", "MED", "HIGH"].indices.contains($0) ? ["LOW", "MED", "HIGH"][$0] : "?" } ?? "—"
         meanLabel.text = "3×3 mean \(scalar("meanDepthMeters")) m · \(confidenceText) · \(scalar("validNeighborCount", "%.0f"))/9"
@@ -338,28 +391,30 @@ final class TagDebugPanelView: UIView {
         let record = record ?? [:]
         let rawAvailable = record["available"] as? NSNumber
         let available = rawAvailable.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
-        func angle(_ key: String, range: ClosedRange<Double>) -> Double? {
-            guard available, let value = record[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(),
+        func angle(_ key: String, legacy: String? = nil, range: ClosedRange<Double>) -> Double? {
+            let raw = record[key] ?? legacy.flatMap { record[$0] }
+            guard available, let value = raw as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(),
                   value.doubleValue.isFinite, range.contains(value.doubleValue) else { return nil }
             return value.doubleValue
         }
-        let tilt = angle("tiltFromVerticalDegrees", range: 0...90)
-        let twist = tilt == nil ? nil : angle("twistDegrees", range: -180...180)
-        let tiltText = tilt.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
-        let twistText = twist.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
-        gravityOrientationLabel.text = "Gravity · Tilt \(tiltText) · Twist \(twistText)"
+        let planeLean = angle("planeLeanFromVerticalDegrees", legacy: "tiltFromVerticalDegrees", range: 0...90)
+        let uprightRotation = planeLean == nil ? nil :
+            angle("uprightRotationClockwiseDegrees", legacy: "twistDegrees", range: -180...180)
+        let leanText = planeLean.map { String(format: "%.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        let uprightText = uprightRotation.map { String(format: "%+.1f°", $0 == 0 ? 0 : $0) } ?? "—"
+        gravityOrientationLabel.text = "Gravity · Lean \(leanText) · Upright \(uprightText)"
         let reason = unavailableReason ?? (record["reason"] as? String) ?? "No gravity-relative orientation in this frame"
-        let tiltAccessibility = tilt.map { "Tilt from vertical \(String(format: "%.1f", $0)) degrees; zero degrees is a vertical tag plane." }
-            ?? "Tilt from vertical unavailable. Reason: \(available ? "Invalid gravity-relative orientation" : reason)."
-        let twistReason = tilt.map { $0 > 89.99 } == true
+        let leanAccessibility = planeLean.map { "Tag-plane lean from vertical \(String(format: "%.1f", $0)) degrees; zero degrees is a vertical tag plane." }
+            ?? "Tag-plane lean unavailable. Reason: \(available ? "Invalid gravity-relative orientation" : reason)."
+        let uprightReason = planeLean.map { $0 > 89.99 } == true
             ? "Gravity does not define upright within a horizontal tag plane."
             : "Reason: \(available ? "No valid twist in this frame" : reason)."
-        let twistAccessibility = twist.map { "Twist from upright \(String(format: "%+.1f", $0)) degrees; positive is clockwise when viewing the printed front." }
-            ?? "Twist from upright unavailable. \(twistReason)"
+        let uprightAccessibility = uprightRotation.map { "Printed rotation from upright \(String(format: "%+.1f", $0)) degrees; positive is clockwise when viewing the printed front." }
+            ?? "Printed rotation from upright unavailable. \(uprightReason)"
         gravityOrientationLabel.accessibilityLabel = "Gravity-relative tag orientation"
-        gravityOrientationLabel.accessibilityValue = tiltAccessibility + " " + twistAccessibility
-        gravityOrientationLabel.setAccessibilityValue(tiltAccessibility, for: "tilt")
-        gravityOrientationLabel.setAccessibilityValue(twistAccessibility, for: "twist")
+        gravityOrientationLabel.accessibilityValue = leanAccessibility + " " + uprightAccessibility
+        gravityOrientationLabel.setAccessibilityValue(leanAccessibility, for: "tag-lean")
+        gravityOrientationLabel.setAccessibilityValue(uprightAccessibility, for: "upright-rotation")
     }
 }
 
@@ -414,6 +469,14 @@ private final class DebugMetricRow: UIView {
         }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func setTitles(_ titles: [String], anchors: [String]) {
+        for index in 0..<3 {
+            let title = titles[index]
+            headings[index].setLinks([.init(title.components(separatedBy: " · ")[0], anchor: anchors[index],
+                pattern: NSRegularExpression.escapedPattern(for: title))])
+            headings[index].text = title
+        }
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
         let width = bounds.width / 3

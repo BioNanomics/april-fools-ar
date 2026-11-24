@@ -3,7 +3,7 @@ import CoreFoundation
 import simd
 
 /// Camera orientation and tag pose must come from the same captured AR frame.
-struct TagGravityOrientationContext {
+struct GravityRelativeTagOrientationContext {
     let cameraToWorld: simd_float4x4
     let settings: TagDebugSettings
     let tracking: String
@@ -13,8 +13,8 @@ struct TagGravityOrientationContext {
     let frameAgeSeconds: Double
 }
 
-enum TagGravityOrientation {
-    static func enrich(_ detection: [String: Any], context: TagGravityOrientationContext) -> [String: Any] {
+enum GravityRelativeTagOrientation {
+    static func enrich(_ detection: [String: Any], context: GravityRelativeTagOrientationContext) -> [String: Any] {
         var result = detection
         let orientation = evaluate(detection, context: context)
         result["gravityOrientation"] = orientation
@@ -24,14 +24,15 @@ enum TagGravityOrientation {
         return result
     }
 
-    static func evaluate(_ detection: [String: Any], context: TagGravityOrientationContext) -> [String: Any] {
+    static func evaluate(_ detection: [String: Any], context: GravityRelativeTagOrientationContext) -> [String: Any] {
         var output: [String: Any] = [
+            "planeLeanFromVerticalDegrees": NSNull(), "uprightRotationClockwiseDegrees": NSNull(),
             "available": false, "reason": "invalidPose", "tiltFromVerticalDegrees": NSNull(),
             "twistDegrees": NSNull(), "twistAvailable": false, "twistReason": "orientationUnavailable",
             "normalWorld": NSNull(), "upWorld": NSNull(), "worldFromTagRotationRowMajor": NSNull(),
             "source": "tagPose+ARKitGravity", "coordinateFrame": "gravity-aligned-world-y-up",
             "method": "R_world_ARCamera * diag(1,-1,-1) * R_optical_tag",
-            "angleConvention": "tilt: unsigned printed-plane departure from vertical, 0 vertical / 90 horizontal; twist: clockwise from upright looking at the printed front, undefined for a horizontal plane",
+            "angleConvention": "plane lean: unsigned printed-plane departure from vertical, 0 vertical / 90 horizontal; upright rotation: clockwise looking at the printed front, undefined for a horizontal plane; legacy tilt/twist fields are aliases",
             "frameId": context.frameID, "segmentId": context.segmentID,
             "timestamp": context.timestamp.isFinite ? context.timestamp as Any : NSNull(),
             "frameAgeSeconds": context.frameAgeSeconds.isFinite ? context.frameAgeSeconds as Any : NSNull(),
@@ -45,20 +46,20 @@ enum TagGravityOrientation {
         input.world_from_optical = TagDebugMath.coreWorldFromOptical(context.cameraToWorld)
         input.settings = TagDebugMath.coreMeasurementSettings(context.settings)
         let pose = detection["pose"] as? [String: Any] ?? [:]
-        let rotation = numbers(pose["rotationRowMajor"], count: 9)
+        let opticalTagRotationRowMajor = numbers(pose["rotationRowMajor"], count: 9)
         // The matrix is authoritative, including at Euler-angle singularities.
-        input.pose.orientation_available = rotation == nil ? 0 : 1
+        input.pose.orientation_available = opticalTagRotationRowMajor == nil ? 0 : 1
         withUnsafeMutableBytes(of: &input.optical_from_tag_rotation.values) { bytes in
             let values = bytes.bindMemory(to: Double.self)
             values[15] = 1
-            if let rotation {
-                for column in 0..<3 { for row in 0..<3 { values[column*4+row] = rotation[row*3+column] } }
+            if let opticalTagRotationRowMajor {
+                for column in 0..<3 { for row in 0..<3 { values[column*4+row] = opticalTagRotationRowMajor[row*3+column] } }
             }
         }
-        if let translation = numbers(pose["translation"], count: 3) {
+        if let opticalTranslationMeters = numbers(pose["translation"], count: 3) {
             input.pose.translation_available = 1
-            input.pose.translation = AFSCVec3(x: translation[0], y: translation[1], z: translation[2])
-            input.pose.range_m = TagDebugMath.coreOptional(hypot(hypot(translation[0], translation[1]), translation[2]))
+            input.pose.translation = AFSCVec3(x: opticalTranslationMeters[0], y: opticalTranslationMeters[1], z: opticalTranslationMeters[2])
+            input.pose.range_m = TagDebugMath.coreOptional(hypot(hypot(opticalTranslationMeters[0], opticalTranslationMeters[1]), opticalTranslationMeters[2]))
         }
         input.pose.plane_angle_rad = TagDebugMath.coreOptional(number(pose["planeAngleDegrees"]).map { $0 * .pi / 180 })
         input.pose.reprojection_rms_px = TagDebugMath.coreOptional(number(pose["reprojectionRMSEPixels"]))
@@ -72,18 +73,22 @@ enum TagGravityOrientation {
             output["reason"] = reason(value.reason)
             return output
         }
-        let rotationWorld = withUnsafeBytes(of: value.world_from_tag_rotation.values) { bytes -> [Double] in
+        let worldFromTagRotationRowMajor = withUnsafeBytes(of: value.world_from_tag_rotation.values) { bytes -> [Double] in
             let values = bytes.bindMemory(to: Double.self)
             return (0..<9).map { values[($0 % 3)*4 + $0 / 3] }
         }
-        let twist = TagDebugMath.coreValue(value.twist_rad).map { $0 * 180 / .pi }
+        let planeLeanFromVerticalDegrees = value.tilt_from_vertical_rad * 180 / .pi
+        let uprightRotationClockwiseDegrees = TagDebugMath.coreValue(value.twist_rad).map { $0 * 180 / .pi }
         output.merge([
-            "available": true, "reason": "valid", "tiltFromVerticalDegrees": value.tilt_from_vertical_rad * 180 / .pi,
-            "twistDegrees": twist as Any? ?? NSNull(), "twistAvailable": twist != nil,
-            "twistReason": twist == nil ? "horizontalTagPlane" : "valid",
+            "available": true, "reason": "valid", "planeLeanFromVerticalDegrees": planeLeanFromVerticalDegrees,
+            "uprightRotationClockwiseDegrees": uprightRotationClockwiseDegrees as Any? ?? NSNull(),
+            // Schema-1 readers keep their original, numerically identical fields.
+            "tiltFromVerticalDegrees": planeLeanFromVerticalDegrees,
+            "twistDegrees": uprightRotationClockwiseDegrees as Any? ?? NSNull(), "twistAvailable": uprightRotationClockwiseDegrees != nil,
+            "twistReason": uprightRotationClockwiseDegrees == nil ? "horizontalTagPlane" : "valid",
             "normalWorld": [value.normal_world.x, value.normal_world.y, value.normal_world.z],
             "upWorld": [value.up_world.x, value.up_world.y, value.up_world.z],
-            "worldFromTagRotationRowMajor": rotationWorld
+            "worldFromTagRotationRowMajor": worldFromTagRotationRowMajor
         ]) { _, new in new }
         return output
     }

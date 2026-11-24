@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "0.12.0",
+      "build": "35",
+      "title": "Consistent FIRST pose vocabulary and consolidated app",
+      "changes": [
+        "Choose explicit FTC SDK, FRC / PhotonVision, or raw optical pose coordinates, independently of physical tag-size detection.",
+        "Use convention-correct tag pitch, roll and yaw, signed FTC bearing and elevation, and separate planar range from 3D distance.",
+        "Clarify optical depth, viewing incidence, optical-axis offset and gravity-relative tag lean and upright rotation in the linked offline glossary.",
+        "Bring field definitions, anchored walks, adaptive controls, Kalman smoothing, measurement triangles and recorded sensor playback together on main while preserving existing recordings."
+      ]
+    },
+    {
       "version": "0.11.0",
       "build": "34",
       "title": "Field definitions and anchored AR walks",

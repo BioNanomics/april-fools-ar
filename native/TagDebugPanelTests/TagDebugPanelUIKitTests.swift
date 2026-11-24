@@ -30,6 +30,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     private func validDebug() -> [String: Any] {
         ["id": 42, "status": "valid", "severity": "good",
          "translationMeters": [0.123, -0.045, 1.234], "eulerDegrees": [12.3, -24.5, 36.7],
+         "rotationRowMajor": [1.0, 0, 0, 0, 1, 0, 0, 0, 1],
          "opticalPoseZMeters": 1.234, "centerDepthMeters": 1.250, "depthDifferenceMeters": 0.016,
          "rangeMeters": 1.241, "planeAngleDegrees": 28.4, "centerBearingDegrees": 6.1,
          "meanDepthMeters": 1.251, "centerConfidence": 2, "validNeighborCount": 9,
@@ -45,18 +46,18 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         var debug = validDebug()
         debug["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 0.0, "twistDegrees": 0.0]
         show(debug)
-        XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt 0.0° · Twist +0.0°")
+        XCTAssertEqual(try gravityLabel().text, "Gravity · Lean 0.0° · Upright +0.0°")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("zero degrees is a vertical tag plane") == true)
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("positive is clockwise") == true)
-        XCTAssertTrue(try glossaryLink("tilt").accessibilityValue?.contains("zero degrees is a vertical tag plane") == true,
+        XCTAssertTrue(try glossaryLink("tag-lean").accessibilityValue?.contains("zero degrees is a vertical tag plane") == true,
                       "The accessible link must retain the reading's meaning")
-        XCTAssertTrue(try glossaryLink("twist").accessibilityValue?.contains("positive is clockwise") == true)
-        _ = try label("Cam roll · °")
-        _ = try label("Cam pitch · °")
-        _ = try label("Cam yaw · °")
-        _ = try label("+12.3")
+        XCTAssertTrue(try glossaryLink("upright-rotation").accessibilityValue?.contains("positive is clockwise") == true)
+        _ = try label("Roll · °")
+        _ = try label("Pitch · °")
+        _ = try label("Yaw · °")
+        _ = try label("+180.0")
         assertReadable()
-        try savePNG("panel-gravity-orientation-390x290")
+        try savePNG("panel-gravity-orientation-390x350")
     }
 
     func testGravityOrientationHorizontalMissingLegacyAndTrackingUnavailableClearPreviousValues() throws {
@@ -64,22 +65,22 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         var debug = validDebug()
         debug["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 90.0, "twistDegrees": NSNull()]
         show(debug)
-        XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt 90.0° · Twist —")
+        XCTAssertEqual(try gravityLabel().text, "Gravity · Lean 90.0° · Upright —")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("horizontal tag plane") == true)
-        XCTAssertTrue(try glossaryLink("twist").accessibilityValue?.contains("horizontal tag plane") == true,
+        XCTAssertTrue(try glossaryLink("upright-rotation").accessibilityValue?.contains("horizontal tag plane") == true,
                       "VoiceOver must explain why horizontal-plane twist is unavailable")
         debug["gravityOrientation"] = ["available": false, "reason": "trackingLimited", "tiltFromVerticalDegrees": 12.0, "twistDegrees": 3.0]
         show(debug)
-        XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
+        XCTAssertEqual(try gravityLabel().text, "Gravity · Lean — · Upright —")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("trackingLimited") == true)
-        XCTAssertTrue(try glossaryLink("tilt").accessibilityValue?.contains("trackingLimited") == true)
-        XCTAssertTrue(try glossaryLink("twist").accessibilityValue?.contains("trackingLimited") == true)
+        XCTAssertTrue(try glossaryLink("tag-lean").accessibilityValue?.contains("trackingLimited") == true)
+        XCTAssertTrue(try glossaryLink("upright-rotation").accessibilityValue?.contains("trackingLimited") == true)
         debug.removeValue(forKey: "gravityOrientation")
         show(debug)
-        XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
+        XCTAssertEqual(try gravityLabel().text, "Gravity · Lean — · Upright —")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("No gravity-relative orientation in this frame") == true)
         panel.showUnavailable("Stale result")
-        XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
+        XCTAssertEqual(try gravityLabel().text, "Gravity · Lean — · Upright —")
         XCTAssertTrue(try gravityLabel().accessibilityValue?.contains("Stale result") == true)
         assertReadable()
     }
@@ -90,18 +91,18 @@ final class TagDebugPanelUIKitTests: XCTestCase {
             var debug = validDebug()
             debug["gravityOrientation"] = ["available": true, "tiltFromVerticalDegrees": tilt, "twistDegrees": 1.0]
             show(debug)
-            XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
+            XCTAssertEqual(try gravityLabel().text, "Gravity · Lean — · Upright —")
         }
         for twist: Any in [true, Double.nan, Double.infinity, -180.1, 180.1, "1.0", NSNull()] {
             var debug = validDebug()
             debug["gravityOrientation"] = ["available": true, "tiltFromVerticalDegrees": 12.5, "twistDegrees": twist]
             show(debug)
-            XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt 12.5° · Twist —")
+            XCTAssertEqual(try gravityLabel().text, "Gravity · Lean 12.5° · Upright —")
         }
         var debug = validDebug()
         debug["gravityOrientation"] = ["available": 1, "tiltFromVerticalDegrees": 0.0, "twistDegrees": 0.0]
         show(debug)
-        XCTAssertEqual(try gravityLabel().text, "Gravity · Tilt — · Twist —")
+        XCTAssertEqual(try gravityLabel().text, "Gravity · Lean — · Upright —")
         assertReadable()
     }
 
@@ -119,11 +120,11 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         expandPanel()
         XCTAssertTrue(labels().contains { $0.text?.contains("120.0 cm") == true })
         _ = try label("1.234")
-        _ = try label("+0.123")
+        _ = try label("-0.123")
         assertReadable()
     }
 
-    func testPassiveEmbeddedDetailsShowAllMetricsWithoutDisclosureOrTouchInterception() throws {
+    func testPassiveEmbeddedDetailsKeepTermLinksWhileBackgroundPassesThrough() throws {
         panel.configureAsPassiveReadout()
         resizePanel(to: panel.preferredHeight)
         show(validDebug())
@@ -131,13 +132,20 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         let button = try detailsButton()
         XCTAssertTrue(button.isHidden)
         XCTAssertFalse(button.isAccessibilityElement)
-        _ = try label("+0.123")
+        _ = try label("-0.123")
         _ = try label("1.234")
         let scroll = try XCTUnwrap(panel.subviews.compactMap { $0 as? UIScrollView }.first)
         XCTAssertFalse(scroll.isScrollEnabled, "The surrounding bottom sheet owns scrolling")
+        let linkFrames = glossaryLinks().map { $0.convert($0.bounds, to: panel) }
         for y in stride(from: CGFloat(5), to: panel.bounds.height, by: 17) {
             for x in stride(from: CGFloat(5), to: panel.bounds.width, by: 23) {
-                XCTAssertNil(panel.hitTest(CGPoint(x: x, y: y), with: nil))
+                let point = CGPoint(x: x, y: y)
+                let hit = panel.hitTest(point, with: nil)
+                if linkFrames.contains(where: { $0.contains(point) }) {
+                    XCTAssertTrue(hit is UIControl, "Embedded glossary terms keep native link activation")
+                } else {
+                    XCTAssertNil(hit, "The surrounding sheet receives background scroll gestures")
+                }
             }
         }
         panel.setExpanded(false)
@@ -146,7 +154,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     }
 
     func testSeparateReadoutMountLifecycleAndFreshnessAreIndependentOfCamera() throws {
-        let readout = ARCaptureReadoutView(frame: CGRect(x: 0, y: 450, width: 390, height: 290))
+        let readout = ARCaptureReadoutView(frame: CGRect(x: 0, y: 450, width: 390, height: 350))
         var attachments = [Bool]()
         readout.onWindowAttachmentChanged = { [weak readout] view, attached in
             XCTAssertTrue(view === readout)
@@ -158,10 +166,16 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(attachments, [true])
         XCTAssertEqual(readout.panel.frame, readout.bounds)
         XCTAssertEqual(readout.bounds.height, readout.panel.preferredHeight, "The embedded host must allow the added gravity row and calibration footer")
-        XCTAssertNil(readout.hitTest(CGPoint(x: 50, y: 100), with: nil))
+        XCTAssertNil(readout.hitTest(CGPoint(x: readout.bounds.width - 4, y: 100), with: nil))
+        let profileLink = try XCTUnwrap(allViews(readout).compactMap { $0 as? UIButton }.first {
+            $0.accessibilityIdentifier == "tagMetricHelp-pose-profile" && !$0.isHidden
+        })
+        let profileFrame = profileLink.convert(profileLink.bounds, to: readout)
+        XCTAssertTrue(readout.hitTest(CGPoint(x: profileFrame.midX, y: profileFrame.midY), with: nil) === profileLink,
+                      "The React Native wrapper must preserve the glossary link's native hit target")
         XCTAssertTrue(readout.panel.isExpanded)
         func show(_ debug: [String: Any]?, timestamp: Double) {
-            readout.panel.show(debug: debug, frameID: UUID().uuidString, timestamp: timestamp,
+            readout.panel.show(debug: preparedDebug(debug, settings: settings), frameID: UUID().uuidString, timestamp: timestamp,
                                analysisHz: 30, latencyMilliseconds: 12, settings: settings)
         }
         func contains(_ text: String) -> Bool {
@@ -169,25 +183,25 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         }
         show(validDebug(), timestamp: ProcessInfo.processInfo.systemUptime)
         readout.layoutIfNeeded(); readout.panel.layoutIfNeeded()
-        XCTAssertTrue(contains("+0.123"))
-        for label in allViews(readout.panel).compactMap({ $0 as? UILabel }) where !(label.text ?? "").isEmpty && !label.isHidden {
+        XCTAssertTrue(contains("-0.123"))
+        for label in allViews(readout.panel).compactMap({ $0 as? UILabel }) where !(label.text ?? "").isEmpty && isVisible(label) {
             let bounds = label.convert(label.bounds, to: readout.panel)
             XCTAssertTrue(readout.panel.bounds.insetBy(dx: -0.5, dy: -0.5).contains(bounds),
                           "Embedded metric clipped: \(label.text ?? "")")
         }
         show(nil, timestamp: ProcessInfo.processInfo.systemUptime)
-        XCTAssertFalse(contains("+0.123"))
+        XCTAssertFalse(contains("-0.123"))
         XCTAssertTrue(contains("TAG DEBUG · WAITING"))
         for offset in [-1.0, 1.0] {
             show(validDebug(), timestamp: ProcessInfo.processInfo.systemUptime + offset)
-            XCTAssertFalse(contains("+0.123"), "Stale and future cached snapshots must stay unavailable")
+            XCTAssertFalse(contains("-0.123"), "Stale and future cached snapshots must stay unavailable")
         }
         show(validDebug(), timestamp: ProcessInfo.processInfo.systemUptime)
-        XCTAssertTrue(contains("+0.123"))
+        XCTAssertTrue(contains("-0.123"))
         let expiry = expectation(description: "Embedded cached snapshot expires")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { expiry.fulfill() }
         wait(for: [expiry], timeout: 1)
-        XCTAssertFalse(contains("+0.123"))
+        XCTAssertFalse(contains("-0.123"))
         readout.removeFromSuperview()
         XCTAssertEqual(attachments, [true, false])
         host.addSubview(readout)
@@ -195,10 +209,26 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         readout.removeFromSuperview()
     }
 
-    private func show(_ debug: [String: Any]?, frame: String = UUID().uuidString, settings configured: TagDebugSettings? = nil) {
+    private func preparedDebug(_ debug: [String: Any]?, settings configured: TagDebugSettings) -> [String: Any]? {
+        guard var debug else { return nil }
+        if let translation = debug["translationMeters"] as? [Double],
+           let rotation = debug["rotationRowMajor"] as? [Double],
+           let convention = TagPoseConvention(rawValue: configured.poseConvention),
+           let readout = TagPoseReadout.evaluate(opticalPose: ["translation": translation, "rotationRowMajor": rotation], convention: convention) {
+            debug["poseReadout"] = readout.dictionary
+        } else {
+            debug.removeValue(forKey: "poseReadout")
+        }
+        return debug
+    }
+
+    private func show(_ debug: [String: Any]?, frame: String = UUID().uuidString, settings configured: TagDebugSettings? = nil,
+                      derivePoseReadout: Bool = true) {
+        let configured = configured ?? settings
+        let debug = derivePoseReadout ? preparedDebug(debug, settings: configured) : debug
         panel.traitCollection.performAsCurrent {
             panel.show(debug: debug, frameID: frame, timestamp: ProcessInfo.processInfo.systemUptime,
-                       analysisHz: 29.7, latencyMilliseconds: 12, settings: configured ?? settings)
+                       analysisHz: 29.7, latencyMilliseconds: 12, settings: configured)
         }
         panel.setNeedsLayout(); panel.layoutIfNeeded()
     }
@@ -252,6 +282,112 @@ final class TagDebugPanelUIKitTests: XCTestCase {
     private func label(_ text: String) throws -> UILabel {
         try XCTUnwrap(labels().first { $0.text == text && isVisible($0) }, "Missing visible value: \(text)")
     }
+    private func metricValue(_ title: String) throws -> UILabel {
+        let heading = try label(title)
+        let row = try XCTUnwrap(heading.superview)
+        return try XCTUnwrap(row.subviews.compactMap { $0 as? UILabel }.first {
+            $0 !== heading && abs($0.frame.minX - heading.frame.minX) < 0.5 && $0.frame.minY >= heading.frame.maxY - 0.5
+        }, "Missing value for \(title)")
+    }
+    private func assertMetric(_ title: String, equals expected: Double, accuracy: Double = 0.051,
+                              file: StaticString = #filePath, line: UInt = #line) throws {
+        let text = try XCTUnwrap(try metricValue(title).text, file: file, line: line)
+        XCTAssertEqual(try XCTUnwrap(Double(text), file: file, line: line), expected, accuracy: accuracy,
+                       "Wrong value for \(title)", file: file, line: line)
+    }
+
+    func testCoordinateProfilesUseTheirOwnAxesRotationOrderAndSignWithoutChangingGravity() throws {
+        expandPanel()
+        let angle = 40.0 * Double.pi / 180
+        var debug = validDebug()
+        debug["translationMeters"] = [1.0, -2, 4]
+        debug["rotationRowMajor"] = [cos(angle), -sin(angle), 0, sin(angle), cos(angle), 0, 0, 0, 1]
+        // Deliberately incompatible legacy Euler values must not supply any profile.
+        debug["eulerDegrees"] = [123.0, -87, 65]
+        debug["gravityOrientation"] = ["available": true, "planeLeanFromVerticalDegrees": 12.5,
+            "uprightRotationClockwiseDegrees": -3.2, "tiltFromVerticalDegrees": 88.0, "twistDegrees": 60.0]
+        let cases: [(String, [String], [Double], [String], [Double])] = [
+            ("rawOptical", ["X right · m", "Y down · m", "Z forward · m"], [1, -2, 4],
+             ["Rot X · °", "Rot Y · °", "Rot Z · °"], [0, 0, 40]),
+            ("ftcSdk", ["X right · m", "Y forward · m", "Z up · m"], [1, 4, 2],
+             ["Pitch · °", "Roll · °", "Yaw · °"], [0, 40, 0]),
+            ("frcPhotonVision", ["X forward · m", "Y left · m", "Z up · m"], [4, -1, 2],
+             ["Roll · °", "Pitch · °", "Yaw · °"], [-40, 0, 180])
+        ]
+        for (convention, axes, coordinates, rotations, angles) in cases {
+            var configured = settings; configured.poseConvention = convention
+            show(debug, settings: configured)
+            for (title, value) in zip(axes, coordinates) { try assertMetric(title, equals: value, accuracy: 0.00051) }
+            for (title, value) in zip(rotations, angles) { try assertMetric(title, equals: value) }
+            XCTAssertLessThan(try label(rotations[0]).frame.minX, try label(rotations[1]).frame.minX)
+            XCTAssertLessThan(try label(rotations[1]).frame.minX, try label(rotations[2]).frame.minX)
+            XCTAssertEqual(try gravityLabel().text, "Gravity · Lean 12.5° · Upright -3.2°")
+            XCTAssertTrue(try glossaryLink("tag-lean").accessibilityValue?.contains("12.5") == true)
+            XCTAssertTrue(try glossaryLink("upright-rotation").accessibilityValue?.contains("-3.2") == true)
+            let profile = try XCTUnwrap(labels().first { $0.accessibilityIdentifier == "tagDebugPoseProfile" })
+            XCTAssertTrue(profile.text?.contains("Tag pose relative to camera") == true)
+            if convention == "rawOptical" {
+                for anchor in ["optical-rotation-x", "optical-rotation-y", "optical-rotation-z"] { _ = try glossaryLink(anchor) }
+            }
+            assertReadable()
+            try savePNG("panel-pose-\(convention)-390x350")
+        }
+    }
+
+    func testFTCPitchAndYawUseSDKSignsAndAimingRangeRemainsDistinctFrom3DDistance() throws {
+        expandPanel()
+        var configured = settings; configured.poseConvention = "ftcSdk"
+        var debug = validDebug()
+        debug["translationMeters"] = [3.0, -12, 4]
+        debug["cameraDistanceMeters"] = 13.0
+        debug["viewingIncidenceDegrees"] = 20.0
+        debug["opticalAxisOffsetDegrees"] = atan2(sqrt(153.0), 4) * 180 / Double.pi
+        show(debug, settings: configured)
+        try assertMetric("3D dist · m", equals: 13, accuracy: 0.00051)
+        try assertMetric("XY range · m", equals: 5, accuracy: 0.00051)
+        try assertMetric("Bearing · °", equals: -36.9)
+        try assertMetric("Elevation · °", equals: 71.6)
+        try assertMetric("Incidence · °", equals: 20)
+        try assertMetric("Axis offset · °", equals: 72.1)
+        for anchor in ["planar-range", "horizontal-bearing", "elevation"] {
+            XCTAssertTrue(try glossaryLink(anchor).accessibilityTraits.contains(.link))
+        }
+        let angle = 30.0 * Double.pi / 180
+        debug["rotationRowMajor"] = [cos(angle), 0, sin(angle), 0, 1, 0, -sin(angle), 0, cos(angle)]
+        show(debug, settings: configured)
+        try assertMetric("Yaw · °", equals: -30)
+        debug["rotationRowMajor"] = [1.0, 0, 0, 0, cos(angle), -sin(angle), 0, sin(angle), cos(angle)]
+        show(debug, settings: configured)
+        try assertMetric("Pitch · °", equals: 30)
+        assertReadable()
+        try savePNG("panel-ftc-aiming-and-3d-390x350")
+        show(debug)
+        XCTAssertFalse(labels().contains { isVisible($0) && $0.text == "XY range · m" },
+                       "FTC aiming fields must not relabel the FRC 3D diagnostics")
+    }
+
+    func testMissingMismatchedAndMalformedDerivedPoseNeverReinterpretsLegacyEulerOrInventsZero() throws {
+        expandPanel()
+        var legacy = validDebug()
+        legacy.removeValue(forKey: "rotationRowMajor")
+        show(legacy, derivePoseReadout: false)
+        for title in ["X forward · m", "Y left · m", "Z up · m", "Roll · °", "Pitch · °", "Yaw · °"] {
+            XCTAssertEqual(try metricValue(title).text, "—")
+        }
+        try assertMetric("Pose Z · m", equals: 1.234, accuracy: 0.00051)
+        var mismatched = try XCTUnwrap(preparedDebug(validDebug(), settings: settings))
+        var record = try XCTUnwrap(mismatched["poseReadout"] as? [String: Any])
+        record["convention"] = "ftcSdk"
+        mismatched["poseReadout"] = record
+        show(mismatched, derivePoseReadout: false)
+        XCTAssertEqual(try metricValue("Roll · °").text, "—")
+        record["convention"] = "frcPhotonVision"
+        record["rollPitchYawDegrees"] = [0.0, 0, 0]
+        mismatched["poseReadout"] = record
+        show(mismatched, derivePoseReadout: false)
+        XCTAssertEqual(try metricValue("Yaw · °").text, "—", "A cached zero cannot override the authoritative rotation matrix")
+        XCTAssertTrue(try glossaryLink("pose-profile").accessibilityTraits.contains(.link))
+    }
     private func assertReadable(file: StaticString = #filePath, line: UInt = #line) {
         for label in labels() where isVisible(label) && !(label.text ?? "").isEmpty {
             let frame = label.convert(label.bounds, to: panel)
@@ -303,16 +439,16 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         print("PANEL_PNG \(directory.appendingPathComponent(name + ".png").path)")
     }
 
-    func testValidMetricsAreVisibleAndFit390By290() throws {
+    func testValidMetricsAreVisibleAndFit390By350() throws {
         expandPanel()
         show(validDebug())
-        for text in ["TAG #42 · VALID", "+0.123", "-0.045", "+1.234", "+12.3", "-24.5", "+36.7",
+        for text in ["TAG #42 · VALID", "-0.123", "+0.045", "+1.234", "+0.0", "+180.0",
                      "1.234", "1.250", "0.016", "1.241", "28.4", "6.1"] { _ = try label(text) }
         XCTAssertTrue(labels().contains { ($0.text ?? "").contains("3×3 mean 1.251 m · HIGH · 9/9") })
         XCTAssertTrue(labels().contains { ($0.text ?? "").contains("RMS 0.42px · margin 92.1 · H0") })
         XCTAssertTrue(labels().contains { ($0.text ?? "").contains("\nAge ") && ($0.text ?? "").contains("compute 12 ms") })
         assertReadable()
-        try savePNG("panel-valid-390x290")
+        try savePNG("panel-valid-390x350")
     }
 
     func testAutoSizeFooterUsesTheSelectedFTCWidthInsteadOfTheGlobalReferenceWidth() throws {
@@ -330,7 +466,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertFalse(labels().contains { isVisible($0) && ($0.text ?? "").contains("165.1 mm") })
         assertReadable()
         try assertWidthLinksOpenDefinition(["Edge", "Tag width source", "Field type"])
-        try savePNG("panel-auto-ftc-size-390x290")
+        try savePNG("panel-auto-ftc-size-390x350")
     }
 
     func testUnavailableAutoSizeClearsThePreviousWidthAndDirectsTheUserToSettings() throws {
@@ -355,7 +491,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertFalse(labels().contains { isVisible($0) && (($0.text ?? "").contains("82.5 mm") || ($0.text ?? "").contains("82.6 mm") || ($0.text ?? "").contains("165.1 mm")) })
         assertReadable()
         try assertWidthLinksOpenDefinition(["Edge", "Tag width source", "Tag width preset", "Measured tag width", "Tag width settings"])
-        try savePNG("panel-auto-size-unavailable-390x290")
+        try savePNG("panel-auto-size-unavailable-390x350")
     }
 
     func testExplicitCenterstageYearShowsPerIDWidthAndUnknownIDsCannotShowTheReferenceWidth() throws {
@@ -372,7 +508,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertFalse(labels().contains { isVisible($0) && ($0.text ?? "").contains("50.8 mm") })
         assertReadable()
         try assertWidthLinksOpenDefinition(["Edge", "Field type", "Competition year"])
-        try savePNG("panel-ftc-2024-large-tag-390x290")
+        try savePNG("panel-ftc-2024-large-tag-390x350")
         debug["id"] = 42
         debug["status"] = "sizeUnavailable"
         debug["severity"] = "neutral"
@@ -384,7 +520,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("Edge — (FTC 2024)") })
         XCTAssertFalse(labels().contains { isVisible($0) && (($0.text ?? "").contains("50.8 mm") || ($0.text ?? "").contains("127.0 mm")) })
         assertReadable()
-        try savePNG("panel-ftc-2024-unknown-tag-390x290")
+        try savePNG("panel-ftc-2024-unknown-tag-390x350")
         show(nil, settings: field)
         XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("FTC 2024 · 29.7 Hz") })
         try assertWidthLinksOpenDefinition(["Field type", "Competition year"])
@@ -407,13 +543,13 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         _ = try label("TAG #42 · AMBIGUOUS")
         XCTAssertGreaterThanOrEqual(labels().filter { $0.text == "—" }.count, 2)
         assertReadable()
-        try savePNG("panel-ambiguous-missing-depth-390x290")
+        try savePNG("panel-ambiguous-missing-depth-390x350")
         show(nil)
         _ = try label("TAG DEBUG · WAITING")
         XCTAssertTrue(labels().contains { ($0.text ?? "").contains("29.7 Hz\nFrame age ") &&
             ($0.text ?? "").contains("compute 12 ms") },"No-tag footer must retain current cadence/age/compute telemetry")
         assertReadable()
-        try savePNG("panel-missing-390x290")
+        try savePNG("panel-missing-390x350")
     }
 
     func testDeltaColorsAreIndependentOfOverallSeverity() throws {
@@ -442,7 +578,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(deltaValue.text,"—")
         assertColor(deltaValue.textColor,.lightGray)
         assertReadable()
-        try savePNG("panel-missing-depth-neutral-390x290")
+        try savePNG("panel-missing-depth-neutral-390x350")
     }
 
     func testDeltaThresholdBoundariesMatchMathTolerance() throws {
@@ -484,7 +620,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         for text in ["1.234","1.250","0.016"] {
             XCTAssertFalse(labels().contains { isVisible($0) && $0.text == text },"Per-tag cards own repeated measurements; expanded Details retains raw Z values")
         }
-        XCTAssertFalse(labels().contains { isVisible($0) && $0.text == "+0.123" },"Full translation row belongs in Details")
+        XCTAssertFalse(labels().contains { isVisible($0) && $0.text == "-0.123" },"Full translation row belongs in Details")
         XCTAssertTrue(labels().contains { isVisible($0) && ($0.text ?? "").contains("29.7 Hz") &&
             ($0.text ?? "").contains("age") },"Compact telemetry must include cadence and frame age")
         assertReadable()
@@ -506,17 +642,17 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(button.title(for:.normal),"Details")
         button.sendActions(for:.touchUpInside)
         XCTAssertTrue(panel.isExpanded)
-        XCTAssertEqual(panel.preferredHeight,290)
-        XCTAssertEqual(panel.bounds.height,290)
+        XCTAssertEqual(panel.preferredHeight,350)
+        XCTAssertEqual(panel.bounds.height,350)
         XCTAssertEqual(button.title(for:.normal),"Collapse")
-        show(validDebug()); _=try label("+0.123")
+        show(validDebug()); _=try label("-0.123")
         assertReadable()
         button.sendActions(for:.touchUpInside)
         XCTAssertFalse(panel.isExpanded)
         XCTAssertEqual(panel.preferredHeight,44)
         XCTAssertEqual(panel.bounds.height,44)
         XCTAssertEqual(button.title(for:.normal),"Details")
-        XCTAssertEqual(changes,[290,44])
+        XCTAssertEqual(changes,[350,44])
         XCTAssertEqual(panel.superview?.bounds,originalSuperviewBounds,"Expanding the overlay must not resize its host")
         panel.setExpanded(true); resizePanel(to:panel.preferredHeight)
         XCTAssertTrue(panel.isExpanded)
@@ -555,8 +691,8 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         show(validDebug())
         var opened = [String]()
         panel.onOpenGlossary = { opened.append($0) }
-        let anchors = ["x-right", "y-down", "z-forward", "camera-roll", "camera-pitch", "camera-yaw",
-                       "gravity", "tilt", "twist", "pnp-z", "lidar-z", "delta-z", "distance", "plane", "bearing",
+        let anchors = ["pose-profile", "pose-x", "pose-y", "pose-z", "pose-roll", "pose-pitch", "pose-yaw",
+                       "gravity", "tag-lean", "upright-rotation", "pose-depth", "scene-depth", "delta-z", "distance", "viewing-incidence", "optical-axis-offset",
                        "depth-mean", "depth-confidence", "depth-neighbors", "rms", "decision-margin", "hamming",
                        "edge", "analysis-rate", "frame-age", "compute-time"]
         for anchor in anchors {
@@ -572,10 +708,10 @@ final class TagDebugPanelUIKitTests: XCTestCase {
             XCTAssertEqual(opened.last, anchor)
         }
         XCTAssertEqual(opened, anchors)
-        XCTAssertTrue(try glossaryLink("tilt").accessibilityActivate(), "VoiceOver must be able to open a term")
-        XCTAssertEqual(opened.last, "tilt")
+        XCTAssertTrue(try glossaryLink("tag-lean").accessibilityActivate(), "VoiceOver must be able to open a term")
+        XCTAssertEqual(opened.last, "tag-lean")
         XCTAssertTrue(panel.isExpanded, "Definition navigation must preserve the expanded readout")
-        for text in ["+0.123", "1.234", "28.4"] {
+        for text in ["-0.123", "1.234", "28.4"] {
             let value = try label(text)
             let frame = value.convert(value.bounds, to: panel)
             XCTAssertNil(panel.hitTest(CGPoint(x: frame.midX, y: frame.midY), with: nil),
@@ -602,7 +738,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         panel.layoutIfNeeded()
         var opened = [String]()
         panel.onOpenGlossary = { opened.append($0) }
-        for anchor in ["tilt", "twist", "pnp-z", "lidar-z", "delta-z", "plane", "bearing"] {
+        for anchor in ["tag-lean", "upright-rotation", "pose-depth", "scene-depth", "delta-z", "viewing-incidence", "optical-axis-offset"] {
             try glossaryLink(anchor).sendActions(for: .touchUpInside)
             XCTAssertEqual(opened.last, anchor)
         }
@@ -642,7 +778,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         XCTAssertEqual(button.titleLabel?.text,"Collapse")
         show(validDebug())
         assertReadable()
-        try savePNG("panel-expanded-settled-Collapse-390x290")
+        try savePNG("panel-expanded-settled-Collapse-390x350")
 
         button.sendActions(for:.touchUpInside)
         button.layoutIfNeeded()
@@ -699,7 +835,7 @@ final class TagDebugPanelUIKitTests: XCTestCase {
         for size in [CGSize(width: 390, height: 600), CGSize(width: 500, height: 250),
                      CGSize(width: 860, height: 630), CGSize(width: 480, height: 900)] {
             let viewport = CGRect(origin: .zero, size: size)
-            for preferredHeight in [CGFloat(44), 290] {
+            for preferredHeight in [CGFloat(44), 350] {
                 let frame = TagDebugPanelView.overlayFrame(in: viewport, preferredHeight: preferredHeight)
                 XCTAssertTrue(viewport.insetBy(dx: 7.5, dy: 7.5).contains(frame))
                 XCTAssertLessThanOrEqual(frame.width, 480)

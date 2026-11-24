@@ -106,7 +106,7 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
             events: [detection(gravityOrientation: orientation)])
         let first = try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first)
         let moved = try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0.2)).tags.first)
-        XCTAssertTrue(first.label.contains("Tilt 12.5° · Twist -3.2°"))
+        XCTAssertTrue(first.label.contains("Lean 12.5° · Upright -3.2°"))
         XCTAssertEqual(moved.label, first.label, "Playback must use the recorded orientation, not the current movie camera")
         XCTAssertNotEqual(moved.corners[0].x, first.corners[0].x)
         XCTAssertTrue(try XCTUnwrap(timeline.snapshot(at: 0.6)).tags.isEmpty)
@@ -116,10 +116,10 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
 
     func testRecordedGravityOrientationDisplaysZeroHorizontalAndSignedValues() throws {
         let cases: [(Double, Any, String)] = [
-            (0, 0.0, "Tilt 0.0° · Twist +0.0°"),
-            (90, NSNull(), "Tilt 90.0° · Twist —"),
-            (45, 180.0, "Tilt 45.0° · Twist +180.0°"),
-            (12.5, -180.0, "Tilt 12.5° · Twist -180.0°"),
+            (0, 0.0, "Lean 0.0° · Upright +0.0°"),
+            (90, NSNull(), "Lean 90.0° · Upright —"),
+            (45, 180.0, "Lean 45.0° · Upright +180.0°"),
+            (12.5, -180.0, "Lean 12.5° · Upright -180.0°"),
         ]
         for (tilt, twist, expected) in cases {
             let orientation: [String: Any] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": tilt, "twistDegrees": twist]
@@ -127,6 +127,18 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
                                                          events: [detection(gravityOrientation: orientation)])
             XCTAssertTrue(try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first).label.contains(expected))
         }
+    }
+
+    func testCanonicalRecordedLeanAndUprightNamesTakePriorityOverLegacyAliases() throws {
+        let orientation: [String: Any] = ["available": true, "reason": "valid",
+            "planeLeanFromVerticalDegrees": 7.5, "uprightRotationClockwiseDegrees": -9.0,
+            "tiltFromVerticalDegrees": 88.0, "twistDegrees": 44.0]
+        let timeline = try RecordingPlaybackTimeline(manifest: manifest, frames: [frame("f0", 0)],
+                                                     events: [detection(gravityOrientation: orientation)])
+        let label = try XCTUnwrap(try XCTUnwrap(timeline.snapshot(at: 0)).tags.first).label
+        XCTAssertTrue(label.contains("Lean 7.5° · Upright -9.0°"))
+        XCTAssertFalse(label.contains("88.0°"))
+        XCTAssertFalse(label.contains("44.0°"))
     }
 
     func testRecordedGravityOrientationRejectsMalformedLegacyAndMismatchedValues() throws {
@@ -137,23 +149,23 @@ final class RecordingPlaybackTimelineTests: XCTestCase {
         }
         let valid: [String: Any] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 12.5, "twistDegrees": 3.0]
         for missing: Any? in [nil, NSNull(), "unavailable"] {
-            XCTAssertTrue(try label(missing).contains("Tilt — · Twist —"), "Legacy recordings must not recalculate orientation")
+            XCTAssertTrue(try label(missing).contains("Lean — · Upright —"), "Legacy recordings must not recalculate orientation")
         }
         for unavailable: Any in [false, 1, "true", NSNull()] {
             var orientation = valid; orientation["available"] = unavailable
-            XCTAssertTrue(try label(orientation).contains("Tilt — · Twist —"))
+            XCTAssertTrue(try label(orientation).contains("Lean — · Upright —"))
         }
         for tilt: Any in [true, "12.5", Double.nan, Double.infinity, -0.1, 90.1, NSNull()] {
             var orientation = valid; orientation["tiltFromVerticalDegrees"] = tilt
-            XCTAssertTrue(try label(orientation).contains("Tilt — · Twist —"))
+            XCTAssertTrue(try label(orientation).contains("Lean — · Upright —"))
         }
         for twist: Any? in [true, "3.0", Double.nan, Double.infinity, -180.1, 180.1, NSNull(), nil] {
             var orientation = valid; orientation["twistDegrees"] = twist
-            XCTAssertTrue(try label(orientation).contains("Tilt 12.5° · Twist —"))
+            XCTAssertTrue(try label(orientation).contains("Lean 12.5° · Upright —"))
         }
         for (key, value): (String, Any) in [("frameId", "other"), ("segmentId", "B"), ("frameId", NSNull()), ("segmentId", 1)] {
             var orientation = valid; orientation[key] = value
-            XCTAssertTrue(try label(orientation).contains("Tilt — · Twist —"))
+            XCTAssertTrue(try label(orientation).contains("Lean — · Upright —"))
         }
     }
 

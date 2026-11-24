@@ -56,8 +56,9 @@ struct TagDebugSettings: Codable, Equatable {
     var tagSizeMeters = frcTagSizeMeters
     var tagSizeMode = "auto"
     var competitionYear = 0
+    var poseConvention = TagPoseConvention.frcPhotonVision.rawValue
     var maxDistanceMeters = 5.0
-    var maxPlaneAngleDegrees = 60.0
+    var maxViewingIncidenceDegrees = 60.0
     var warningDepthDifferenceMeters = 0.10
     var rejectDepthDifferenceMeters = 0.15
     var distanceDeltaThresholdMeters = 0.15
@@ -73,17 +74,26 @@ struct TagDebugSettings: Codable, Equatable {
     static let tagSizeEvidenceKey = "AprilFoolsAR.TagSizeEvidence.v1"
 
     private enum CodingKeys: String, CodingKey {
-        case tagSizeMeters, tagSizeMode, competitionYear, maxDistanceMeters, maxPlaneAngleDegrees, warningDepthDifferenceMeters
+        case tagSizeMeters, tagSizeMode, competitionYear, maxDistanceMeters, warningDepthDifferenceMeters
+        // Keep the persisted schema-1 key while naming the actual quantity internally.
+        case maxViewingIncidenceDegrees = "maxPlaneAngleDegrees"
         case rejectDepthDifferenceMeters, distanceDeltaThresholdMeters, maxReprojectionErrorPixels, tagSizeSource, showPoseAxes, showImperialHeight, levelFloorWithGravity
-        case kalmanFilterEnabled, kalmanFilterSamples
+        case kalmanFilterEnabled, kalmanFilterSamples, poseConvention
     }
+    private enum InputAliases: String, CodingKey { case maxViewingIncidenceDegrees }
     init() {}
     init(from decoder: Decoder) throws {
         self.init()
         let values = try decoder.container(keyedBy: CodingKeys.self)
         tagSizeMeters = try values.decodeIfPresent(Double.self, forKey: .tagSizeMeters) ?? tagSizeMeters
         maxDistanceMeters = try values.decodeIfPresent(Double.self, forKey: .maxDistanceMeters) ?? maxDistanceMeters
-        maxPlaneAngleDegrees = try values.decodeIfPresent(Double.self, forKey: .maxPlaneAngleDegrees) ?? maxPlaneAngleDegrees
+        let legacyIncidence = try values.decodeIfPresent(Double.self, forKey: .maxViewingIncidenceDegrees)
+        let aliases = try decoder.container(keyedBy: InputAliases.self)
+        let namedIncidence = try aliases.decodeIfPresent(Double.self, forKey: .maxViewingIncidenceDegrees)
+        if let legacyIncidence, let namedIncidence, legacyIncidence != namedIncidence {
+            throw TagDebugError.invalid("Conflicting viewing-incidence settings.")
+        }
+        maxViewingIncidenceDegrees = namedIncidence ?? legacyIncidence ?? maxViewingIncidenceDegrees
         warningDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .warningDepthDifferenceMeters) ?? warningDepthDifferenceMeters
         rejectDepthDifferenceMeters = try values.decodeIfPresent(Double.self, forKey: .rejectDepthDifferenceMeters) ?? rejectDepthDifferenceMeters
         distanceDeltaThresholdMeters = try values.decodeIfPresent(Double.self, forKey: .distanceDeltaThresholdMeters) ?? distanceDeltaThresholdMeters
@@ -104,19 +114,28 @@ struct TagDebugSettings: Codable, Equatable {
         levelFloorWithGravity = try values.decodeIfPresent(Bool.self, forKey: .levelFloorWithGravity) ?? false
         kalmanFilterEnabled = try values.decodeIfPresent(Bool.self, forKey: .kalmanFilterEnabled) ?? false
         kalmanFilterSamples = try values.decodeIfPresent(Int.self, forKey: .kalmanFilterSamples) ?? 5
+        poseConvention = try values.decodeIfPresent(String.self, forKey: .poseConvention) ?? TagPoseConvention.frcPhotonVision.rawValue
     }
 
     var dictionary: [String: Any] {
         ["tagSizeMeters": tagSizeMeters, "tagSizeMode": tagSizeMode, "competitionYear": competitionYear, "maxDistanceMeters": maxDistanceMeters,
-         "maxPlaneAngleDegrees": maxPlaneAngleDegrees, "warningDepthDifferenceMeters": warningDepthDifferenceMeters,
+         "maxPlaneAngleDegrees": maxViewingIncidenceDegrees, "warningDepthDifferenceMeters": warningDepthDifferenceMeters,
          "rejectDepthDifferenceMeters": rejectDepthDifferenceMeters, "distanceDeltaThresholdMeters": distanceDeltaThresholdMeters,
          "maxReprojectionErrorPixels": maxReprojectionErrorPixels,
          "tagSizeSource": tagSizeSource, "showPoseAxes": showPoseAxes, "showImperialHeight": showImperialHeight,
          "levelFloorWithGravity": levelFloorWithGravity,
-         "kalmanFilterEnabled": kalmanFilterEnabled, "kalmanFilterSamples": kalmanFilterSamples]
+         "kalmanFilterEnabled": kalmanFilterEnabled, "kalmanFilterSamples": kalmanFilterSamples,
+         "poseConvention": poseConvention]
     }
     func merging(_ changes: [String: Any]) throws -> TagDebugSettings {
         var result = self
+        if let legacy = changes["maxPlaneAngleDegrees"], let named = changes["maxViewingIncidenceDegrees"] {
+            guard let old = legacy as? NSNumber, let new = named as? NSNumber,
+                  CFGetTypeID(old) != CFBooleanGetTypeID(), CFGetTypeID(new) != CFBooleanGetTypeID(),
+                  old.doubleValue.isFinite, new.doubleValue.isFinite, old.doubleValue == new.doubleValue else {
+                throw TagDebugError.invalid("Conflicting viewing-incidence settings.")
+            }
+        }
         let requestedMode: String?
         if let value = changes["tagSizeMode"] {
             guard let mode = value as? String, ["auto", "ftc", "frc", "custom"].contains(mode) else {
@@ -135,6 +154,13 @@ struct TagDebugSettings: Codable, Equatable {
         } else { requestedYear = nil }
         for (key, value) in changes {
             if key == "tagSizeMode" || key == "competitionYear" { continue }
+            if key == "poseConvention" {
+                guard let name = value as? String, TagPoseConvention(rawValue: name) != nil else {
+                    throw TagDebugError.invalid("Choose Raw optical, FTC SDK, or FRC / PhotonVision pose coordinates.")
+                }
+                result.poseConvention = name
+                continue
+            }
             if key == "showPoseAxes" || key == "showImperialHeight" || key == "levelFloorWithGravity" || key == "kalmanFilterEnabled" {
                 guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
                     throw TagDebugError.invalid("\(key) must be a boolean.")
@@ -158,7 +184,7 @@ struct TagDebugSettings: Codable, Equatable {
                 }
                 result.tagSizeMeters = value
             case "maxDistanceMeters": result.maxDistanceMeters = value
-            case "maxPlaneAngleDegrees": result.maxPlaneAngleDegrees = value
+            case "maxPlaneAngleDegrees", "maxViewingIncidenceDegrees": result.maxViewingIncidenceDegrees = value
             case "warningDepthDifferenceMeters": result.warningDepthDifferenceMeters = value
             case "rejectDepthDifferenceMeters": result.rejectDepthDifferenceMeters = value
             case "distanceDeltaThresholdMeters": result.distanceDeltaThresholdMeters = value
@@ -193,13 +219,16 @@ struct TagDebugSettings: Codable, Equatable {
               ((result.tagSizeMode == "custom" || result.tagSizeMode == "auto") ? result.competitionYear == 0 :
                 TagFieldCatalog.referenceWidth(mode: result.tagSizeMode, year: result.competitionYear) == result.tagSizeMeters),
               (result.tagSizeMode != "auto" || result.tagSizeMeters == Self.frcTagSizeMeters),
-              result.maxPlaneAngleDegrees > 0, result.maxPlaneAngleDegrees <= 90,
+              result.maxViewingIncidenceDegrees > 0, result.maxViewingIncidenceDegrees <= 90,
               result.warningDepthDifferenceMeters >= 0, result.rejectDepthDifferenceMeters > 0,
               result.warningDepthDifferenceMeters < result.rejectDepthDifferenceMeters, result.rejectDepthDifferenceMeters <= 10,
               (0...10).contains(result.distanceDeltaThresholdMeters),
               result.maxReprojectionErrorPixels > 0, result.maxReprojectionErrorPixels <= 100,
               Self.allowedKalmanFilterSamples.contains(result.kalmanFilterSamples) else {
-            throw TagDebugError.invalid("Settings out of range: positive size/distance/error, plane angle 0–90°, 0 ≤ warning < reject depth difference, and distance delta threshold 0–10 m are required.")
+            throw TagDebugError.invalid("Settings out of range: positive size/distance/error, viewing incidence 0–90°, 0 ≤ warning < reject depth difference, and distance delta threshold 0–10 m are required.")
+        }
+        guard TagPoseConvention(rawValue: result.poseConvention) != nil else {
+            throw TagDebugError.invalid("Unknown pose coordinate convention.")
         }
         return result
     }
@@ -416,11 +445,14 @@ enum TagDebugMath {
     static func enrich(_ detection: [String: Any], depth: TagDepthSamples, settings: TagDebugSettings, tracking: String) -> [String: Any] {
         var result = detection
         let pose = detection["pose"] as? [String: Any]
-        let translation = numbers(pose?["translation"], count: 3)
-        let euler = numbers(pose?["eulerDegrees"], count: 3)
-        let range = number(pose?["rangeMeters"]), plane = number(pose?["planeAngleDegrees"])
-        let bearing = number(pose?["opticalAxisAngleDegrees"]), reprojection = number(pose?["reprojectionRMSEPixels"])
-        let poseZ = translation?[2], margin = number(detection["decisionMargin"]), hamming = number(detection["hamming"])
+        let opticalTranslationMeters = numbers(pose?["translation"], count: 3)
+        let opticalEulerZYXDegrees = numbers(pose?["eulerDegrees"], count: 3)
+        let cameraDistanceMeters = number(pose?["rangeMeters"])
+        let viewingIncidenceDegrees = number(pose?["planeAngleDegrees"])
+        let opticalAxisOffsetDegrees = number(pose?["opticalAxisAngleDegrees"])
+        let reprojection = number(pose?["reprojectionRMSEPixels"])
+        let poseOpticalDepthMeters = opticalTranslationMeters?[2]
+        let margin = number(detection["decisionMargin"]), hamming = number(detection["hamming"])
         var corePose = corePoseObservation(detection)
         var coreDepth = coreDepthObservation(depth: depth.centerDepthMeters, confidence: depth.centerConfidence.map(Double.init))
         var coreSettings = coreMeasurementSettings(settings)
@@ -444,14 +476,32 @@ enum TagDebugMath {
         let severity = coreSeverity(quality.severity)
         let reasons = [reason]
         var debug: [String: Any] = ["id": detection["id"] as Any? ?? NSNull(), "status": status, "severity": severity, "valid": status == "valid",
-            "reasons": reasons, "translationMeters": translation as Any? ?? NSNull(), "eulerDegrees": euler as Any? ?? NSNull(),
-            "opticalPoseZMeters": poseZ as Any? ?? NSNull(), "rangeMeters": range as Any? ?? NSNull(),
-            "planeAngleDegrees": plane as Any? ?? NSNull(), "centerBearingDegrees": bearing as Any? ?? NSNull(),
+            "reasons": reasons, "translationMeters": opticalTranslationMeters as Any? ?? NSNull(), "eulerDegrees": opticalEulerZYXDegrees as Any? ?? NSNull(),
+            "opticalPoseZMeters": poseOpticalDepthMeters as Any? ?? NSNull(), "rangeMeters": cameraDistanceMeters as Any? ?? NSNull(),
+            "planeAngleDegrees": viewingIncidenceDegrees as Any? ?? NSNull(), "centerBearingDegrees": opticalAxisOffsetDegrees as Any? ?? NSNull(),
             "reprojectionRMSEPixels": reprojection as Any? ?? NSNull(), "decisionMargin": margin as Any? ?? NSNull(), "hamming": hamming as Any? ?? NSNull(),
             "centerDepthMeters": acceptedDepth as Any? ?? NSNull(), "rawCenterDepthMeters": depth.rawCenterDepthMeters.flatMap { $0.isFinite ? $0 : nil } as Any? ?? NSNull(),
             "meanDepthMeters": depth.meanDepthMeters as Any? ?? NSNull(), "centerConfidence": depth.centerConfidence as Any? ?? NSNull(),
             "validNeighborCount": depth.validNeighborCount, "depthDifferenceMeters": delta as Any? ?? NSNull(), "tracking": tracking,
-            "angleConvention": "plane incidence normal-to-view; center bearing optical-axis offset", "coordinates": "camera optical +X right +Y down +Z forward"]
+            "angleConvention": "raw optical ZYX Euler; unsigned optical-axis offset and viewing incidence", "coordinates": "camera optical +X right +Y down +Z forward"]
+        // Schema-1 keys above remain optical compatibility aliases. New code uses named quantities.
+        debug["opticalTranslationMeters"] = opticalTranslationMeters as Any? ?? NSNull()
+        debug["opticalRotationRowMajor"] = pose?["rotationRowMajor"] as Any? ?? NSNull()
+        debug["opticalEulerZYXDegrees"] = opticalEulerZYXDegrees as Any? ?? NSNull()
+        debug["cameraDistanceMeters"] = cameraDistanceMeters as Any? ?? NSNull()
+        debug["viewingIncidenceDegrees"] = viewingIncidenceDegrees as Any? ?? NSNull()
+        debug["opticalAxisOffsetDegrees"] = opticalAxisOffsetDegrees as Any? ?? NSNull()
+        debug["poseOpticalDepthMeters"] = poseOpticalDepthMeters as Any? ?? NSNull()
+        debug["sceneOpticalDepthMeters"] = acceptedDepth as Any? ?? NSNull()
+        debug["absoluteOpticalDepthDifferenceMeters"] = delta as Any? ?? NSNull()
+        if let pose, let convention = TagPoseConvention(rawValue: settings.poseConvention),
+           let readout = TagPoseReadout.evaluate(opticalPose: pose, convention: convention) {
+            debug["poseReadout"] = readout.dictionary
+            result["poseReadout"] = readout.dictionary
+        } else {
+            debug["poseReadout"] = NSNull()
+            result["poseReadout"] = NSNull()
+        }
         debug["tagSizeMeters"] = number(pose?["tagSizeMeters"]) as Any? ?? NSNull()
         debug["tagSizeSource"] = pose?["tagSizeSource"] as Any? ?? settings.tagSizeSource
         if let resolution = detection["tagSizeResolution"] as? [String: Any] {
@@ -495,7 +545,7 @@ enum TagDebugMath {
     }
     static func coreMeasurementSettings(_ settings: TagDebugSettings) -> AFSCMeasurementSettings {
         AFSCMeasurementSettings(max_range_m: settings.maxDistanceMeters,
-            max_plane_angle_rad: settings.maxPlaneAngleDegrees * .pi / 180,
+            max_plane_angle_rad: settings.maxViewingIncidenceDegrees * .pi / 180,
             max_reprojection_rms_px: settings.maxReprojectionErrorPixels,
             warning_depth_difference_m: settings.warningDepthDifferenceMeters,
             reject_depth_difference_m: settings.rejectDepthDifferenceMeters)

@@ -109,8 +109,8 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         show([upright, leaning])
         let readouts = cards()
         XCTAssertEqual(readouts.count, 2)
-        XCTAssertEqual(cardLabel(readouts[0], "gravityOrientation")?.text, "Tilt 0.0° · Twist +0.0°")
-        XCTAssertEqual(cardLabel(readouts[1], "gravityOrientation")?.text, "Tilt 12.5° · Twist -3.2°")
+        XCTAssertEqual(cardLabel(readouts[0], "gravityOrientation")?.text, "Lean 0.0° · Upright +0.0°")
+        XCTAssertEqual(cardLabel(readouts[1], "gravityOrientation")?.text, "Lean 12.5° · Upright -3.2°")
         XCTAssertTrue(readouts[0].accessibilityValue?.contains("zero degrees is a vertical tag plane") == true)
         XCTAssertTrue(readouts[1].accessibilityValue?.contains("positive is clockwise when viewing the printed front") == true)
         readouts.forEach { assertCardChildrenContained($0) }
@@ -122,16 +122,16 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         row["gravityOrientation"] = ["available": true, "reason": "valid", "tiltFromVerticalDegrees": 90.0, "twistDegrees": NSNull()]
         show([row])
         let card = try XCTUnwrap(cards().first)
-        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt 90.0° · Twist —")
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Lean 90.0° · Upright —")
         XCTAssertTrue(card.accessibilityValue?.contains("horizontal tag plane") == true)
         row["gravityOrientation"] = ["available": false, "reason": "trackingLimited", "tiltFromVerticalDegrees": 12.0, "twistDegrees": 3.0]
         show([row])
         XCTAssertTrue(cards().first === card)
-        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt — · Twist —")
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Lean — · Upright —")
         XCTAssertTrue(card.accessibilityValue?.contains("trackingLimited") == true)
         row.removeValue(forKey: "gravityOrientation")
         show([row])
-        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt — · Twist —")
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Lean — · Upright —")
         XCTAssertTrue(card.accessibilityValue?.contains("No gravity-relative orientation in this frame") == true)
         XCTAssertFalse(card.accessibilityValue?.contains("12.0 degrees") == true)
     }
@@ -143,18 +143,18 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
             row["gravityOrientation"] = ["available": true, "tiltFromVerticalDegrees": tilt, "twistDegrees": 1.0]
             show([row])
             let card = try XCTUnwrap(cards().first)
-            XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt — · Twist —")
+            XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Lean — · Upright —")
         }
         for twist: Any in [true, Double.nan, Double.infinity, -180.1, 180.1, "1.0", NSNull()] {
             var row = metricsRow()
             row["gravityOrientation"] = ["available": true, "tiltFromVerticalDegrees": 0.0, "twistDegrees": twist]
             show([row])
-            XCTAssertEqual(cardLabel(try XCTUnwrap(cards().first), "gravityOrientation")?.text, "Tilt 0.0° · Twist —")
+            XCTAssertEqual(cardLabel(try XCTUnwrap(cards().first), "gravityOrientation")?.text, "Lean 0.0° · Upright —")
         }
         var row = metricsRow()
         row["gravityOrientation"] = ["available": 1, "tiltFromVerticalDegrees": 1.0, "twistDegrees": 1.0]
         show([row])
-        XCTAssertEqual(cardLabel(try XCTUnwrap(cards().first), "gravityOrientation")?.text, "Tilt — · Twist —")
+        XCTAssertEqual(cardLabel(try XCTUnwrap(cards().first), "gravityOrientation")?.text, "Lean — · Upright —")
     }
 
     func testGravityOrientationCardFitsPortraitTabletAndShortLandscape() throws {
@@ -189,8 +189,8 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
                      frameID: "filtered", expiresAt: ProcessInfo.processInfo.systemUptime + 0.5, showImperialHeight: false)
         overlay.layoutIfNeeded()
         let card = try XCTUnwrap(cards().first)
-        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "Distance · Kalman")
-        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Tilt 12.5° · Twist -3.2°")
+        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "3D distance · Kalman")
+        XCTAssertEqual(cardLabel(card, "gravityOrientation")?.text, "Lean 12.5° · Upright -3.2°")
         XCTAssertTrue(cardLabel(card, "summary")?.text?.contains("152.0 cm") == true)
         XCTAssertEqual(cardLabel(card, "lidarMetric")?.text, "260.0 cm")
         XCTAssertEqual(cardLabel(card, "tagMetric")?.text, "265.0 cm")
@@ -200,7 +200,7 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
 
         show([next])
         XCTAssertTrue(cards().first === card)
-        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "Distance")
+        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "3D distance")
         XCTAssertFalse(card.accessibilityValue?.contains("Kalman") == true)
     }
 
@@ -484,7 +484,9 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         let row = metricsRow(height: nil)
         show([row])
         let label = try XCTUnwrap(cards().first)
-        XCTAssertEqual(cardLabel(label, "distanceHeading")?.text, "Distance")
+        XCTAssertEqual(cardLabel(label, "distanceHeading")?.text, "3D distance")
+        XCTAssertEqual(cardLabel(label, "lidarTitle")?.text, "Depth")
+        XCTAssertEqual(cardLabel(label, "tagTitle")?.text, "Pose")
         XCTAssertEqual(cardLabel(label, "lidarMetric")?.font.pointSize, 12)
         XCTAssertFalse(try XCTUnwrap(cardLabel(label, "lidarMetric")).font.fontDescriptor.symbolicTraits.contains(.traitBold))
         XCTAssertTrue(cardText(label).contains("250.0 cm (8 ft 2.4 in)"))
@@ -586,7 +588,7 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
     func testDistanceHeadingAndMetricDecimalsShareAColumnIndependentOfEnglishDigitLengths() throws {
         show([metricsRow(lidar: 2.95, tag: 10.3)])
         let card = try XCTUnwrap(cards().first)
-        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "Distance")
+        XCTAssertEqual(cardLabel(card, "distanceHeading")?.text, "3D distance")
         let lidar = try XCTUnwrap(cardLabel(card, "lidarMetric")), tag = try XCTUnwrap(cardLabel(card, "tagMetric"))
         let lidarEnglish = try XCTUnwrap(cardLabel(card, "lidarEnglish")), tagEnglish = try XCTUnwrap(cardLabel(card, "tagEnglish"))
         XCTAssertEqual(lidar.text, "295.0 cm")
@@ -616,17 +618,17 @@ final class AprilTagOverlayUIKitTests: XCTestCase {
         }
         let card = try render(0.15)
         XCTAssertTrue(try XCTUnwrap(cardLabel(card, "deltaTitle")).isHidden)
-        XCTAssertFalse(card.accessibilityValue?.contains("Absolute LiDAR versus Tag") == true)
+        XCTAssertFalse(card.accessibilityValue?.contains("Absolute scene-depth versus pose") == true)
         let originalHeight = card.bounds.height
         let originalIDs = card.subviews.map(ObjectIdentifier.init)
         XCTAssertTrue(try render(0.15000001) === card)
         XCTAssertFalse(try XCTUnwrap(cardLabel(card, "deltaTitle")).isHidden)
-        XCTAssertEqual(cardLabel(card, "deltaTitle")?.text, "LiDAR Δ")
+        XCTAssertEqual(cardLabel(card, "deltaTitle")?.text, "Δ 3D")
         XCTAssertEqual(cardLabel(card, "deltaMetric")?.text, "15.0 cm")
         XCTAssertEqual(cardLabel(card, "deltaEnglish")?.text, "(0 ft 5.9 in)")
         XCTAssertEqual(cardLabel(card, "deltaMetric")?.textColor, .systemOrange)
         XCTAssertEqual(cardLabel(card, "lidarMetric")?.textColor, .systemGreen)
-        XCTAssertTrue(card.accessibilityValue?.contains("Absolute LiDAR versus Tag camera range difference: 15.0 cm") == true)
+        XCTAssertTrue(card.accessibilityValue?.contains("Absolute scene-depth versus pose 3D camera-distance difference: 15.0 cm") == true)
         XCTAssertGreaterThan(card.bounds.height, originalHeight)
         XCTAssertEqual(card.subviews.map(ObjectIdentifier.init), originalIDs)
         assertCardChildrenContained(card)

@@ -21,9 +21,11 @@ public final class SpatialCore {
      * sample count, inlier count, RMS metres. */
     public static native double[] fitFloor(double[] xyz, double referenceX, double referenceZ);
     /** corners: 8 ordered AprilTag corner coordinates in original image pixels.
-     * calibration: [fx,fy,cx,cy,tagEdgeMetres]. Result: translation xyz (optical axes),
-     * rotation (9 row-major), range, reprojection RMS pixels, object-space pose error,
-     * candidate count, ambiguous (0/1), plane angle degrees. No pose throws.
+     * calibration: [fx,fy,cx,cy,tagEdgeMetres]. The 18-value ABI-1 result remains RAW
+     * optical: translation xyz (+X right,+Y down,+Z forward), rotation (9 row-major,
+     * tag-local to optical camera), 3-D camera distance, reprojection RMS pixels,
+     * object-space pose error, candidate count, ambiguous (0/1), viewing incidence
+     * degrees. This is not an FTC SDK or PhotonVision converted pose. No pose throws.
      */
     public static native double[] estimateTagPose(double[] corners, double[] calibration);
 }

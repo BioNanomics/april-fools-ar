@@ -66,7 +66,8 @@ host.source_build_phase.add_file_reference(project.main_group.new_file(host_sour
  File.join(root, 'native/SpatialMeasurementTests/SpatialMeasurementTests.swift'),
  File.join(root, 'native/SpatialMeasurementTests/SpatialProjectionUIKitTests.swift'),
  File.join(root, 'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift'),
- File.join(root, 'native/TagDebugPanelTests/TagMetricGlossaryUIKitTests.swift')].each do |path|
+ File.join(root, 'native/TagDebugPanelTests/TagMetricGlossaryUIKitTests.swift'),
+ File.join(root, 'native/ARCapture/tests/TagPoseReadoutTests.swift')].each do |path|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(path))
 end
 glossary_resources = File.join(work, 'MetricGlossary')

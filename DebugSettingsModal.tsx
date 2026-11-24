@@ -20,11 +20,14 @@ import {
 } from './FieldSizeCatalog.generated';
 
 export type TagSizeMode = 'auto' | 'ftc' | 'frc' | 'custom';
+export type PoseConvention = 'rawOptical' | 'ftcSdk' | 'frcPhotonVision';
+export const DEFAULT_POSE_CONVENTION: PoseConvention = 'frcPhotonVision';
 
 export type DebugSettings = {
   tagSizeMeters: number;
   tagSizeMode?: TagSizeMode;
   competitionYear?: number;
+  poseConvention?: PoseConvention;
   maxDistanceMeters: number;
   maxPlaneAngleDegrees: number;
   warningDepthDifferenceMeters: number;
@@ -45,6 +48,7 @@ export const DEFAULT_DEBUG_SETTINGS: DebugSettings = {
   tagSizeMeters: FRC_REFERENCE_SIZE_METERS,
   tagSizeMode: 'auto',
   competitionYear: 0,
+  poseConvention: DEFAULT_POSE_CONVENTION,
   maxDistanceMeters: 5,
   maxPlaneAngleDegrees: 60,
   warningDepthDifferenceMeters: 0.1,
@@ -63,6 +67,7 @@ type SettingsKey = Exclude<
   | 'tagSizeSource'
   | 'tagSizeMode'
   | 'competitionYear'
+  | 'poseConvention'
   | 'showPoseAxes'
   | 'showImperialHeight'
   | 'levelFloorWithGravity'
@@ -83,13 +88,13 @@ const fields: {
   },
   {
     key: 'maxDistanceMeters',
-    label: 'Maximum range (m)',
+    label: 'Maximum 3D distance (m)',
     scale: 1,
     hint: 'Camera-to-tag distance, including horizontal and vertical offset.',
   },
   {
     key: 'maxPlaneAngleDegrees',
-    label: 'Maximum plane angle (°)',
+    label: 'Maximum viewing incidence (°)',
     scale: 1,
     hint: '0° is head-on; 90° is edge-on.',
   },
@@ -127,6 +132,27 @@ const tagSizeOptions: { mode: TagSizeMode; label: string }[] = [
   { mode: 'ftc', label: 'FTC' },
   { mode: 'frc', label: 'FRC' },
   { mode: 'custom', label: 'Custom width' },
+];
+const poseConventionOptions: {
+  value: PoseConvention;
+  label: string;
+  axes: string;
+}[] = [
+  {
+    value: 'rawOptical',
+    label: 'Raw optical',
+    axes: 'Camera axes: +X right, +Y down, +Z forward.',
+  },
+  {
+    value: 'ftcSdk',
+    label: 'FTC SDK',
+    axes: 'Camera axes: +X right, +Y forward, +Z up.',
+  },
+  {
+    value: 'frcPhotonVision',
+    label: 'FRC / PhotonVision',
+    axes: 'Camera axes: +X forward, +Y left, +Z up.',
+  },
 ];
 
 type FieldSeason = {
@@ -204,7 +230,7 @@ export function parseDebugSettings(draft: Draft): DebugSettings {
   }
   if (result.maxPlaneAngleDegrees <= 0 || result.maxPlaneAngleDegrees > 90) {
     throw new Error(
-      'Plane angle must be greater than 0° and no more than 90°.',
+      'Viewing incidence must be greater than 0° and no more than 90°.',
     );
   }
   if (
@@ -257,6 +283,9 @@ export function DebugSettingsModal({
   const [tagSizeMode, setTagSizeMode] = useState<TagSizeMode>(() =>
     initialTagSizeMode(initialSettings),
   );
+  const [poseConvention, setPoseConvention] = useState<PoseConvention>(
+    initialSettings.poseConvention ?? DEFAULT_POSE_CONVENTION,
+  );
   const [competitionYear, setCompetitionYear] = useState(
     () =>
       seasonFor(
@@ -285,6 +314,9 @@ export function DebugSettingsModal({
       setDraft(makeDraft(initialSettings));
       setResetToDefaults(false);
       setTagSizeMode(initialTagSizeMode(initialSettings));
+      setPoseConvention(
+        initialSettings.poseConvention ?? DEFAULT_POSE_CONVENTION,
+      );
       setCompetitionYear(
         seasonFor(
           initialTagSizeMode(initialSettings),
@@ -300,6 +332,9 @@ export function DebugSettingsModal({
     }
   }, [visible, initialSettings]);
   const selectedSeason = seasonFor(tagSizeMode, competitionYear);
+  const selectedPoseConvention =
+    poseConventionOptions.find(option => option.value === poseConvention) ??
+    poseConventionOptions[2];
   const selectFieldType = (mode: TagSizeMode) => {
     setTagSizeMode(mode);
     const season = seasonFor(
@@ -323,6 +358,7 @@ export function DebugSettingsModal({
       values.showImperialHeight = showImperialHeight;
       values.levelFloorWithGravity = levelFloorWithGravity;
       values.tagSizeMode = tagSizeMode;
+      values.poseConvention = poseConvention;
       values.competitionYear = selectedSeason?.year ?? 0;
       values.kalmanFilterEnabled = kalmanFilterEnabled;
       values.kalmanFilterSamples = kalmanFilterSamples;
@@ -408,6 +444,42 @@ export function DebugSettingsModal({
               Applied to all tags and saved on this device. Correct tag width is
               required for a meaningful pose.
             </Text>
+            <View style={s.sizeSection}>
+              <Text style={s.label}>Pose coordinates</Text>
+              <View
+                accessibilityRole="radiogroup"
+                accessibilityLabel="Pose coordinates"
+                style={s.sizeOptions}
+              >
+                {poseConventionOptions.map(option => (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="radio"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{
+                      checked: poseConvention === option.value,
+                      disabled: saving,
+                    }}
+                    disabled={saving}
+                    onPress={() => setPoseConvention(option.value)}
+                    style={[
+                      s.sizeOption,
+                      poseConvention === option.value && s.sizeOptionSelected,
+                    ]}
+                  >
+                    <Text style={s.sizeOptionText}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={s.hint} accessibilityLiveRegion="polite">
+                {selectedPoseConvention.axes}
+              </Text>
+              <Text style={s.hint}>
+                Camera-relative tag pose. Roll, pitch and yaw describe the tag,
+                not phone attitude. This choice is independent of field type and
+                tag width.
+              </Text>
+            </View>
             <View style={s.sizeSection}>
               <Text style={s.label}>Field type</Text>
               <View style={s.sizeOptions}>
@@ -678,6 +750,7 @@ export function DebugSettingsModal({
                 setDraft(makeDraft(DEFAULT_DEBUG_SETTINGS));
                 setResetToDefaults(true);
                 setTagSizeMode('auto');
+                setPoseConvention(DEFAULT_POSE_CONVENTION);
                 setCompetitionYear(0);
                 setShowPoseAxes(false);
                 setShowImperialHeight(true);

@@ -17,7 +17,8 @@ find_package(Threads REQUIRED)
 
 # Build C and C++ once; a C ABI keeps all platform frameworks outside this target.
 add_library(afsc_objects OBJECT ${AFSC_SOURCES}
-    "${AFSC_ROOT}/native/AprilTag/AFTagCore.c" ${AFSC_APRILTAG_RELATIVE_SOURCES})
+    "${AFSC_ROOT}/native/AprilTag/AFTagCore.c"
+    "${AFSC_ROOT}/native/AprilTag/AFTagPoseConventions.c" ${AFSC_APRILTAG_RELATIVE_SOURCES})
 set_target_properties(afsc_objects PROPERTIES POSITION_INDEPENDENT_CODE ON
     C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS YES
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
@@ -60,7 +61,7 @@ if(BUILD_TESTING)
         target_compile_options(${test_name} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()
-    foreach(smoke IN ITEMS AFTagCoreSmoke AFTagPoseSmoke)
+    foreach(smoke IN ITEMS AFTagCoreSmoke AFTagPoseSmoke AFTagPoseConventionsTests)
         add_executable(${smoke} "${AFSC_ROOT}/native/AprilTag/tests/${smoke}.c")
         target_link_libraries(${smoke} PRIVATE af_spatial_core)
         target_include_directories(${smoke} PRIVATE "${AFSC_APRILTAG}")
@@ -128,6 +129,7 @@ install(TARGETS ${AFSC_INSTALL_TARGETS} EXPORT AFSpatialCoreTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES ${AFSC_HEADERS} "${AFSC_ROOT}/native/AprilTag/AFTagCore.h"
+    "${AFSC_ROOT}/native/AprilTag/AFTagPoseConventions.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/afsc)
 install(FILES "${AFSC_APRILTAG}/LICENSE.md" "${AFSC_APRILTAG}/NOTICE.md"
     "${AFSC_APRILTAG}/REVISION" DESTINATION ${CMAKE_INSTALL_DATADIR}/afsc/apriltag)

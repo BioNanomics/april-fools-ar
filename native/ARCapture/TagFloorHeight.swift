@@ -63,16 +63,16 @@ enum TagFloorHeight {
             return output
         }
         let source = evaluation.source == AFSC_HEIGHT_SOURCE_DEPTH ? "sceneDepth" : "tagPose"
-        let acceptedDepth = TagDebugMath.coreValue(evaluation.accepted_depth_z_m)
-        let difference = TagDebugMath.coreValue(evaluation.depth_difference_m)
-        let optical = [evaluation.optical_m.x, evaluation.optical_m.y, evaluation.optical_m.z]
+        let acceptedSceneOpticalDepthMeters = TagDebugMath.coreValue(evaluation.accepted_depth_z_m)
+        let absoluteOpticalDepthDifferenceMeters = TagDebugMath.coreValue(evaluation.depth_difference_m)
+        let opticalPointMeters = [evaluation.optical_m.x, evaluation.optical_m.y, evaluation.optical_m.z]
         // Preserve the native Float world-coordinate representation in recording payloads.
         let world = SIMD3<Float>(Float(evaluation.world_m.x), Float(evaluation.world_m.y), Float(evaluation.world_m.z))
         let foot = SIMD3<Float>(Float(evaluation.floor_foot_world_m.x), Float(evaluation.floor_foot_world_m.y), Float(evaluation.floor_foot_world_m.z))
         guard SpatialMeasurementMath.finite(world), SpatialMeasurementMath.finite(foot) else {
             output["reason"] = "invalidGeometry"; return output
         }
-        let height = evaluation.height_m
+        let verticalHeightMeters = evaluation.height_m
         let basis: [String: Any] = ["id": floor.id, "originWorldMeters": SpatialMeasurementMath.array(floor.origin),
             "normalWorld": SpatialMeasurementMath.array(floor.normal), "frameId": floor.frameID, "timestamp": floor.timestamp,
             "segmentId": floor.segmentID, "classification": floor.classification, "operatorConfirmed": true,
@@ -80,12 +80,12 @@ enum TagFloorHeight {
             "tiltSource": floor.tiltSource, "tiltAvailable": floor.observedTiltDegrees != nil,
             "observedTiltDegrees": floor.observedTiltDegrees as Any? ?? NSNull(), "effectiveTiltDegrees": floor.effectiveTiltDegrees as Any? ?? NSNull(),
             "floorFit": floor.floorFit as Any? ?? NSNull()]
-        output.merge(["available": true, "meters": height, "source": source,
+        output.merge(["available": true, "meters": verticalHeightMeters, "source": source,
             "reason": source == "sceneDepth" ? "valid" : "poseFallbackMissingDepth", "floor": basis,
             "worldMeters": SpatialMeasurementMath.array(world), "floorFootWorldMeters": SpatialMeasurementMath.array(foot),
-            "opticalMeters": optical, "centerPixel": center as Any? ?? NSNull(),
-            "centerDepthMeters": acceptedDepth as Any? ?? NSNull(), "centerConfidence": confidence as Any? ?? NSNull(),
-            "poseZMeters": input.pose.translation.z, "depthDifferenceMeters": difference as Any? ?? NSNull(),
+            "opticalMeters": opticalPointMeters, "centerPixel": center as Any? ?? NSNull(),
+            "centerDepthMeters": acceptedSceneOpticalDepthMeters as Any? ?? NSNull(), "centerConfidence": confidence as Any? ?? NSNull(),
+            "poseZMeters": input.pose.translation.z, "depthDifferenceMeters": absoluteOpticalDepthDifferenceMeters as Any? ?? NSNull(),
             "severity": TagDebugMath.coreSeverity(evaluation.severity)]) { _, new in new }
         return output
     }

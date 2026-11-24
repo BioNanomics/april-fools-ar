@@ -100,7 +100,10 @@ final class TagMetricGlossaryViewController: UIViewController, WKNavigationDeleg
                 const target = document.getElementById(\(json)[0]);
                 if (!target) return false;
                 target.scrollIntoView();
-                const heading = /^H[1-6]$/.test(target.tagName) ? target : target.nextElementSibling;
+                let heading = /^H[1-6]$/.test(target.tagName) ? target : target.nextElementSibling;
+                while (heading && heading.tagName === 'A' && heading.hasAttribute('id')) {
+                    heading = heading.nextElementSibling;
+                }
                 if (heading && /^H[1-6]$/.test(heading.tagName)) heading.focus({preventScroll: true});
                 return true;
             })()

@@ -39,7 +39,8 @@ host.source_build_phase.add_file_reference(project.main_group.new_file(host_sour
  'native/ARCapture/MetricGlossaryLabel.swift', 'native/ARCapture/TagMetricGlossaryViewController.swift',
  'native/ARCapture/HeightDisplayFormatter.swift', 'native/ARCapture/TagReadoutFilter.swift',
  'native/TagDebugPanelTests/TagDebugPanelUIKitTests.swift',
- 'native/TagDebugPanelTests/TagMetricGlossaryUIKitTests.swift'].each do |relative|
+ 'native/TagDebugPanelTests/TagMetricGlossaryUIKitTests.swift',
+ 'native/ARCapture/tests/TagPoseReadoutTests.swift'].each do |relative|
   tests.source_build_phase.add_file_reference(project.main_group.new_file(File.join(root,relative)))
 end
 glossary_resources = File.join(work, 'MetricGlossary')

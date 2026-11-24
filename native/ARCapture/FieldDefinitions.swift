@@ -264,7 +264,7 @@ final class FieldWalkState {
             let usable = allowRegistration && normal && fresh && optical != nil && pose["ambiguous"] as? Bool == false && acceptableStatus &&
                 (FieldValue.number(pose["rangeMeters"]) ?? .infinity) <= settings.maxDistanceMeters &&
                 (FieldValue.number(pose["reprojectionRMSEPixels"]) ?? .infinity) <= settings.maxReprojectionErrorPixels &&
-                (FieldValue.number(pose["planeAngleDegrees"]) ?? .infinity) <= settings.maxPlaneAngleDegrees &&
+                (FieldValue.number(pose["planeAngleDegrees"]) ?? .infinity) <= settings.maxViewingIncidenceDegrees &&
                 (FieldValue.number(detection["decisionMargin"]) ?? 0) > 0 && FieldValue.number(detection["hamming"]) == 0
             var worldTag: simd_double4x4?
             if let optical { var out = AFSCMat4(); if afsc_field_observed_tag(FieldValue.core(camera), FieldValue.core(optical), &out) != 0 { worldTag = FieldValue.matrix(out) } }

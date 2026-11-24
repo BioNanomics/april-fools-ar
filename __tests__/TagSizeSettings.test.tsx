@@ -108,7 +108,7 @@ test('legacy measured settings keep their full precision and Custom mode', async
   ).toBe(true);
   await act(async () => {
     tree.root
-      .findByProps({ accessibilityLabel: 'Maximum range (m)' })
+      .findByProps({ accessibilityLabel: 'Maximum 3D distance (m)' })
       .props.onChangeText('8');
   });
   await press('Apply debug settings');
@@ -185,7 +185,7 @@ test('a saved year reopens selected and survives a threshold-only edit', async (
   ).toBe(true);
   await act(async () => {
     tree.root
-      .findByProps({ accessibilityLabel: 'Maximum range (m)' })
+      .findByProps({ accessibilityLabel: 'Maximum 3D distance (m)' })
       .props.onChangeText('9');
   });
   await press('Apply debug settings');

@@ -4,149 +4,240 @@
 
 ## Overview
 
-Tap a linked label in **Details** to jump to its definition here. This page and its diagrams are maintained in Markdown and bundled with the app so help is available offline.
+Tap an underlined label in **Details** to open its definition. This Markdown page and its diagrams are bundled with the app for offline use.
 
-**Coordinates:** [X right](#x-right) · [Y down](#y-down) · [Z forward](#z-forward) · [Cam roll](#camera-roll) · [Cam pitch](#camera-pitch) · [Cam yaw](#camera-yaw).
+**Tag pose:** [Pose profile](#pose-profile) · [X](#pose-x) · [Y](#pose-y) · [Z](#pose-z) · [Roll](#pose-roll) · [Pitch](#pose-pitch) · [Yaw](#pose-yaw).
 
-**Orientation:** [Gravity](#gravity) · [Tilt](#tilt) · [Twist](#twist) · [Plane](#plane) · [Bearing](#bearing).
+**Camera geometry:** [3D distance](#distance) · [FTC planar range](#planar-range) · [Horizontal bearing](#horizontal-bearing) · [Elevation](#elevation) · [Viewing incidence](#viewing-incidence) · [Optical-axis offset](#optical-axis-offset).
 
-**Depth and range:** [PnP Z](#pnp-z) · [LiDAR Z](#lidar-z) · [|Δ Z|](#delta-z) · [Distance](#distance) · [3×3 mean](#depth-mean) · [Confidence](#depth-confidence) · [n/9](#depth-neighbors).
+**Raw diagnostics:** [Optical coordinates](#camera-coordinates) · [Rot X](#optical-rotation-x) · [Rot Y](#optical-rotation-y) · [Rot Z](#optical-rotation-z) · [Pose Z](#pose-depth) · [Scene Z](#scene-depth) · [|Δ Z|](#delta-z) · [3×3 mean](#depth-mean) · [Confidence](#depth-confidence) · [n/9](#depth-neighbors).
 
-**Quality and timing:** [RMS](#rms) · [Margin](#decision-margin) · [Hamming](#hamming) · [Edge / Auto / FTC / FRC / year](#edge) · [Hz](#analysis-rate) · [Age](#frame-age) · [Compute](#compute-time).
+**Gravity and height:** [Gravity](#gravity) · [Lean](#tag-lean) · [Upright](#upright-rotation) · [Height](#height) · [Height source](#height-source) · [Kalman](#kalman).
 
-**Readout:** [Height](#height) · [Height source](#height-source) · [Kalman](#kalman) · [Tag ID](#tag-id) · [Status](#status) · [Units](#units).
+**Quality and timing:** [RMS](#rms) · [Margin](#decision-margin) · [Hamming](#hamming) · [Edge / Auto / FTC / FRC / year](#edge) · [Hz](#analysis-rate) · [Age](#frame-age) · [Compute](#compute-time) · [Tag ID](#tag-id) · [Status](#status) · [Units](#units).
 
-All measurements describe the detected tag's **center** unless stated otherwise. A dash (**—**) means unavailable; it is different from a measured zero. The detailed pose, depth and orientation diagnostics are raw values, even when live height and distance smoothing is on. Passing the app's checks does not establish surveyed field accuracy.
+Measurements describe the tag's **center** unless stated otherwise. A dash (**—**) means unavailable, distinct from measured zero. **Tag pose (camera-relative)** describes the tag relative to the camera; it is separate from the phone's attitude, a robot pose, and a tag's field position. The displayed profile names the axes and rotation convention. Raw diagnostics and gravity angles remain unsmoothed when live height/distance smoothing is enabled. Passing the app's checks does not establish surveyed field accuracy.
+
+<a id="pose-profile"></a>
+
+## Pose profile
+
+**Pose profile** chooses the convention used for the camera-relative tag translation and rotation. **FRC / PhotonVision** is the default; **FTC SDK** and **Raw optical** are also available. This choice is independent of [Field type and tag sizing](#edge). Auto can infer a nominal width, but cannot determine which pose convention you want or establish competition identity.
+
+- **Raw optical:** camera +X right, +Y down, +Z forward in the original captured sensor image. The tag's local axes are +X printed right, +Y printed down, +Z into the print. A centered, upright tag facing the camera has identity rotation, with Rot X/Y/Z near 0°. The raw rotation uses `R = Rz(Rot Z) Ry(Rot Y) Rx(Rot X)`.
+- **FTC SDK:** camera +X right, +Y forward, +Z up in the camera's view. Its tag axes are +X printed right, +Y into the print, +Z printed up, giving a head-on upright tag pitch/roll/yaw near 0°. SDK **Pitch / Roll / Yaw** are rotations about FTC X / Y / Z, respectively, with right-hand signs. The convention is `R = Rz(yaw) Rx(pitch) Ry(roll)`. The app matches the SDK's intrinsic-YXZ extraction from the raw optical matrix and its angle-branch handling.
+- **FRC / PhotonVision:** camera +X forward, +Y left, +Z up. The tag's local +X points out of its printed front, +Y points printed right, +Z points printed up. A head-on upright tag therefore has pose yaw 180°, rather than 0°. **Roll / Pitch / Yaw** use right-hand rotation about X / Y / Z and `R = Rz(yaw) Ry(pitch) Rx(roll)`, matching PhotonVision's AprilTag basis correction and WPILib rotation convention.
+
+The camera axes follow the captured sensor orientation. Rotating the phone or rotating/cropping the preview can make them differ from the current screen's right/up. **Up** in a camera profile is camera-relative; gravity-aligned world up is used separately for [Lean and Upright](#gravity). The optional colored pose gizmo retains the raw tag-local axes; changing this readout profile does not rotate that gizmo.
+
+For raw translation `(3, −4, 4)` meters, FTC translation is `(3, 4, 4)` and FRC translation is `(4, −3, 4)`. All describe the same tag center and the same **3D distance ≈ 6.403 m**. FTC planar range is **5 m**, bearing **−36.87°**, and elevation **+45°**.
+
+![The three camera-relative pose profiles use different axes and tag bases. A raw head-on identity rotation becomes FTC zero angles and PhotonVision yaw 180 degrees.](diagrams/tag-pose-profiles.svg)
+
+Camera-relative translation is not field localization. A robot pose requires camera-to-robot extrinsics; a field pose additionally needs an identified field frame and tag layout. A stationary tag's camera-relative rotation can change when the camera turns. [Lean and Upright](#gravity) instead use gravity.
+
+<a id="pose-x"></a>
+
+## Pose X
+
+**X** is the tag center's first translation component, in meters: **right** for Raw optical and FTC SDK; **forward** for FRC / PhotonVision. Negative means the opposite direction. It is not a pixel coordinate. The visible [pose profile](#pose-profile) supplies the axis meaning.
+
+<a id="pose-y"></a>
+
+## Pose Y
+
+**Y** is the tag center's second translation component, in meters: **down** for Raw optical, **forward** for FTC SDK, **left** for FRC / PhotonVision. These are camera-relative directions, separate from [height above the floor](#height).
+
+<a id="pose-z"></a>
+
+## Pose Z component
+
+The **Z translation component** is **forward** for Raw optical and **up** for FTC SDK and FRC / PhotonVision. A camera-profile Z value is separate from the raw diagnostic [Pose Z](#pose-depth), which always means forward **optical Z depth**, regardless of the selected profile.
+
+<a id="pose-roll"></a>
+
+## Pose roll
+
+**Roll** belongs to the camera-relative tag orientation in the selected profile. FTC SDK roll is about its **Y forward** axis; FRC / PhotonVision roll is about **X forward**. Positive follows the right-hand rule. For FTC, positive roll turns the print clockwise as viewed through the camera. Raw optical uses [Rot X/Y/Z](#optical-rotation-x) to avoid assigning robotics axis names to optical axes.
+
+The rotations are Euler components, not three independent physical tilts. Use the complete order under [Pose profile](#pose-profile); mixed-axis rotations cannot be converted by renaming or swapping Euler values. At a singularity the matrix is authoritative and the adapter follows its named SDK's branch choice.
+
+<a id="pose-pitch"></a>
+
+## Pose pitch
+
+**Pitch** is about **X right** in FTC SDK and **Y left** in FRC / PhotonVision, with right-hand signs. Positive FTC tag pitch tips the printed face downward. Positive FRC rotation about camera Y is the right-hand rotation around the left-pointing axis. This describes **tag orientation**, separate from an aiming angle toward the tag's center. See [Pose profile](#pose-profile) and [Elevation](#elevation).
+
+<a id="pose-yaw"></a>
+
+## Pose yaw
+
+**Yaw** is about camera **Z up** in FTC SDK and FRC / PhotonVision, positive counterclockwise viewed from above that axis. Their tag bases differ: a head-on upright tag has FTC yaw **0°**, but FRC / PhotonVision pose yaw **180°**. Yaw describes the tag's orientation, rather than [horizontal bearing](#horizontal-bearing) to its center, compass heading or field heading. PhotonVision's separate `getYaw()` aiming measurement is also distinct from its pose rotation.
 
 <a id="camera-coordinates"></a>
 
-## Camera coordinates
+## Raw optical coordinates
 
-The translation readout locates the tag center relative to the camera in **optical coordinates**: **+X right, +Y down, +Z forward**, in meters. The origin is the camera's optical center. Directions refer to the captured sensor image before the preview is rotated or cropped for the screen.
+The detector's raw pose uses **+X right, +Y down, +Z forward**, in meters, from the camera's optical center. These directions refer to the captured sensor image before the preview is rotated or cropped. The raw pose maps tag coordinates into camera coordinates: `pCamera = R × pTag + t`.
 
-These axes differ from ARKit's camera axes (+Y up, −Z forward) and from a robot or field coordinate system. They also differ from the optional colored **tag-local pose axes**, which begin at the tag center and rotate with the printed tag.
+ARKit's camera axes are +X right, +Y up, −Z forward; the integration explicitly changes those axes when combining the tag pose with the camera-to-world transform. [Pose profiles](#pose-profile) derive their values from the complete raw rotation and translation; stored legacy optical values retain their original meaning.
 
-![Camera optical axes: X points right in the sensor image, Y points down, and Z points forward from the camera toward the scene.](diagrams/tag-camera-axes.svg)
+![Raw optical camera axes: X points right in the captured sensor image, Y points down, and Z points forward toward the scene.](diagrams/tag-camera-axes.svg)
 
 <a id="x-right"></a>
 
-## X right
+## Raw X right
 
-**X** is the tag center's horizontal displacement in optical camera coordinates. Positive is right in the captured image; negative is left. It is a distance in meters, not a pixel position. See [Camera coordinates](#camera-coordinates).
+Legacy **X right** means the tag center's raw optical horizontal displacement, in meters. Positive is right in the captured image. It maps to FTC X and negative FRC Y. Current profile-dependent X is defined under [Pose X](#pose-x).
 
 <a id="y-down"></a>
 
-## Y down
+## Raw Y down
 
-**Y** is the tag center's vertical displacement in optical camera coordinates. Positive is down in the captured image; negative is up. It is measured in meters and changes when the camera rotates. It is separate from [height above the floor](#height).
+Legacy **Y down** means the tag center's raw optical vertical displacement. Positive is down in the captured image. Negative raw Y maps to FTC and FRC camera-relative up. It is separate from gravity-referenced [floor height](#height).
 
 <a id="z-forward"></a>
 
-## Z forward
+## Raw Z forward
 
-**Z** is the forward component of the tag center's camera-relative position. A visible tag is in front of the camera and has positive Z. This is the same solved forward depth shown as [PnP Z](#pnp-z); it is shorter than [Distance](#distance) when the tag is off the optical axis.
+Legacy **Z forward** is the tag center's forward optical depth, identical to the raw diagnostic [Pose Z](#pose-depth). It maps to FTC Y and FRC X; it is shorter than 3D distance for a center off the optical axis.
 
 <a id="camera-roll"></a>
+<a id="optical-rotation-x"></a>
 
-## Camera roll
+## Raw optical Rot X
 
-**Cam roll** is the X-axis component of the solved **tag-to-optical-camera rotation**, displayed in degrees. Together with camera pitch and yaw, it describes how the tag's local axes are oriented relative to the captured camera image. It is not a phone attitude or gravity measurement.
+**Rot X**, previously labeled **Cam roll**, is the X-axis Euler component of the raw tag-to-optical-camera rotation. It is in degrees, using the right-hand rule about optical X right. The full raw convention is `R = Rz(Rot Z) Ry(Rot Y) Rx(Rot X)`.
 
-The app uses the rotation convention `R = Rz(yaw) Ry(pitch) Rx(roll)`. Near pitch ±90°, these Euler angles cannot uniquely separate roll and yaw; the rotation matrix remains authoritative, and the solver chooses roll = 0°. Use [Tilt](#tilt) and [Twist](#twist) for gravity-relative orientation.
+These optical components are retained for diagnostics. They are not FTC pitch/roll/yaw, FRC pose angles, or the phone's attitude. Near Rot Y = ±90°, the decomposition cannot uniquely separate Rot X and Rot Z; the raw solver chooses Rot X = 0°, and the matrix remains authoritative.
 
-![Camera roll, pitch and yaw rotate about optical X, Y and Z respectively; their combined rotation uses Rz times Ry times Rx.](diagrams/tag-camera-rotation.svg)
+![Raw optical rotation components Rot X, Rot Y and Rot Z use the optical axes and Rz times Ry times Rx order. These are distinct from FTC and FRC pose-angle conventions.](diagrams/tag-camera-rotation.svg)
 
 <a id="camera-pitch"></a>
+<a id="optical-rotation-y"></a>
 
-## Camera pitch
+## Raw optical Rot Y
 
-**Cam pitch** is the Y-axis component of the tag-to-optical-camera rotation, in degrees. The complete convention and its singularity are defined under [Camera roll](#camera-roll). Moving or turning the phone can change these camera-relative angles for a stationary tag.
+**Rot Y**, previously **Cam pitch**, is the Y-axis component of the raw tag-to-optical-camera Euler rotation. It uses the right-hand rule about optical Y down. Its order and singularity are defined under [Rot X](#optical-rotation-x). It must not be substituted for a profile's [pose pitch](#pose-pitch).
 
 <a id="camera-yaw"></a>
+<a id="optical-rotation-z"></a>
 
-## Camera yaw
+## Raw optical Rot Z
 
-**Cam yaw** is the Z-axis component of the tag-to-optical-camera rotation, in degrees. The complete convention is defined under [Camera roll](#camera-roll). This value is not compass heading or the tag's heading on the field.
+**Rot Z**, previously **Cam yaw**, is the Z-axis component of the raw tag-to-optical-camera Euler rotation. It uses the right-hand rule about optical Z forward. Its order is defined under [Rot X](#optical-rotation-x). It is separate from [pose yaw](#pose-yaw), horizontal center bearing and field heading.
 
 <a id="gravity"></a>
 
-## Gravity
+## Gravity reference
 
-**Gravity** identifies the reference used for the neighboring Tilt and Twist values. The app combines the tag rotation with the camera's ARKit orientation from the **same captured frame**, then measures against gravity-aligned world up.
+**Gravity** supplies the reference for the app-derived **Lean** and **Upright** measurements. The app combines the tag's raw rotation with the camera's ARKit orientation from the **same captured frame**, then measures against gravity-aligned world up. These measurements are independent of the pose display profile.
 
-For a stationary tag, rotating the phone should leave these estimates approximately unchanged. Normal tracking and a current, unambiguous pose passing range, viewing-angle and decoder/reprojection checks are required. Floor selection is not required. The gravity calculation does not use depth, but [Auto size mode](#edge) needs LiDAR to resolve the physical width before that pose is available. Gravity defines vertical but supplies no absolute field heading.
+For a stationary tag, turning the phone should leave these estimates approximately unchanged. Normal tracking and a current, unambiguous pose passing range, viewing-incidence and decoder/reprojection checks are required. No floor selection is required. This gravity calculation does not consume depth; [Auto size mode](#edge) still needs scene depth to resolve the physical width before that pose is available. Gravity establishes vertical, not an absolute field heading.
 
 <a id="tilt"></a>
+<a id="tag-lean"></a>
 
-## Tilt
+## Tag lean
 
-**Tilt** is the unsigned angle by which the printed tag plane departs from **vertical**: **0° is vertical**, **90° is horizontal**. Leaning forward and backward by the same amount produce the same tilt. Rotating the print within its own plane changes twist without changing tilt.
+**Lean**, formerly **Tilt**, is the unsigned departure of the printed tag plane from **vertical**: **0° is vertical**, **90° is horizontal**. Equal forward and backward leans produce equal values. This is an app-derived geometry measurement, separate from FTC/FRC pitch and roll.
 
-This differs from [Plane](#plane), which describes the camera's viewing angle. It also differs from floor tilt, which measures a floor's departure from horizontal. The app computes tag tilt as `asin(abs(normal · worldUp))` using a unit tag-plane normal.
+The calculation is `asin(abs(normal · worldUp))` for a unit tag-plane normal. It differs from [viewing incidence](#viewing-incidence), which compares the print with the line of sight, and from floor tilt, which measures a floor's departure from horizontal.
 
-![Tilt is a tag plane's unsigned lean from vertical. Twist is clockwise rotation from gravity-defined upright when viewing the printed front. A horizontal plane has no gravity-defined twist.](diagrams/tag-tilt-twist.svg)
+![Tag lean is the printed plane's unsigned departure from vertical. Upright is its clockwise printed rotation relative to gravity-defined up. A horizontal plane has no gravity-defined upright rotation.](diagrams/tag-tilt-twist.svg)
 
 <a id="twist"></a>
+<a id="upright-rotation"></a>
 
-## Twist
+## Upright printed rotation
 
-**Twist** is the signed rotation of the printed square from upright **within the tag plane**, viewed from the **printed front**. **0° is upright**, positive is clockwise, negative is counterclockwise; the displayed range is −180° to +180°.
+**Upright**, formerly **Twist**, is the signed rotation of the printed square from gravity-defined upright **within its plane**, viewed from the **printed front**. **0° is upright**, positive is clockwise, negative is counterclockwise; values span −180° to +180°. It is an app-derived measurement, separate from the pose profile's Euler roll/pitch/yaw.
 
-Upright comes from projecting gravity-defined world up into the tag plane. For a horizontal or nearly horizontal plane, that projection is too small to define an upright direction, so twist shows **—** while tilt can remain available. See the [Tilt and Twist diagram](#tilt).
+Upright comes from projecting gravity-defined world up into the tag plane. For a horizontal or nearly horizontal plane, that projection is too small to define upright, so the value is **—** while Lean can remain valid. See the [Lean and Upright diagram](#tag-lean).
 
 <a id="pnp-z"></a>
+<a id="pose-depth"></a>
 
-## PnP Z
+## Pose depth in optical Z
 
-**PnP** means **Perspective-n-Point**: estimating a known object's position and orientation from its points in an image. In this app, the pose solver uses the detected tag's four corners and the matching camera intrinsics; its metric scale uses the **resolved physical width for that detection**. The width comes from Auto, an explicit field/year preset or a custom measurement, as described under [Edge](#edge).
+**Pose Z** is the resolved tag center's **forward optical depth**, in meters, regardless of the pose display profile. In FTC coordinates it is Y; in FRC coordinates it is X. It is also called optical pose depth.
 
-**PnP Z** is the solved tag center's **forward optical depth**, in meters. It is also called **pose Z**. An incorrect resolved [Edge](#edge) scales the estimated translation and range. An explicit field/year or custom width allows pose solving without LiDAR; the default Auto mode uses matching-frame LiDAR to select that width. Until size is resolved, the app shows **—** rather than a pose with an assumed scale. Compare with [LiDAR Z](#lidar-z), and use [Distance](#distance) for straight-line camera-to-center range.
+The old label **PnP Z** referred broadly to the Perspective-n-Point pose problem. This app's actual solver uses homography initialization and **orthogonal iteration** on the four tag corners, including a possible second pose; it does not call OpenCV `solvePnP`. The camera intrinsics and [resolved width for that detection](#edge) establish metric scale. An incorrect width scales translation and distance.
 
-![Forward Z depth is the distance along the optical axis to the tag's depth plane. Distance is the diagonal camera-to-tag-center range, and Bearing is the angle between that ray and the optical axis.](diagrams/tag-depth-range-bearing.svg)
+An explicit field/year or custom width permits pose solving without scene depth. Auto uses matching-frame scene depth to select a nominal width; until resolved, Pose Z is **—**. Compare [Scene Z](#scene-depth), and use [3D distance](#distance) for straight-line camera-to-center distance.
+
+![Forward optical Z is one component of 3D distance. Optical-axis offset is the unsigned full 3D angle between the forward axis and the tag-center ray, separate from signed horizontal bearing.](diagrams/tag-depth-range-bearing.svg)
 
 <a id="lidar-z"></a>
+<a id="scene-depth"></a>
 
-## LiDAR Z
+## Scene depth in optical Z
 
-**LiDAR** means **Light Detection and Ranging**. **LiDAR Z** is the matching AR frame's scene-depth sample at the detected tag-center pixel, expressed as forward optical depth in meters. The app accepts a finite, positive center depth with confidence **MED (1)** or **HIGH (2)**. LOW confidence or missing data shows **—**.
+**Scene Z**, formerly **LiDAR Z**, is the matching AR frame's **scene-depth** sample at the detected tag-center pixel, in meters from the camera plane. This is processed ARKit depth, powered by LiDAR and camera information; it is not a raw scanner return or a 3D Euclidean distance.
 
-The [3×3 mean](#depth-mean) is a separate diagnostic and never substitutes for an unusable center sample. LiDAR Z is forward depth; the live tag card's **LiDAR distance** unprojects that sample through camera intrinsics to obtain straight-line range. These quantities differ off the optical axis.
+The app accepts finite positive center depth with **MED (1)** or **HIGH (2)** confidence for its usual depth diagnostics. Auto size resolution specifically requires HIGH. Missing or rejected center depth shows **—**; a neighboring [3×3 mean](#depth-mean) never substitutes for it. Unprojecting Scene Z through matching intrinsics produces a 3D point whose norm supplies the live card's scene-derived distance.
 
 <a id="delta-z"></a>
 
-## Delta Z
+## Absolute optical depth difference
 
-**|Δ Z|** is the absolute difference between the two forward-depth estimates: `abs(LiDAR Z − PnP Z)`, in meters. It has no sign. A value of 0.12 m means the two depth estimates differ by 12 cm.
+**|Δ Z|** is `abs(Scene Z − Pose Z)`, in meters. Both terms are always optical forward depth, even when the selected profile calls its up component Z. A value of 0.12 m means the depth estimates differ by 12 cm; the bars make the difference unsigned.
 
-The color uses Settings' depth thresholds: green is at or below the warning threshold; amber is above warning through rejection; red is above rejection. Defaults are **0.10 m warning** and **0.15 m rejection**. Missing data remains neutral. Agreement is a consistency check, not independent evidence of absolute accuracy. In [Auto size mode](#edge), the same LiDAR depth helps select the pose's physical scale, so depth agreement is partly a consequence of that selection.
+Green means at or below the warning threshold; amber means above warning through rejection; red means above rejection. Defaults are **0.10 m warning** and **0.15 m rejection**. Missing data is neutral. Auto uses the same scene depth to select pose scale, so agreement is partly a consequence of size selection and cannot independently validate tag dimensions or absolute accuracy.
 
-The live tag card's **LiDAR Δ** instead compares the two **straight-line ranges**, optionally smoothed, and has its own display threshold. It is separate from this raw Z-depth difference.
+The live tag card's **Δ 3D** (formerly **LiDAR Δ**) compares the two **3D distances**, optionally smoothed, with a separate display threshold. It is a different quantity from this raw optical-depth difference.
 
 <a id="distance"></a>
 
-## Distance
+## 3D camera distance
 
-**Distance** is the straight-line Euclidean range from the camera's optical center to the tag center, estimated from the tag pose: `sqrt(X² + Y² + Z²)`, in meters. It equals PnP Z only when X and Y are zero.
+**3D dist** is straight-line Euclidean distance from the camera's optical center to the tag center: `sqrt(X² + Y² + Z²)`, in meters. The norm is unchanged by switching pose profiles. It equals forward optical depth only when the tag center lies on the optical axis. Settings → Maximum 3D distance uses this 3D quantity for its quality gate.
 
-For example, X = 3 m, Y = 0 m, Z = 4 m gives Distance = 5 m and Bearing ≈ 36.9°. The configured maximum range gates pose quality. Live tag cards also compare LiDAR-derived range with tag-derived range; the Details value remains the raw pose range. See the [depth/range diagram](#pnp-z).
+The live cards compare a scene-derived distance with a tag-pose distance. Detailed **3D dist** remains the raw tag-pose distance. It is distinct from [FTC planar range](#planar-range), floor height, and a manual distance between two selected points.
+
+<a id="planar-range"></a>
+
+## FTC planar range
+
+**Planar range** matches FTC SDK `ftcPose.range`: `hypot(ftcX, ftcY)`, or `hypot(rawX, rawZ)`. It excludes FTC Z, the camera-relative vertical component. This is a projection onto the camera's right/forward plane; it is ground-plane distance only when the camera is level.
+
+For raw translation `(3, −4, 4)` m, FTC planar range is 5 m while 3D distance is `sqrt(41) ≈ 6.403 m`. The app keeps them distinct. FRC / PhotonVision and Raw optical readouts use the explicitly named [3D distance](#distance).
+
+<a id="horizontal-bearing"></a>
+
+## Horizontal bearing
+
+**Horizontal bearing** matches FTC SDK `ftcPose.bearing`: `atan2(-ftcX, ftcY)`, or `atan2(-rawX, rawZ)`, in degrees. Zero is straight ahead in the camera's view; positive is left, negative right. A tag directly above image center can have zero horizontal bearing despite a nonzero [optical-axis offset](#optical-axis-offset).
+
+It aims toward the **center**, not the tag's printed orientation. It is separate from pose yaw, compass direction and field heading. For raw `(3, −4, 4)`, bearing is approximately −36.87°.
+
+<a id="elevation"></a>
+
+## FTC elevation
+
+**Elevation** matches FTC SDK `ftcPose.elevation`: `atan2(ftcZ, ftcY)`, or `atan2(-rawY, rawZ)`, in degrees. Positive is up in the camera's view; negative is down. The denominator is forward depth, **not planar range**, so it is a projected vertical aiming angle rather than spherical elevation above the full horizontal center ray.
+
+For raw `(3, −4, 4)`, FTC elevation is +45°. It is independent of tag pose pitch. Camera-relative up can differ from gravity up when the phone tilts.
 
 <a id="plane"></a>
+<a id="viewing-incidence"></a>
 
-## Plane
+## Viewing incidence
 
-**Plane** is the unsigned **incidence angle** between a normal to the printed tag plane and the line of sight between camera and tag center: **0° is head-on**, **90° is edge-on**. A normal is a direction perpendicular to the flat printed surface. The app uses the acute angle regardless of normal sign.
+**Incidence**, formerly **Plane**, is the unsigned acute angle between the tag-plane normal and the camera-to-center line: `acos(abs(normal · normalizedCenterRay))`. A normal is perpendicular to the printed surface. **0° is head-on**, **90° is edge-on**. The app uses the acute angle regardless of normal sign.
 
-This angle drives the maximum viewing-angle check (60° by default). It describes how obliquely the camera sees the tag, rather than the tag's lean relative to gravity. A vertical wall tag can have Tilt = 0° while Plane is large because you are viewing it from the side.
+This drives Settings → Maximum viewing incidence (60° by default). It is separate from gravity-relative Lean and from the center's offset in the image. A vertical tag can have Lean 0° and large Incidence when viewed from the side.
 
-![Plane is measured at the tag between its surface normal and the direction to the camera; Bearing is measured at the camera between the optical axis and the ray to the tag.](diagrams/tag-plane-incidence.svg)
+![Viewing incidence is measured at the tag between a perpendicular surface normal and the camera-to-center line. Optical-axis offset is measured at the camera between the forward axis and that line.](diagrams/tag-plane-incidence.svg)
 
 <a id="bearing"></a>
+<a id="optical-axis-offset"></a>
 
-## Bearing
+## Optical-axis offset
 
-**Bearing** is the unsigned angle away from the camera's **forward optical axis** to the ray through the tag center: `atan2(sqrt(X² + Y²), Z)`, in degrees. A tag centered on the optical axis has bearing 0°; displacement in any image direction increases it.
+**Axis offset**, formerly **Bearing**, is the unsigned full 3D angle from the forward optical axis to the tag-center ray: `atan2(hypot(rawX, rawY), rawZ)`. Zero is on the optical axis; moving the center away in any image direction increases it.
 
-It does not indicate left versus right, compass direction or field heading. It is independent of the tag's surface orientation: a tag can move away from image center while facing directly toward the camera. Compare with [Plane](#plane) and the [depth/range diagram](#pnp-z).
+This raw diagnostic does not say left/right or up/down. It is separate from [horizontal bearing](#horizontal-bearing), [FTC elevation](#elevation), tag orientation and viewing incidence. The old glossary anchor `bearing` retains this historical meaning; FTC bearing has its own explicit definition.
 
 <a id="depth-mean"></a>
 
@@ -154,7 +245,7 @@ It does not indicate left versus right, compass direction or field heading. It i
 
 **3×3 mean** is the arithmetic mean of accepted scene-depth pixels in a 3-by-3 neighborhood centered on the tag's depth-image pixel. Each contributing pixel must be finite, positive and have MED or HIGH confidence. The result is in meters.
 
-Pixels can describe nearby background or an edge, especially for a small or distant tag. The neighborhood can contain fewer than nine candidates at image boundaries. Its mean does not replace the center value used for LiDAR Z or depth agreement.
+Pixels can describe nearby background or an edge, especially for a small or distant tag. The neighborhood can contain fewer than nine candidates at image boundaries. Its mean does not replace the center value used for Scene Z or depth agreement.
 
 ![A 3-by-3 depth neighborhood has nine possible samples. Only finite, positive MED or HIGH confidence samples enter its mean. The center sample is evaluated independently.](diagrams/tag-depth-neighborhood.svg)
 
@@ -202,7 +293,7 @@ The app's conservative pose-quality checks require **H0** even if the detector c
 
 **Edge** is the **resolved physical width for the selected detection**, measured along one tag side between its detection corners at the black/white boundary. It excludes the surrounding paper margin. The pose solver uses this length to establish metric scale. Different tags in the same frame can have different applied widths. **Edge —** means the width has not been resolved; it is not a zero-size tag.
 
-**Field type** in Settings selects how size is resolved. **Auto (LiDAR)** is the default for new settings. It compares each detection's reference pose with the **same frame's HIGH-confidence center LiDAR depth**, then selects a unique supported nominal width. Normal tracking and a reliable, unambiguous corner pose are required. The supported widths are **50.8, 82.55, 101.6, 127, 152.4 and 165.1 mm** (2, 3.25, 4, 5, 6 and 6.5 inches). Matching tolerance is 10%, tightened to 3% for the nearby 6- and 6.5-inch sizes. If the necessary inputs or a unique match are missing, the tag ID and outline remain visible while its scaled pose is unavailable. Select an explicit field/year or custom width when needed.
+**Field type** in Settings selects how size is resolved. It is independent of [Pose profile](#pose-profile); neither a selected width nor Auto inference chooses a coordinate convention. **Auto (LiDAR)** is the default for new settings. It compares each detection's reference pose with the **same frame's HIGH-confidence center LiDAR depth**, then selects a unique supported nominal width. Normal tracking and a reliable, unambiguous corner pose are required. The supported widths are **50.8, 82.55, 101.6, 127, 152.4 and 165.1 mm** (2, 3.25, 4, 5, 6 and 6.5 inches). Matching tolerance is 10%, tightened to 3% for the nearby 6- and 6.5-inch sizes. If the necessary inputs or a unique match are missing, the tag ID and outline remain visible while its scaled pose is unavailable. Select an explicit field/year or custom width when needed.
 
 **FTC** means **FIRST Tech Challenge**; **FRC** means **FIRST Robotics Competition**. Selecting one explicitly, together with **Competition year**, applies that season's known black-border sizes without requiring LiDAR to choose the width. FTC's year is the season's **ending year**: **FTC 2027** means the **2026–27 BIOBUZZ** season. FRC uses its calendar year: **FRC 2026** means **2026 REBUILT**. The initial choices when selecting these modes are FTC 2027 and FRC 2026.
 
@@ -262,7 +353,7 @@ The pose fallback depends on the detection's [resolved tag width](#edge). Missin
 
 **Kalman** identifies the optional recursive smoothing applied to live tag heights and the separate live LiDAR/Tag camera ranges. Settings offers **3, 5, 10, 20 or 30 equivalent samples**; a larger value reduces jitter and adds lag. This is a filter strength, not a fixed-length moving average.
 
-The filter resets when a tag or signal disappears, its source changes, tracking/floor/settings change or results expire. Detailed pose and depth values, Tilt, Twist, quality gates, world-space vectors, recordings and playback retain raw values. Smoothing changes readability and response, not measurement accuracy.
+The filter resets when a tag or signal disappears, its source changes, tracking/floor/settings change or results expire. Detailed camera-relative pose, optical depth, Lean, Upright, quality gates, world-space vectors, recordings and playback retain unsmoothed values. Smoothing changes readability and response, not measurement accuracy.
 
 <a id="tag-id"></a>
 
@@ -304,3 +395,11 @@ When several checks fail, the displayed status is the first applicable check in 
 - **Δ:** difference; vertical bars, as in **|Δ Z|**, mean absolute magnitude.
 - **≈:** estimated or approximate value.
 - **—:** unavailable data, distinct from zero.
+
+<a id="standards-sources"></a>
+
+## Standards and sources
+
+These conventions follow the [AprilTag optical frame](https://github.com/AprilRobotics/apriltag#coordinate-system), its [orthogonal-iteration pose API](https://github.com/AprilRobotics/apriltag/blob/master/apriltag_pose.h), the [FTC SDK conversion](https://ftc-docs.firstinspires.org/en/latest/apriltag/vision_portal/apriltag_intro/apriltag-intro.html#advanced-use), [WPILib coordinates](https://docs.wpilib.org/en/stable/docs/software/basic-programming/coordinate-system.html), and [PhotonVision camera/tag frames](https://docs.photonvision.org/en/latest/docs/apriltag-pipelines/coordinate-systems.html). FTC adapter behavior is checked against SDK 11.1.0/12.0.0, and the FRC adapter against PhotonVision 2026.3.3 and WPILib 2026.2.2. These are explicit interoperability profiles; other FRC camera providers can have different contracts.
+
+Apple defines [ARKit scene depth](https://developer.apple.com/documentation/arkit/ardepthdata) relative to the camera plane. Lean and Upright are app-derived geometry definitions, independent of these SDK pose-angle names. External references need an internet connection; the definitions and diagrams above remain available offline.

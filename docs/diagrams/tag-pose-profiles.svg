@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="990" viewBox="0 0 640 990" role="img" aria-labelledby="title desc">
+  <title id="title">Three explicit camera-relative tag pose profiles</title>
+  <desc id="desc">Raw optical camera axes are X right, Y down, Z forward; head-on upright raw rotation is identity. FTC axes are X right, Y forward, Z up; head-on upright FTC pitch roll yaw are zero. FRC PhotonVision camera axes are X forward, Y left, Z up; its outward-facing tag X basis gives head-on pose yaw 180 degrees. The same raw position three right, four up, four forward meters is FTC three four four and FRC four minus three four.</desc>
+  <defs>
+    <marker id="red" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="#b83232"/></marker>
+    <marker id="green" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="#19734b"/></marker>
+    <marker id="blue" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="#2563b8"/></marker>
+  </defs>
+  <rect width="640" height="990" rx="18" fill="#f4f7fb"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
+    <text x="26" y="39" font-size="25" font-weight="700">One tag pose, three explicit conventions</text>
+    <rect x="22" y="62" width="596" height="228" rx="12" fill="#fff" stroke="#c8d3e2"/>
+    <text x="40" y="94" font-size="24" font-weight="700">Raw optical</text>
+    <g stroke-width="4">
+      <path d="M117 190H224" stroke="#b83232" marker-end="url(#red)"/>
+      <path d="M117 190V254" stroke="#19734b" marker-end="url(#green)"/>
+      <path d="M117 190L197 126" stroke="#2563b8" marker-end="url(#blue)"/>
+    </g>
+    <circle cx="117" cy="190" r="5"/>
+    <text x="235" y="197" font-size="22" fill="#b83232">X</text>
+    <text x="108" y="278" font-size="22" fill="#19734b">Y</text>
+    <text x="203" y="127" font-size="22" fill="#2563b8">Z</text>
+    <text x="312" y="136" font-size="22">X right · Y down</text>
+    <text x="312" y="168" font-size="22">Z forward</text>
+    <text x="312" y="215" font-size="20">Head-on upright tag:</text>
+    <text x="312" y="246" font-size="22" font-weight="600">Rot X/Y/Z = 0°</text>
+
+    <rect x="22" y="306" width="596" height="228" rx="12" fill="#fff" stroke="#c8d3e2"/>
+    <text x="40" y="338" font-size="24" font-weight="700">FTC SDK</text>
+    <g stroke-width="4">
+      <path d="M117 462H224" stroke="#b83232" marker-end="url(#red)"/>
+      <path d="M117 462L197 398" stroke="#19734b" marker-end="url(#green)"/>
+      <path d="M117 462V377" stroke="#2563b8" marker-end="url(#blue)"/>
+    </g>
+    <circle cx="117" cy="462" r="5"/>
+    <text x="235" y="469" font-size="22" fill="#b83232">X</text>
+    <text x="205" y="400" font-size="22" fill="#19734b">Y</text>
+    <text x="108" y="370" font-size="22" fill="#2563b8">Z</text>
+    <text x="312" y="380" font-size="22">X right · Y forward</text>
+    <text x="312" y="412" font-size="22">Z up</text>
+    <text x="312" y="459" font-size="20">Head-on upright tag:</text>
+    <text x="312" y="490" font-size="22" font-weight="600">Pitch/Roll/Yaw = 0°</text>
+
+    <rect x="22" y="550" width="596" height="228" rx="12" fill="#fff" stroke="#c8d3e2"/>
+    <text x="40" y="582" font-size="24" font-weight="700">FRC / PhotonVision</text>
+    <g stroke-width="4">
+      <path d="M164 706L244 642" stroke="#b83232" marker-end="url(#red)"/>
+      <path d="M164 706H57" stroke="#19734b" marker-end="url(#green)"/>
+      <path d="M164 706V621" stroke="#2563b8" marker-end="url(#blue)"/>
+    </g>
+    <circle cx="164" cy="706" r="5"/>
+    <text x="250" y="644" font-size="22" fill="#b83232">X</text>
+    <text x="36" y="714" font-size="22" fill="#19734b">Y</text>
+    <text x="155" y="614" font-size="22" fill="#2563b8">Z</text>
+    <text x="312" y="624" font-size="22">X forward · Y left</text>
+    <text x="312" y="656" font-size="22">Z up</text>
+    <text x="312" y="703" font-size="20">Head-on upright tag:</text>
+    <text x="312" y="734" font-size="22" font-weight="600">Roll/Pitch = 0°</text>
+    <text x="312" y="764" font-size="22" font-weight="600">Pose yaw = 180°</text>
+
+    <text x="28" y="823" font-size="23" font-weight="700">Same center, in meters</text>
+    <text x="28" y="860" font-size="22">Raw (3, −4, 4) → FTC (3, 4, 4)</text>
+    <text x="28" y="894" font-size="22">FRC (4, −3, 4) · 3D distance ≈ 6.403 m</text>
+    <text x="28" y="937" font-size="20" fill="#465873">Camera up follows the sensor, not gravity.</text>
+    <text x="28" y="967" font-size="20" fill="#465873">Size mode and field selection do not choose this profile.</text>
+  </g>
+</svg>

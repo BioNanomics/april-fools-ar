@@ -4,6 +4,8 @@ Stopping a recording finalizes the source capture and automatically creates a du
 
 In-app playback draws recorded tags, measurements, confirmed floors and tag-height vectors over the clean video. **Recorded overlays** defaults on and can hide the annotations. `RecordingPlaybackTimeline` verifies the retained JSON logs, indexes accepted video frames by their media timestamps and rebuilds geometry at the current playback time. `RecordingPlaybackOverlayView` maps sensor pixels through the video's actual transform and letterboxed video rectangle. Pausing and seeking use playback time rather than live-camera expiry timers. Dismissal removes the time/notification observations along with the player. Missing or invalid metadata leaves a playable clean video with an unavailable explanation. The MP4's pixels and payloads are never rewritten by this viewer.
 
+The playback view selector offers **Recorded / Camera / Depth / Confidence**. New captures save their effective preview mode per frame so Recorded follows those changes. Older clips support explicit sensor-view selection, with an explanation that their original mode history is unavailable. Depth and confidence maps are loaded and verified in the background one sample at a time, held only within their source segment for at most 0.4 seconds, and rendered with the live palettes over the full video image. Seeking, switching views, disabling overlays and dismissal clear pending images. See [recorded sensor-view validation](../../docs/validation/M0-recorded-sensor-views.md).
+
 `SavedRecordingStore` publishes the MP4 atomically, followed by a small receipt containing the original manifest SHA, artifact SHA and file identity. Interrupted/failed packaging preserves the raw session folder and can be retried with Play or Share. Legacy sessions are prepared on first use, with orientation inferred from the first frame. A cross-process file lock serializes publication and permits cleanup of abandoned private staging directories. Listing sessions does not read entire movies or wait on packaging.
 
 Source folders under `Documents/AprilFoolsAR/sessions/` remain immutable recovery/analysis copies until explicitly deleted. This uses extra disk space. They are not discarded automatically. A capture with no completed video remains unfinalized; it cannot be misreported as ready to play.
@@ -31,11 +33,14 @@ npm ci --prefix recording-format/npm
 npm --prefix recording-format/npm test
 python3 native/ArchiveModule/tests/validate-mp4.py
 python3 native/ArchiveModule/tests/validate-saved-recording.py
+python3 native/ArchiveModule/tests/validate-recording-memory.py
 ruby native/ARCapture/tests/run-build-info-tests.rb --device-id <dedicated-simulator-id>
 ruby native/ArchiveModule/tests/run-playback-overlay-tests.rb --device-id <dedicated-simulator-id>
 ```
 
 The first two native scripts run on macOS without a device. They cover numeric precision, orientation, exact restoration, interrupted publication, concurrent reuse, path checks and retry. Simulator tests cover the player lifecycle, orientation calculation, and empty-capture handling. Physical playback, new recording and sharing remain separate checks.
+
+The memory regression uses dense synthetic metadata and a 160 MiB sidecar to check save and fresh-process reopen below 256 MiB RSS. It terminates a failing export at the budget and accepts `--source-ref` to verify an older revision. JSON conversion and file hashing drain Foundation temporaries after each record/chunk; see [recording memory investigation](../../docs/validation/M0-recording-memory.md).
 
 The playback-overlay suite also checks recorded-time geometry, floor provenance, paused seeking, the visibility toggle, metadata integrity and observer cleanup. See [recorded-overlay validation](../../docs/validation/M0-recorded-overlays.md) for results and optional private-recording checks.
 

@@ -98,15 +98,15 @@ JNIEXPORT jdoubleArray JNICALL Java_com_aprilfools_spatial_SpatialCore_estimateT
     if (!read(env, corners, c) || !read(env, calibration, k)) return nullptr;
     double ordered[4][2];
     for (size_t i = 0; i < 4; ++i) { ordered[i][0] = c[i * 2]; ordered[i][1] = c[i * 2 + 1]; }
-    AFTagCalibration intrinsics{k[0], k[1], k[2], k[3], k[4]}; AFTagPose pose{};
-    if (AFTagCoreEstimatePoseFromCorners(ordered, &intrinsics, &pose) != AFTagCoreSuccess) {
+    AFTagCalibration intrinsics{k[0], k[1], k[2], k[3], k[4]}; AFTagPose opticalPose{};
+    if (AFTagCoreEstimatePoseFromCorners(ordered, &intrinsics, &opticalPose) != AFTagCoreSuccess) {
         invalid(env, "Tag pose is unavailable for these corners/calibration"); return nullptr;
     }
     std::array<double, 18> result{};
-    for (size_t i = 0; i < 3; ++i) result[i] = pose.translation[i];
-    for (size_t i = 0; i < 9; ++i) result[3 + i] = pose.rotationRowMajor[i];
-    result[12] = pose.rangeMeters; result[13] = pose.reprojectionRMSEPixels;
-    result[14] = pose.poseError; result[15] = pose.candidateCount;
-    result[16] = pose.ambiguous; result[17] = pose.planeAngleDegrees;
+    for (size_t i = 0; i < 3; ++i) result[i] = opticalPose.translation[i];
+    for (size_t i = 0; i < 9; ++i) result[3 + i] = opticalPose.rotationRowMajor[i];
+    result[12] = opticalPose.rangeMeters; result[13] = opticalPose.reprojectionRMSEPixels;
+    result[14] = opticalPose.poseError; result[15] = opticalPose.candidateCount;
+    result[16] = opticalPose.ambiguous; result[17] = opticalPose.planeAngleDegrees;
     return output(env, result);
 }

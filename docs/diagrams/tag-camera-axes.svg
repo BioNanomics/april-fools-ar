@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="450" viewBox="0 0 640 450" role="img" aria-labelledby="title desc">
-  <title id="title">Optical camera coordinates</title>
+  <title id="title">Raw optical camera coordinates</title>
   <desc id="desc">The origin is the camera optical center. X points right and Y down in the captured sensor image; Z points forward into the scene. A dashed image rectangle illustrates the camera's image orientation.</desc>
   <defs>
     <marker id="red" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#b83232"/></marker>
@@ -8,7 +8,7 @@
   </defs>
   <rect width="640" height="450" rx="18" fill="#f4f7fb"/>
   <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
-    <text x="28" y="39" font-size="25" font-weight="700">Camera optical axes</text>
+    <text x="28" y="39" font-size="25" font-weight="700">Raw optical camera axes</text>
     <path d="M104 110H366V329H104Z" fill="#e9eef6" stroke="#8b9aaf" stroke-width="2" stroke-dasharray="7 6"/>
     <text x="112" y="99" font-size="19" fill="#465873">Captured-image orientation</text>
     <path d="M185 190H445" stroke="#b83232" stroke-width="4" marker-end="url(#red)"/>

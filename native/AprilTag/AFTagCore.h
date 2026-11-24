@@ -17,10 +17,10 @@ typedef struct {
 typedef struct {
     double translation[3]; // Tag center in camera optical x-right/y-down/z-forward, meters.
     double rotationRowMajor[9]; // p_camera = R * p_tag + translation.
-    double eulerDegrees[3]; // [rollX,pitchY,yawZ], R = Rz(yaw) Ry(pitch) Rx(roll).
-    double rangeMeters;
-    double opticalAxisAngleDegrees;
-    double planeAngleDegrees; // acos(abs(tag normal dot normalized center ray)); 0=head-on.
+    double eulerDegrees[3]; // Legacy optical Rot X/Y/Z, R=Rz(RotZ) Ry(RotY) Rx(RotX); not FTC/FRC angles.
+    double rangeMeters; // Legacy ABI name: Euclidean 3-D camera-to-tag-center distance.
+    double opticalAxisAngleDegrees; // Unsigned optical-axis offset, not FTC horizontal bearing.
+    double planeAngleDegrees; // Legacy ABI name: viewing incidence acos(abs(normal dot center ray)); 0=head-on.
     double reprojectionRMSEPixels; // sqrt(sum of four squared 2D corner distances / 4).
     double poseError; // Upstream object-space sum of squared distances to rays, m^2; NOT pixels.
     int candidateCount; // Numerically valid, positive-depth solutions (one or two).
@@ -31,7 +31,7 @@ typedef struct {
     double candidateRotationSeparationDegrees;
     double candidateTranslationSeparationMeters;
     int ambiguous; // Ratio >=0.8 AND rotation >1deg or translation >1% tag edge.
-    int eulerSingular; // At pitch +/-90deg, roll=0 chosen; matrix is authoritative.
+    int eulerSingular; // At optical Rot Y +/-90deg, Rot X=0; matrix is authoritative.
 } AFTagPose;
 
 typedef struct {

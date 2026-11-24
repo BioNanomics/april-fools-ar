@@ -232,6 +232,8 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 }
                 recorder.event(["type": "segment", "segmentId": self.segment, "reason": "recording began", "timestamp": self.latestFrame?.timestamp ?? 0])
                 recorder.event(["type": "debugSettingsAtStart", "settings": self.debugSettings.dictionary, "timestamp": self.latestFrame?.timestamp ?? 0])
+                recorder.event(["type": "previewModeAtStart", "previewMode": self.previewMode, "segmentId": self.segment,
+                    "frameId": self.frameID, "timestamp": self.latestFrame?.timestamp ?? 0])
                 recorder.event(["type": "measurementsAtStart", "segmentId": self.segment, "timestamp": self.latestFrame?.timestamp ?? 0,
                     "measurements": self.spatialState.completed.map(\.dictionary), "floor": self.confirmedFloorDictionary() as Any? ?? NSNull()])
                 self.emitStatus(); completion(.success(self.status()))
@@ -373,7 +375,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         let old = debugSettings.dictionary
         let levelingChanged = debugSettings.levelFloorWithGravity != settings.levelFloorWithGravity
         let previousFloor = confirmedFloorDictionary()
-        let fieldPolicyChanged = debugSettings.tagSizeMode != settings.tagSizeMode || debugSettings.competitionYear != settings.competitionYear || debugSettings.tagSizeMeters != settings.tagSizeMeters || levelingChanged || debugSettings.maxDistanceMeters != settings.maxDistanceMeters || debugSettings.maxPlaneAngleDegrees != settings.maxPlaneAngleDegrees || debugSettings.maxReprojectionErrorPixels != settings.maxReprojectionErrorPixels || debugSettings.warningDepthDifferenceMeters != settings.warningDepthDifferenceMeters || debugSettings.rejectDepthDifferenceMeters != settings.rejectDepthDifferenceMeters
+        let fieldPolicyChanged = debugSettings.tagSizeMode != settings.tagSizeMode || debugSettings.competitionYear != settings.competitionYear || debugSettings.tagSizeMeters != settings.tagSizeMeters || levelingChanged || debugSettings.maxDistanceMeters != settings.maxDistanceMeters || debugSettings.maxViewingIncidenceDegrees != settings.maxViewingIncidenceDegrees || debugSettings.maxReprojectionErrorPixels != settings.maxReprojectionErrorPixels || debugSettings.warningDepthDifferenceMeters != settings.warningDepthDifferenceMeters || debugSettings.rejectDepthDifferenceMeters != settings.rejectDepthDifferenceMeters
         debugSettings = settings; settings.persist(); invalidateAprilTags()
         if fieldPolicyChanged { fieldState.invalidate("Sizing, floor or quality policy changed; recheck alignment.", segment: segment, timestamp: latestFrame?.timestamp ?? 0) }
         spatialState.setFloorLeveling(settings.levelFloorWithGravity)
@@ -431,7 +433,12 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
         captureQueue.async {
             guard ["camera", "depth", "confidence"].contains(mode) else { completion(.failure(CaptureError.message("Preview must be camera, depth, or confidence."))); return }
             let actual = self.spatialState.mode == .selectFloor ? "camera" : mode
+            let previous = self.previewMode
             self.previewMode = actual; self.lastDepthPreviewTime = 0
+            if actual != previous {
+                self.recorder?.event(["type": "previewModeChanged", "previewMode": actual, "previousPreviewMode": previous,
+                    "segmentId": self.segment, "frameId": self.frameID, "timestamp": self.latestFrame?.timestamp ?? 0])
+            }
             let hideTags = !self.debugMode && self.spatialState.mode == .selectFloor
             DispatchQueue.main.async {
                 self.host?.depthView.isHidden = actual == "camera"
@@ -687,6 +694,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                 "cameraToWorldColumnMajor": Self.matrix(frame.camera.transform), "tracking": tracking, "trackingReason": trackingReason,
                 "worldMappingStatus": frame.worldMappingStatus.rawValue, "interfaceOrientation": orientation.rawValue,
                 "viewportWidth": viewport.width, "viewportHeight": viewport.height, "depthAvailable": depthAvailable,
+                "previewMode": previewMode,
                 "droppedWriterFramesTotal": droppedFrames, "exposureDurationSeconds": frame.camera.exposureDuration]
             let display = frame.displayTransform(for: orientation, viewportSize: viewport)
             metadata["displayTransform"] = [display.a, display.b, display.c, display.d, display.tx, display.ty]
@@ -988,7 +996,7 @@ final class ARCaptureCoordinator: NSObject, ARSessionDelegate {
                     let enriched = TagDebugMath.enrich(sized, depth: depth, settings: settings, tracking: sourceTracking)
                     let ranged = TagCameraRanges.enrich(enriched, context: TagCameraRangesContext(intrinsics: k,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp))
-                    let oriented = TagGravityOrientation.enrich(ranged, context: TagGravityOrientationContext(
+                    let oriented = GravityRelativeTagOrientation.enrich(ranged, context: GravityRelativeTagOrientationContext(
                         cameraToWorld: sourceCameraToWorld, settings: settings, tracking: sourceTracking,
                         frameID: sourceFrameID, segmentID: sourceSegmentID, timestamp: timestamp,
                         frameAgeSeconds: ProcessInfo.processInfo.systemUptime-timestamp))

@@ -286,6 +286,117 @@ final class TagDebugMathTests: XCTestCase {
         XCTAssertEqual(result["planeAngleDegrees"] as? Double, 20)
         XCTAssertEqual(result["centerBearingDegrees"] as? Double, 45)
     }
+    func testPoseConventionDefaultsAndLegacySettingsMigrationDoNotChangeTagSizing() throws {
+        let initial = TagDebugSettings()
+        XCTAssertEqual(initial.poseConvention, TagPoseConvention.frcPhotonVision.rawValue)
+        let legacy = try JSONDecoder().decode(TagDebugSettings.self, from: Data("{\"tagSizeMeters\":0.16,\"tagSizeSource\":\"manual\",\"maxPlaneAngleDegrees\":52}".utf8))
+        XCTAssertEqual(legacy.poseConvention, TagPoseConvention.frcPhotonVision.rawValue)
+        XCTAssertEqual(legacy.tagSizeMode,"custom")
+        XCTAssertEqual(legacy.tagSizeMeters,0.16)
+        XCTAssertEqual(legacy.maxViewingIncidenceDegrees,52)
+        let defaults = UserDefaults(suiteName:"TagPoseConventionSettings.\(UUID().uuidString)")!
+        defer { defaults.removeObject(forKey:TagDebugSettings.defaultsKey) }
+        for convention in TagPoseConvention.allCases {
+            let selected = try legacy.merging(["poseConvention":convention.rawValue])
+            XCTAssertEqual(selected.poseConvention,convention.rawValue)
+            XCTAssertEqual(selected.tagSizeMeters,legacy.tagSizeMeters)
+            XCTAssertEqual(selected.tagSizeMode,legacy.tagSizeMode)
+            XCTAssertEqual(selected.competitionYear,legacy.competitionYear)
+            XCTAssertEqual(selected.tagSizeSource,legacy.tagSizeSource)
+            XCTAssertEqual(selected.maxViewingIncidenceDegrees,legacy.maxViewingIncidenceDegrees)
+            selected.persist(to:defaults)
+            XCTAssertEqual(TagDebugSettings.load(from:defaults),selected)
+            XCTAssertEqual(selected.dictionary["poseConvention"] as? String,convention.rawValue)
+            let field = try selected.merging(["tagSizeMode":"ftc","competitionYear":2024])
+            XCTAssertEqual(field.poseConvention,convention.rawValue,"Field/size selection must not select a pose convention")
+            XCTAssertEqual(field.tagSizeMeters,0.0508)
+        }
+        for invalid: Any in ["FIRST","ftc","",true,1,NSNull(),["frcPhotonVision"]] {
+            XCTAssertThrowsError(try initial.merging(["poseConvention":invalid]))
+        }
+        XCTAssertEqual(initial.poseConvention,TagPoseConvention.frcPhotonVision.rawValue,"Invalid Apply must leave current settings unchanged")
+    }
+    func testViewingIncidenceInternalNameRetainsLegacyPersistenceAndAcceptsNamedInputAlias() throws {
+        let initial = TagDebugSettings()
+        let named = try initial.merging(["maxViewingIncidenceDegrees":47])
+        let old = try initial.merging(["maxPlaneAngleDegrees":47])
+        XCTAssertEqual(named,old)
+        XCTAssertEqual(named.maxViewingIncidenceDegrees,47)
+        XCTAssertEqual(named.dictionary["maxPlaneAngleDegrees"] as? Double,47)
+        XCTAssertNil(named.dictionary["maxViewingIncidenceDegrees"],"Existing bridge consumers retain their wire key")
+        let encoded = try JSONEncoder().encode(named)
+        let encodedDictionary = try XCTUnwrap(JSONSerialization.jsonObject(with:encoded) as? [String:Any])
+        XCTAssertEqual(encodedDictionary["maxPlaneAngleDegrees"] as? Double,47)
+        XCTAssertNil(encodedDictionary["maxViewingIncidenceDegrees"])
+        XCTAssertEqual(try JSONDecoder().decode(TagDebugSettings.self,from:encoded),named)
+        let alias = try JSONDecoder().decode(TagDebugSettings.self,from:Data("{\"maxViewingIncidenceDegrees\":42}".utf8))
+        XCTAssertEqual(alias.maxViewingIncidenceDegrees,42)
+        XCTAssertEqual(try initial.merging(["maxPlaneAngleDegrees":47,"maxViewingIncidenceDegrees":47]),named)
+        XCTAssertThrowsError(try initial.merging(["maxPlaneAngleDegrees":47,"maxViewingIncidenceDegrees":48]))
+        XCTAssertThrowsError(try JSONDecoder().decode(TagDebugSettings.self,from:Data("{\"maxPlaneAngleDegrees\":47,\"maxViewingIncidenceDegrees\":48}".utf8)))
+        for invalid: Any in [0,-1,90.1,true,"60",Double.nan,Double.infinity] {
+            XCTAssertThrowsError(try initial.merging(["maxViewingIncidenceDegrees":invalid]))
+        }
+        XCTAssertEqual(TagDebugMath.coreMeasurementSettings(named).max_plane_angle_rad,47 * .pi / 180,accuracy:1e-12)
+    }
+    func testEnrichmentAddsNamedDiagnosticsAndFTCReadoutWithoutChangingOpticalLegacyKeys() throws {
+        let source = row(poseChanges:["translation":[3.0,-12,4],"rotationRowMajor":[1.0,0,0,0,1,0,0,0,1],
+                                      "eulerDegrees":[0.0,0,0],"rangeMeters":13.0])
+        let original = try JSONSerialization.data(withJSONObject:source,options:[.sortedKeys])
+        var selected = try settings.merging(["poseConvention":"ftcSdk"])
+        selected.maxDistanceMeters = 20
+        let enriched = TagDebugMath.enrich(source,depth:depth(4),settings:selected,tracking:"normal")
+        let debug = try XCTUnwrap(enriched["debug"] as? [String:Any])
+        let record = try XCTUnwrap(debug["poseReadout"] as? [String:Any])
+        let readout = try XCTUnwrap(TagPoseReadout.decode(record:record))
+        XCTAssertEqual(readout.convention,.ftcSdk)
+        XCTAssertEqual(readout.translationMeters,[3,4,12])
+        XCTAssertEqual(try XCTUnwrap(readout.planarRangeMeters),5,accuracy:1e-12)
+        XCTAssertEqual(readout.cameraDistanceMeters,13,accuracy:1e-12)
+        XCTAssertEqual(try XCTUnwrap(readout.horizontalBearingDegrees),-36.86989764584402,accuracy:1e-12)
+        XCTAssertEqual(try XCTUnwrap(readout.elevationDegrees),71.56505117707799,accuracy:1e-12)
+        XCTAssertEqual(record["rotationConvention"] as? String,TagPoseConvention.ftcSdk.rotationConvention)
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject:record,options:[.sortedKeys]),
+                       try JSONSerialization.data(withJSONObject:try XCTUnwrap(enriched["poseReadout"] as? [String:Any]),options:[.sortedKeys]))
+        XCTAssertEqual(debug["translationMeters"] as? [Double],[3,-12,4])
+        XCTAssertEqual(debug["eulerDegrees"] as? [Double],[0,0,0])
+        for (canonical,legacy) in [("opticalTranslationMeters","translationMeters"),("opticalEulerZYXDegrees","eulerDegrees")] {
+            XCTAssertEqual(debug[canonical] as? [Double],debug[legacy] as? [Double])
+        }
+        for (canonical,legacy) in [("cameraDistanceMeters","rangeMeters"),("viewingIncidenceDegrees","planeAngleDegrees"),
+                                   ("opticalAxisOffsetDegrees","centerBearingDegrees"),("poseOpticalDepthMeters","opticalPoseZMeters"),
+                                   ("sceneOpticalDepthMeters","centerDepthMeters"),("absoluteOpticalDepthDifferenceMeters","depthDifferenceMeters")] {
+            XCTAssertEqual(debug[canonical] as? Double,debug[legacy] as? Double,canonical)
+        }
+        XCTAssertEqual(debug["poseOpticalDepthMeters"] as? Double,4)
+        XCTAssertEqual(debug["sceneOpticalDepthMeters"] as? Double,4)
+        XCTAssertEqual(debug["absoluteOpticalDepthDifferenceMeters"] as? Double,0)
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject:try XCTUnwrap(enriched["pose"] as? [String:Any]),options:[.sortedKeys]),
+                       try JSONSerialization.data(withJSONObject:try XCTUnwrap(source["pose"] as? [String:Any]),options:[.sortedKeys]))
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject:source,options:[.sortedKeys]),original)
+    }
+    func testPresentationProfileDoesNotChangeResolvedTagScaleOrQualityAndMissingPoseClearsReadout() throws {
+        var originalPoseData: Data?
+        for convention in TagPoseConvention.allCases {
+            let configured = try settings.merging(["poseConvention":convention.rawValue])
+            let sized = resolve(depth:depth(2.5),settings:configured)
+            let pose = try XCTUnwrap(sized["pose"] as? [String:Any])
+            let data = try JSONSerialization.data(withJSONObject:pose,options:[.sortedKeys])
+            if let originalPoseData { XCTAssertEqual(data,originalPoseData) }
+            else { originalPoseData = data }
+            XCTAssertEqual(pose["tagSizeMeters"] as? Double,0.08255)
+            let enriched = TagDebugMath.enrich(sized,depth:depth(2.5),settings:configured,tracking:"normal")
+            let selected = try XCTUnwrap(enriched["debug"] as? [String:Any])
+            let readout = try XCTUnwrap(TagPoseReadout.decode(record:try XCTUnwrap(selected["poseReadout"] as? [String:Any])))
+            XCTAssertEqual(readout.convention,convention)
+            XCTAssertEqual(selected["depthDifferenceMeters"] as? Double,0)
+            XCTAssertEqual(selected["valid"] as? Bool,true)
+            var missing = enriched; missing.removeValue(forKey:"pose")
+            let cleared = TagDebugMath.enrich(missing,depth:depth(2.5),settings:configured,tracking:"normal")
+            XCTAssertTrue(cleared["poseReadout"] is NSNull)
+            XCTAssertTrue((cleared["debug"] as? [String:Any])?["poseReadout"] is NSNull)
+        }
+    }
     func testExactDepthWarningRejectBoundariesAndAbsoluteDifference() {
         XCTAssertEqual(debug(depth: depth(5.1))["severity"] as? String, "good")
         XCTAssertEqual(debug(depth: depth(5.15))["severity"] as? String, "warning")

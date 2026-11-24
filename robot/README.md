@@ -43,6 +43,17 @@ validate tracking, calibration, timestamps and frame/segment identity before
 accepting a measurement. No camera, transport, field-layout or NetworkTables
 policy is included in this minimal consumer.
 
+The WPILib consumers do not automatically convert the raw pose to WPILib's usual
+X forward/Y left/Z up basis. In particular, a WPILib AprilTagPoseEstimator
+transform retains the upstream optical frame. For PhotonVision-compatible
+camera-relative tag presentation, the portable pose-convention helper applies
+both EDN→NWU basis conversion and the tag-local Ry(π) correction; a head-on
+upright tag has pose yaw 180°. FTC uses a different camera/tag basis and its own
+Euler extraction, planar range, horizontal bearing and projected elevation.
+Neither adapter supplies mounting extrinsics or field localization. The app's
+saved display profile and Auto size inference do not change these consumer
+contracts. See [explicit pose conventions](../docs/decisions/004-pose-conventions.md).
+
 Upstream references checked for this integration:
 
 - [WPILib 2027 alpha-8 generated templates](https://github.com/wpilibsuite/vscode-wpilib/releases/tag/v2027.0.0-alpha-8)

@@ -66,6 +66,8 @@ if options[:recording_folder]
   end
   abort 'Missing private playback movie.' unless File.file?(options[:recording_video])
   FileUtils.cp(options[:recording_video], File.join(fixture, 'recording.mp4'))
+  depth = File.join(options[:recording_folder], 'depth')
+  FileUtils.cp_r(depth, File.join(fixture, 'depth')) if File.directory?(depth)
   resource = project.main_group.new_file(fixture)
   resource.last_known_file_type = 'folder'
   tests.resources_build_phase.add_file_reference(resource)

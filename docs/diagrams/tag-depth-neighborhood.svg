@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="465" viewBox="0 0 640 465" role="img" aria-labelledby="title desc">
   <title id="title">The 3-by-3 scene-depth neighborhood</title>
-  <desc id="desc">Nine squares around the detected center pixel contain seven accepted depth samples and two rejected samples. Accepted center and neighbors contribute to the mean; rejected LOW confidence, invalid or missing samples do not. The center depth is checked separately for LiDAR Z.</desc>
+  <desc id="desc">Nine squares around the detected center pixel contain seven accepted depth samples and two rejected samples. Accepted center and neighbors contribute to the mean; rejected LOW confidence, invalid or missing samples do not. The center depth is checked separately for Scene Z.</desc>
   <rect width="640" height="465" rx="18" fill="#f4f7fb"/>
   <g font-family="-apple-system,BlinkMacSystemFont,Arial,sans-serif" fill="#182638">
     <text x="28" y="40" font-size="25" font-weight="700">3×3 mean and center confidence</text>
@@ -21,7 +21,7 @@
     <text x="334" y="167" font-size="20">Finite, positive depth</text>
     <text x="334" y="194" font-size="20">MED or HIGH confidence</text>
     <text x="334" y="241" font-size="22" font-weight="600" fill="#2563b8">Center (blue)</text>
-    <text x="334" y="272" font-size="20">Used separately for LiDAR Z</text>
+    <text x="334" y="272" font-size="20">Used separately for Scene Z</text>
     <text x="334" y="319" font-size="22" font-weight="600">Rejected (×)</text>
     <text x="334" y="350" font-size="20">Excluded from the mean</text>
     <text x="28" y="407" font-size="21">3×3 mean = sum of seven depths / 7 ≈ 2.009 m</text>
